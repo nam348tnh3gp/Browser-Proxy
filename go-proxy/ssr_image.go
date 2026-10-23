@@ -17,31 +17,16 @@ import (
 
 const ssrImageMode = "SSRIMG"
 
-// Common Chrome/Chromium binary names and paths to try.
 var chromeCandidates = []string{
-	// Termux (Android)
 	"/data/data/com.termux/files/usr/bin/chromium-browser",
 	"/data/data/com.termux/files/usr/bin/chromium",
-	"/data/data/com.termux/files/usr/bin/google-chrome",
-	// Common names
 	"chromium-browser",
 	"chromium",
 	"google-chrome",
 	"google-chrome-stable",
-	"google-chrome-beta",
-	"chrome",
-	"chrome.exe",
-	"chromium.exe",
-	// Absolute paths
 	"/usr/bin/chromium-browser",
 	"/usr/bin/chromium",
 	"/usr/bin/google-chrome",
-	"/usr/bin/google-chrome-stable",
-	"/usr/local/bin/chromium",
-	"/snap/bin/chromium",
-	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-	"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-	"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
 }
 
 func findChromeBinary() string {
@@ -50,14 +35,15 @@ func findChromeBinary() string {
 			fmt.Println("[SSRIMG] Using CHROME_PATH:", env)
 			return env
 		}
+		fmt.Println("[SSRIMG] CHROME_PATH set but not found:", env)
 	}
 	for _, name := range chromeCandidates {
 		if path, err := exec.LookPath(name); err == nil {
-			fmt.Println("[SSRIMG] Found Chrome via PATH:", path)
+			fmt.Println("[SSRIMG] Found via PATH:", path)
 			return path
 		}
 		if _, err := os.Stat(name); err == nil {
-			fmt.Println("[SSRIMG] Found Chrome at:", name)
+			fmt.Println("[SSRIMG] Found at path:", name)
 			return name
 		}
 	}
@@ -65,16 +51,23 @@ func findChromeBinary() string {
 	return ""
 }
 
-// ssrImageResponse renders the page with headless Chrome and returns a JPEG.
 func ssrImageResponse(resp *http.Response) error {
-	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Format") != ssrImageMode {
+	if resp == nil || resp.Request == nil {
 		return nil
 	}
+	fmt.Println("[SSRIMG] Header X-TGFN-Format =", resp.Request.Header.Get("X-TGFN-Format"))
+	if resp.Request.Header.Get("X-TGFN-Format") != ssrImageMode {
+		return nil
+	}
+	fmt.Println("[SSRIMG] SSRIMG requested for", resp.Request.URL.String())
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || resp.Body == nil {
+		fmt.Println("[SSRIMG] Bad status or empty body")
 		return nil
 	}
 	ct := strings.ToLower(resp.Header.Get("Content-Type"))
 	if !strings.Contains(ct, "text/html") && !strings.Contains(ct, "xhtml") {
+		fmt.Println("[SSRIMG] Not HTML, skipping:", ct)
 		return nil
 	}
 
@@ -83,10 +76,11 @@ func ssrImageResponse(resp *http.Response) error {
 
 	chromePath := findChromeBinary()
 	if chromePath == "" {
-		return fmt.Errorf("no Chrome/Chromium binary found")
+		fmt.Println("[SSRIMG] Abort: no browser")
+		return fmt.Errorf("no Chrome/Chromium")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
@@ -96,6 +90,7 @@ func ssrImageResponse(resp *http.Response) error {
 		chromedp.NoSandbox,
 		chromedp.Headless,
 		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("disable-software-rasterizer", true),
 	)
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
 	defer allocCancel()
@@ -109,12 +104,17 @@ func ssrImageResponse(resp *http.Response) error {
 		chromedp.CaptureScreenshot(&buf),
 	)
 	if err != nil {
-		fmt.Println("[SSRIMG] Render error:", err)
+		fmt.Println("[SSRIMG] chromedp error:", err)
 		return err
+	}
+	if len(buf) < 100 {
+		fmt.Println("[SSRIMG] Screenshot too small")
+		return fmt.Errorf("empty screenshot")
 	}
 
 	img, err := jpeg.Decode(bytes.NewReader(buf))
 	if err != nil {
+		fmt.Println("[SSRIMG] JPEG decode failed, sending raw")
 		resp.Body = io.NopCloser(bytes.NewReader(buf))
 		resp.ContentLength = int64(len(buf))
 		resp.Header.Set("Content-Type", "image/jpeg")
@@ -128,6 +128,6 @@ func ssrImageResponse(resp *http.Response) error {
 	resp.Header.Set("Content-Type", "image/jpeg")
 	resp.Header.Set("Content-Length", itoa(out.Len()))
 	resp.Header.Del("Content-Encoding")
-	fmt.Println("[SSRIMG] Screenshot OK, size:", out.Len())
+	fmt.Println("[SSRIMG] Success, JPEG bytes:", out.Len())
 	return nil
 }
