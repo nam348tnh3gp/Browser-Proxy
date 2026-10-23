@@ -58,7 +58,9 @@ class MainActivity : Activity() {
         buildUi()
 
         val savedUrls = savedInstanceState?.getStringArrayList("tab_urls")
-        val restoreIndex = savedInstanceState?.getInt("selected_tab", 0) ?: 0
+            ?: loadPersistedSessionUrls()
+        val restoreIndex = savedInstanceState?.getInt("selected_tab")
+            ?: prefs.getInt("session_selected_tab", 0)
         applySavedProxy { success ->
             updateProxySummary()
             if (!success && prefs.getBoolean("proxy_enabled", false)) {
@@ -68,6 +70,7 @@ class MainActivity : Activity() {
                 savedUrls.forEachIndexed { index, url -> createTab(url, index == restoreIndex) }
                 selectedTab = restoreIndex.coerceIn(0, tabs.lastIndex)
                 selectTab(selectedTab)
+                persistSession()
             } else {
                 createTab(null, true)
             }
@@ -246,6 +249,7 @@ class MainActivity : Activity() {
                     if (!url.isNullOrBlank()) setAddress(if (url == "https://tgfn.browser/") "" else url)
                 }
                 rememberHistory(tab)
+                persistSession()
                 updateTabButton()
             }
 
@@ -309,6 +313,7 @@ class MainActivity : Activity() {
         status.text = tab.title
         progress.visibility = View.GONE
         updateTabButton()
+        persistSession()
     }
 
     private fun updateTabButton() {
@@ -605,6 +610,7 @@ class MainActivity : Activity() {
             selectTab(selectedTab)
         }
         updateTabButton()
+        persistSession()
     }
 
     private fun closeCurrentTab() {
@@ -936,6 +942,38 @@ class MainActivity : Activity() {
             .setPositiveButton("Đóng", null).show()
     }
 
+    /**
+     * Persist open tabs independently of Activity instance state. Android may kill the
+     * task/process without calling onSaveInstanceState, so that callback alone is not
+     * sufficient for restoring the browsing session.
+     */
+    private fun loadPersistedSessionUrls(): ArrayList<String> {
+        val raw = prefs.getString("session_tab_urls", null) ?: return arrayListOf()
+        return try {
+            val array = org.json.JSONArray(raw)
+            ArrayList<String>(array.length()).apply {
+                for (i in 0 until array.length()) {
+                    val url = array.optString(i, "")
+                    if (url.isNotBlank()) add(url)
+                }
+            }
+        } catch (_: Exception) {
+            arrayListOf()
+        }
+    }
+
+    private fun persistSession() {
+        if (tabs.isEmpty()) return
+        val urls = org.json.JSONArray()
+        tabs.forEach { tab ->
+            urls.put(tab.webView.url ?: tab.url)
+        }
+        prefs.edit()
+            .putString("session_tab_urls", urls.toString())
+            .putInt("session_selected_tab", selectedTab.coerceIn(0, tabs.lastIndex))
+            .apply()
+    }
+
     private fun rememberHistory(tab: BrowserTab) {
         if (tab.url.isBlank() || !tab.url.startsWith("http")) return
         val history = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toMutableSet()
@@ -1052,6 +1090,7 @@ class MainActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putStringArrayList("tab_urls", ArrayList(tabs.map { it.webView.url ?: it.url }))
         outState.putInt("selected_tab", selectedTab)
+        persistSession()
         super.onSaveInstanceState(outState)
     }
 
@@ -1067,6 +1106,7 @@ class MainActivity : Activity() {
             tab.webView.stopLoading()
             tab.webView.destroy()
         }
+        persistSession()
         tabs.clear()
         super.onDestroy()
     }
