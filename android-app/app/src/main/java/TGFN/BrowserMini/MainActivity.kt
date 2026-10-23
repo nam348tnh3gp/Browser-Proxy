@@ -71,7 +71,7 @@ class MainActivity : Activity() {
         val addressRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         address = EditText(this).apply {
             hint = "Tìm kiếm hoặc nhập URL"
-            singleLine = true
+            setSingleLine(true)
             imeOptions = EditorInfo.IME_ACTION_GO
             setText("https://www.google.com")
             setOnEditorActionListener { _, action, _ ->
@@ -114,7 +114,7 @@ class MainActivity : Activity() {
 
         val proxyUrl = EditText(this).apply {
             hint = "Proxy URL: http://host:port"
-            singleLine = true
+            setSingleLine(true)
             setText(prefs.getString("proxy_url", "") ?: "")
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
         }
@@ -122,7 +122,7 @@ class MainActivity : Activity() {
 
         val home = EditText(this).apply {
             hint = "Trang chủ URL"
-            singleLine = true
+            setSingleLine(true)
             setText(prefs.getString("home_url", "https://www.google.com") ?: "")
         }
         content.addView(home)
@@ -199,7 +199,7 @@ class MainActivity : Activity() {
         val raw = prefs.getString("proxy_url", "") ?: ""
         val executor = mainExecutor
         if (!enabled) {
-            ProxyController.getInstance().clearProxyOverride(Runnable { callback(true) }, executor)
+            ProxyController.getInstance().clearProxyOverride(executor, Runnable { callback(true) })
             return
         }
         val endpoint = parseProxyUrl(raw)
@@ -208,7 +208,7 @@ class MainActivity : Activity() {
             return
         }
         val config = ProxyConfig.Builder().addProxyRule("${endpoint.first}:${endpoint.second}").build()
-        ProxyController.getInstance().setProxyOverride(config, Runnable { callback(true) }, executor)
+        ProxyController.getInstance().setProxyOverride(config, executor, Runnable { callback(true) })
     }
 
     private fun updateProxySummary() {
