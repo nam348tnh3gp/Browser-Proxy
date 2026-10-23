@@ -8,8 +8,8 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
-	"errors"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"mime"
@@ -26,49 +26,51 @@ import (
 var (
 	proxyProcessStartedAt = time.Now().UTC().Format(time.RFC3339)
 	proxyStats struct {
-		httpRequests atomic.Int64
-		httpResponseBytes atomic.Int64
-		gzipResponses atomic.Int64
-		gzipOriginalBytes atomic.Int64
-		gzipCompressedBytes atomic.Int64
-		connectTunnels atomic.Int64
-		connectClientToUpstream atomic.Int64
-		connectUpstreamToClient atomic.Int64
+		httpRequests             atomic.Int64
+		httpResponseBytes        atomic.Int64
+		gzipResponses            atomic.Int64
+		gzipOriginalBytes        atomic.Int64
+		gzipCompressedBytes      atomic.Int64
+		connectTunnels           atomic.Int64
+		connectClientToUpstream  atomic.Int64
+		connectUpstreamToClient  atomic.Int64
 	}
 )
 
 type proxyStatsSnapshot struct {
-	ProcessStartedAt string `json:"process_started_at"`
-	HTTPRequests int64 `json:"http_requests"`
-	HTTPResponseBytes int64 `json:"http_response_bytes"`
-	GzipResponses int64 `json:"gzip_responses"`
-	GzipOriginalBytes int64 `json:"gzip_original_bytes"`
-	GzipCompressedBytes int64 `json:"gzip_compressed_bytes"`
-	GzipSavedBytes int64 `json:"gzip_saved_bytes"`
-	ConnectTunnels int64 `json:"connect_tunnels"`
-	ConnectClientToUpstream int64 `json:"connect_client_to_upstream_bytes"`
-	ConnectUpstreamToClient int64 `json:"connect_upstream_to_client_bytes"`
+	ProcessStartedAt        string `json:"process_started_at"`
+	HTTPRequests            int64  `json:"http_requests"`
+	HTTPResponseBytes       int64  `json:"http_response_bytes"`
+	GzipResponses           int64  `json:"gzip_responses"`
+	GzipOriginalBytes       int64  `json:"gzip_original_bytes"`
+	GzipCompressedBytes     int64  `json:"gzip_compressed_bytes"`
+	GzipSavedBytes          int64  `json:"gzip_saved_bytes"`
+	ConnectTunnels          int64  `json:"connect_tunnels"`
+	ConnectClientToUpstream int64  `json:"connect_client_to_upstream_bytes"`
+	ConnectUpstreamToClient int64  `json:"connect_upstream_to_client_bytes"`
 }
 
 func currentProxyStats() proxyStatsSnapshot {
 	original := proxyStats.gzipOriginalBytes.Load()
 	compressed := proxyStats.gzipCompressedBytes.Load()
 	return proxyStatsSnapshot{
-		ProcessStartedAt: proxyProcessStartedAt,
-		HTTPRequests: proxyStats.httpRequests.Load(),
-		HTTPResponseBytes: proxyStats.httpResponseBytes.Load(),
-		GzipResponses: proxyStats.gzipResponses.Load(),
-		GzipOriginalBytes: original,
-		GzipCompressedBytes: compressed,
-		GzipSavedBytes: maxInt64(original-compressed, 0),
-		ConnectTunnels: proxyStats.connectTunnels.Load(),
+		ProcessStartedAt:        proxyProcessStartedAt,
+		HTTPRequests:            proxyStats.httpRequests.Load(),
+		HTTPResponseBytes:       proxyStats.httpResponseBytes.Load(),
+		GzipResponses:           proxyStats.gzipResponses.Load(),
+		GzipOriginalBytes:       original,
+		GzipCompressedBytes:     compressed,
+		GzipSavedBytes:          maxInt64(original-compressed, 0),
+		ConnectTunnels:          proxyStats.connectTunnels.Load(),
 		ConnectClientToUpstream: proxyStats.connectClientToUpstream.Load(),
 		ConnectUpstreamToClient: proxyStats.connectUpstreamToClient.Load(),
 	}
 }
 
 func maxInt64(a, b int64) int64 {
-	if a > b { return a }
+	if a > b {
+		return a
+	}
 	return b
 }
 
