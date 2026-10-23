@@ -718,7 +718,26 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     private PageResult fetchViaProxy(String url) throws IOException {
-        byte[] response = fetchProxyBytes(url, MAX_PAGE_CHARS * 3);
+        byte[] response = fetchProxyBytes(url, 800000);
+        // JPEG screenshot (SSRIMG)
+        if (response.length >= 3 && (response[0] & 0xFF) == 0xFF && (response[1] & 0xFF) == 0xD8 && (response[2] & 0xFF) == 0xFF) {
+            PageResult result = new PageResult();
+            result.title = url;
+            result.text = "[Rendered page image]";
+            result.links = new Vector();
+            result.images = new Vector();
+            result.blocks = new Vector();
+            try {
+                Image img = Image.createImage(response, 0, response.length);
+                ImageRef ref = new ImageRef("page", url);
+                ref.image = img;
+                result.images.addElement(ref);
+                result.blocks.addElement(new RenderBlock("[Page screenshot]", 1, null));
+            } catch (Exception e) {
+                result.text = "Screenshot received but failed to decode: " + e.toString();
+            }
+            return result;
+        }
         if (response.length >= 4 && (
             (response[0] == 'S' && response[1] == 'S' && response[2] == 'R' && response[3] == '1') ||
             (response[0] == 'T' && response[1] == 'B' && response[2] == 'O' && response[3] == '1'))) {
