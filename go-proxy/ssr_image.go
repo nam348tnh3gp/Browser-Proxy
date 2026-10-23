@@ -51,8 +51,8 @@ func findChromeBinary() string {
 }
 
 type pageLink struct {
-	text string
-	url  string
+	Text string `json:"text"`
+	URL  string `json:"url"`
 }
 
 func ssrImageResponse(resp *http.Response) error {
@@ -77,16 +77,17 @@ func ssrImageResponse(resp *http.Response) error {
 		return fmt.Errorf("no Chrome/Chromium")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
 	defer cancel()
 
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.ExecPath(chromePath),
-		chromedp.WindowSize(240, 480),
+		chromedp.WindowSize(240, 500),
 		chromedp.DisableGPU,
 		chromedp.NoSandbox,
 		chromedp.Headless,
 		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("disable-extensions", true),
 	)
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
 	defer allocCancel()
@@ -97,18 +98,23 @@ func ssrImageResponse(resp *http.Response) error {
 	var links []pageLink
 	err := chromedp.Run(chromeCtx,
 		chromedp.Navigate(pageURL),
-		chromedp.Sleep(3*time.Second),
+		chromedp.Sleep(2800*time.Millisecond),
 		chromedp.CaptureScreenshot(&buf),
 		chromedp.Evaluate(`
 			(function() {
 				var out = [];
+				var seen = {};
 				var as = document.querySelectorAll('a[href]');
-				for (var i = 0; i < as.length && out.length < 80; i++) {
+				for (var i = 0; i < as.length && out.length < 60; i++) {
 					var a = as[i];
-					var t = (a.innerText || a.textContent || '').replace(/\s+/g, ' ').trim();
-					if (t.length > 1 && t.length < 120) {
-						out.push({text: t, url: a.href});
-					}
+					var href = a.href || '';
+					if (!href || href.indexOf('javascript:') === 0) continue;
+					var t = (a.innerText || a.textContent || a.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
+					if (t.length < 2 || t.length > 100) continue;
+					var key = t + '|' + href;
+					if (seen[key]) continue;
+					seen[key] = true;
+					out.push({text: t, url: href});
 				}
 				return out;
 			})()
@@ -118,8 +124,8 @@ func ssrImageResponse(resp *http.Response) error {
 		fmt.Println("[SSRIMG] chromedp error:", err)
 		return err
 	}
-	if len(buf) < 100 {
-		return fmt.Errorf("empty screenshot")
+	if len(buf) < 200 {
+		return fmt.Errorf("screenshot too small")
 	}
 
 	img, _, err := image.Decode(bytes.NewReader(buf))
@@ -127,22 +133,21 @@ func ssrImageResponse(resp *http.Response) error {
 		return err
 	}
 	var jpegBuf bytes.Buffer
-	if err := jpeg.Encode(&jpegBuf, img, &jpeg.Options{Quality: 38}); err != nil {
+	if err := jpeg.Encode(&jpegBuf, img, &jpeg.Options{Quality: 36}); err != nil {
 		return err
 	}
 
-	// Build IMGL packet: magic + jpegLen(4) + jpeg + linkCount(2) + links
 	var packet bytes.Buffer
 	packet.WriteString(imglMagic)
 	_ = binary.Write(&packet, binary.BigEndian, uint32(jpegBuf.Len()))
 	packet.Write(jpegBuf.Bytes())
-	if len(links) > 80 {
-		links = links[:80]
+	if len(links) > 60 {
+		links = links[:60]
 	}
 	_ = binary.Write(&packet, binary.BigEndian, uint16(len(links)))
 	for _, l := range links {
-		writeLenStr(&packet, l.text)
-		writeLenStr(&packet, l.url)
+		writeLenStr(&packet, l.Text)
+		writeLenStr(&packet, l.URL)
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(packet.Bytes()))
@@ -150,13 +155,13 @@ func ssrImageResponse(resp *http.Response) error {
 	resp.Header.Set("Content-Type", "application/x-tgfn-imgl")
 	resp.Header.Set("Content-Length", itoa(packet.Len()))
 	resp.Header.Del("Content-Encoding")
-	fmt.Println("[SSRIMG] Success, JPEG", jpegBuf.Len(), "links", len(links))
+	fmt.Println("[SSRIMG] OK jpeg=", jpegBuf.Len(), "links=", len(links))
 	return nil
 }
 
 func writeLenStr(b *bytes.Buffer, s string) {
-	if len(s) > 2000 {
-		s = s[:2000]
+	if len(s) > 1500 {
+		s = s[:1500]
 	}
 	_ = binary.Write(b, binary.BigEndian, uint16(len(s)))
 	b.WriteString(s)
