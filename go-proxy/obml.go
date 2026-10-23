@@ -73,7 +73,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 	blocks := make([]obmlBlock, 0, 128)
 	add := func(kind byte, text, link string) {
 		text = strings.TrimSpace(obmlSpace.ReplaceAllString(text, " "))
-		if len(blocks) >= maxOBMLBlocks || (text == "" && kind != 6) { return }
+		if len(blocks) >= maxOBMLBlocks || (text == "" && kind != 6 && kind != 5) { return }
 		if len(text) > maxOBMLString { text = text[:maxOBMLString] }
 		blocks = append(blocks, obmlBlock{kind:kind, text:text, url:link})
 	}
