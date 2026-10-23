@@ -133,53 +133,103 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	dialStarted := time.Now()
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	upstream, err := dialer.DialContext(ctx, "tcp", host)
+	dialDuration := time.Since(dialStarted)
 	if err != nil {
-		log.Printf("CONNECT failed target=%q error=%q", safeLogValue(host), err)
+		log.Printf("CONNECT failed target=%q dial_duration=%s error=%q",
+			safeLogValue(host), dialDuration.Round(time.Millisecond), err)
 		http.Error(w, "Unable to connect to upstream", http.StatusBadGateway)
 		return
 	}
+
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
-		upstream.Close()
+		_ = upstream.Close()
 		http.Error(w, "HTTP hijacking is not supported", http.StatusInternalServerError)
 		return
 	}
 	client, rw, err := hijacker.Hijack()
 	if err != nil {
-		upstream.Close()
+		_ = upstream.Close()
+		log.Printf("CONNECT hijack failed target=%q error=%q", safeLogValue(host), err)
 		return
 	}
 	if _, err = rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
-		client.Close()
-		upstream.Close()
+		_ = client.Close()
+		_ = upstream.Close()
+		log.Printf("CONNECT handshake failed target=%q error=%q", safeLogValue(host), err)
 		return
 	}
 	if err = rw.Flush(); err != nil {
-		client.Close()
-		upstream.Close()
+		_ = client.Close()
+		_ = upstream.Close()
+		log.Printf("CONNECT handshake failed target=%q error=%q", safeLogValue(host), err)
 		return
 	}
-	log.Printf("CONNECT established target=%q", safeLogValue(host))
-	go tunnel(upstream, client)
-	go func() {
-		if rw.Reader.Buffered() > 0 {
-			if _, copyErr := io.Copy(upstream, rw.Reader); copyErr != nil && !errors.Is(copyErr, net.ErrClosed) {
-				log.Printf("CONNECT client-to-upstream: %v", copyErr)
-			}
-		}
-		_, _ = io.Copy(upstream, client)
-		_ = upstream.Close()
-	}()
+
+	log.Printf("CONNECT established target=%q dial_duration=%s",
+		safeLogValue(host), dialDuration.Round(time.Millisecond))
+	go tunnel(upstream, client, rw.Reader, host, time.Now())
 }
 
-func tunnel(upstream net.Conn, client net.Conn) {
-	defer upstream.Close()
-	defer client.Close()
-	if _, err := io.Copy(client, upstream); err != nil && !errors.Is(err, net.ErrClosed) {
-		log.Printf("CONNECT upstream-to-client: %v", err)
+type tunnelCopyResult struct {
+	direction string
+	bytes     int64
+	err       error
+}
+
+func tunnel(upstream, client net.Conn, clientReader io.Reader, host string, started time.Time) {
+	results := make(chan tunnelCopyResult, 2)
+
+	go func() {
+		n, err := io.Copy(upstream, clientReader)
+		if tcp, ok := upstream.(*net.TCPConn); ok {
+			_ = tcp.CloseWrite()
+		}
+		results <- tunnelCopyResult{direction: "client_to_upstream", bytes: n, err: err}
+	}()
+
+	go func() {
+		n, err := io.Copy(client, upstream)
+		if tcp, ok := client.(*net.TCPConn); ok {
+			_ = tcp.CloseWrite()
+		}
+		results <- tunnelCopyResult{direction: "upstream_to_client", bytes: n, err: err}
+	}()
+
+	first := <-results
+	if first.err != nil {
+		_ = client.Close()
+		_ = upstream.Close()
 	}
+	second := <-results
+	_ = client.Close()
+	_ = upstream.Close()
+
+	clientToUpstream, upstreamToClient := int64(0), int64(0)
+	for _, result := range []tunnelCopyResult{first, second} {
+		switch result.direction {
+		case "client_to_upstream":
+			clientToUpstream = result.bytes
+		case "upstream_to_client":
+			upstreamToClient = result.bytes
+		}
+	}
+
+	reason := "clean_eof"
+	for _, result := range []tunnelCopyResult{first, second} {
+		if result.err != nil && !errors.Is(result.err, net.ErrClosed) {
+			reason = result.direction + "_error"
+			log.Printf("CONNECT tunnel copy error target=%q direction=%s error=%q",
+				safeLogValue(host), result.direction, result.err)
+		}
+	}
+	log.Printf("CONNECT closed target=%q duration=%s bytes_client_to_upstream=%d bytes_upstream_to_client=%d reason=%s",
+		safeLogValue(host), time.Since(started).Round(time.Millisecond),
+		clientToUpstream, upstreamToClient, reason)
 }
