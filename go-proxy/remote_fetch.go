@@ -75,8 +75,10 @@ func serveRemoteFetch(w http.ResponseWriter, r *http.Request) bool {
 	if req.Header.Get("Accept") == "" {
 		req.Header.Set("Accept", "text/html,text/plain,image/*,*/*")
 	}
-	if r.Header.Get("X-TGFN-Format") == "TBO1" {
-		req.Header.Set("X-TGFN-Format", "TBO1")
+	// Forward all known format modes so compactHTMLResponse can act
+	if format := r.Header.Get("X-TGFN-Format"); format != "" {
+		req.Header.Set("X-TGFN-Format", format)
+		log.Printf("remote_fetch format=%s target=%s", format, target.Host)
 	}
 
 	resp, err := client.Do(req)
@@ -105,6 +107,7 @@ func serveRemoteFetch(w http.ResponseWriter, r *http.Request) bool {
 	resp.Body = io.NopCloser(bytes.NewReader(body))
 	resp.ContentLength = int64(len(body))
 	if err := compactHTMLResponse(resp); err != nil {
+		log.Printf("remote_fetch compact error: %v", err)
 		http.Error(w, "Unable to encode compact page", http.StatusBadGateway)
 		return true
 	}
