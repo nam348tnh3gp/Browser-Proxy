@@ -1,6 +1,8 @@
 package tgfn.browsermini;
 
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -716,7 +718,61 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     private PageResult fetchViaProxy(String url) throws IOException {
-        return parsePage(url, new String(fetchProxyBytes(url, MAX_PAGE_CHARS * 3), "UTF-8"));
+        byte[] response = fetchProxyBytes(url, MAX_PAGE_CHARS * 3);
+        if (response.length >= 4 && response[0] == 'T' && response[1] == 'B' &&
+            response[2] == 'O' && response[3] == '1') {
+            return parseTBO1(url, response);
+        }
+        return parsePage(url, new String(response, "UTF-8"));
+    }
+
+    private PageResult parseTBO1(String baseUrl, byte[] packet) throws IOException {
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(packet));
+        byte[] magic = new byte[4];
+        in.readFully(magic);
+        if (magic[0] != 'T' || magic[1] != 'B' || magic[2] != 'O' || magic[3] != '1') {
+            throw new IOException("Invalid compact page header");
+        }
+        PageResult result = new PageResult();
+        result.links = new Vector();
+        result.images = new Vector();
+        result.blocks = new Vector();
+        result.title = readTBOString(in);
+        int count = in.readUnsignedShort();
+        if (count > 1200) throw new IOException("Too many compact page blocks");
+        StringBuffer text = new StringBuffer();
+        for (int i = 0; i < count; i++) {
+            int kind = in.readUnsignedByte();
+            String label = readTBOString(in);
+            String target = readTBOString(in);
+            if (kind == 6) {
+                result.blocks.addElement(new RenderBlock("", 0, null));
+                text.append('\n');
+                continue;
+            }
+            if (label.length() == 0) continue;
+            if (kind == 4 && target.length() > 0) {
+                result.links.addElement(new LinkItem(label, target));
+                result.blocks.addElement(new RenderBlock(label, 4, target));
+            } else {
+                int style = kind >= 0 && kind <= 3 ? kind : 0;
+                result.blocks.addElement(new RenderBlock(label, style, null));
+            }
+            if (text.length() > 0) text.append('\n');
+            text.append(label);
+        }
+        result.text = text.toString();
+        if (result.text.length() == 0) result.text = "(No readable text was found on this page.)";
+        if (result.title == null || result.title.length() == 0) result.title = baseUrl;
+        return result;
+    }
+
+    private String readTBOString(DataInputStream in) throws IOException {
+        int length = in.readUnsignedShort();
+        if (length > in.available()) throw new IOException("Truncated compact page string");
+        byte[] data = new byte[length];
+        in.readFully(data);
+        return new String(data, "UTF-8");
     }
 
     private byte[] fetchProxyBytes(String url, int maxBytes) throws IOException {
@@ -739,8 +795,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             writer.write("GET " + url + " HTTP/1.1\r\n");
             writer.write("Host: " + hostPort + "\r\n");
             writer.write("User-Agent: TGFN-BrowserMini-J2ME/1.0\r\n");
-            writer.write("Accept: text/html,text/plain,*/*\r\n");
-            writer.write("X-TGFN-Compact: 1\r\n");
+            writer.write("Accept: application/x-tgfn-obml,text/html,text/plain,*/*\r\n");
+            writer.write("X-TGFN-Format: TBO1\r\n");
             writer.write("Connection: close\r\n\r\n");
             writer.flush();
             String status = readAsciiLine(input);
