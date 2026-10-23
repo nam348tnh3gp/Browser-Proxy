@@ -15,7 +15,15 @@ const fullModeValue = "FULL"
 var (
 	fullDropScript = regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script\s*>`)
 	fullDropStyle  = regexp.MustCompile(`(?is)<style\b[^>]*>.*?</style\s*>`)
-	fullDropHeavy  = regexp.MustCompile(`(?is)<(iframe|svg|canvas|video|audio|noscript)\b[^>]*>.*?</\1\s*>`)
+	// Separate patterns — Go regexp (RE2) does not support backreferences
+	fullDropHeavy = []*regexp.Regexp{
+		regexp.MustCompile(`(?is)<iframe\b[^>]*>.*?</iframe\s*>`),
+		regexp.MustCompile(`(?is)<svg\b[^>]*>.*?</svg\s*>`),
+		regexp.MustCompile(`(?is)<canvas\b[^>]*>.*?</canvas\s*>`),
+		regexp.MustCompile(`(?is)<video\b[^>]*>.*?</video\s*>`),
+		regexp.MustCompile(`(?is)<audio\b[^>]*>.*?</audio\s*>`),
+		regexp.MustCompile(`(?is)<noscript\b[^>]*>.*?</noscript\s*>`),
+	}
 	fullImgSrc     = regexp.MustCompile(`(?is)(<img\b[^>]*?\s+src\s*=\s*["'])([^"']+)(["'])`)
 	fullWhitespace = regexp.MustCompile(`[\t\r\n ]+`)
 )
@@ -44,7 +52,9 @@ func fullCompressResponse(resp *http.Response) error {
 	// Remove heavy non-content
 	html = fullDropScript.ReplaceAllString(html, "")
 	html = fullDropStyle.ReplaceAllString(html, "")
-	html = fullDropHeavy.ReplaceAllString(html, "")
+	for _, re := range fullDropHeavy {
+		html = re.ReplaceAllString(html, "")
+	}
 
 	// Rewrite image src to go through compression endpoint
 	html = fullImgSrc.ReplaceAllStringFunc(html, func(m string) string {
