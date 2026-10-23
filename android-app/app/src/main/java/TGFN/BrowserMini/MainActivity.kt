@@ -628,26 +628,29 @@ class MainActivity : Activity() {
     private fun isDataSaverEnabled(): Boolean = prefs.getBoolean("data_saver_enabled", false)
 
     /**
-     * Keep images enabled. Data Saver prefers cached resources when enabled, but
-     * does not rewrite page content or inspect/decrypt HTTPS traffic.
+     * Keep normal WebView cache validation in both modes. Forcing
+     * LOAD_CACHE_ELSE_NETWORK can serve expired HTML/JavaScript and break
+     * dynamic sites (for example Google Search). Data Saver must not disable
+     * images, network access, desktop mode, or force a page reload.
+     *
+     * Actual transfer compression needs proxy/server support; WebView cache
+     * settings alone cannot provide Chrome-Lite-style savings.
      */
     private fun applyDataSaverSettings(settings: android.webkit.WebSettings) {
         settings.loadsImagesAutomatically = true
         settings.blockNetworkImage = false
-        settings.cacheMode = if (isDataSaverEnabled()) {
-            android.webkit.WebSettings.LOAD_CACHE_ELSE_NETWORK
-        } else {
-            android.webkit.WebSettings.LOAD_DEFAULT
-        }
+        settings.blockNetworkLoads = false
+        settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
     }
 
     private fun toggleDataSaver() {
         val enabled = !isDataSaverEnabled()
         prefs.edit().putBoolean("data_saver_enabled", enabled).apply()
         tabs.forEach { tab -> applyDataSaverSettings(tab.webView.settings) }
-        currentWebView()?.reload()
+        // Do not reload: changing this preference must not interrupt a page,
+        // reset its desktop-site request, or trigger dynamic-page reload loops.
         status.text = if (enabled) {
-            "Data Saver bật: giữ ảnh, ưu tiên cache"
+            "Data Saver bật: cache an toàn, giữ nguyên chức năng trang"
         } else {
             "Data Saver đã tắt"
         }
@@ -882,12 +885,12 @@ class MainActivity : Activity() {
         }
         content.addView(enabled)
         val dataSaver = android.widget.CheckBox(this).apply {
-            text = "Data Saver: giữ ảnh và ưu tiên cache"
+            text = "Data Saver: giữ ảnh, cache an toàn"
             isChecked = isDataSaverEnabled()
         }
         content.addView(dataSaver)
         content.addView(TextView(this).apply {
-            text = "Ảnh vẫn tải bình thường. Khi bật, trình duyệt ưu tiên dùng tài nguyên đã lưu trong cache; nội dung chưa có trong cache vẫn được tải qua mạng. Chế độ này chưa nén nội dung như Chrome Lite mode trước đây."
+            text = "Ảnh và kết nối mạng vẫn bật. Trình duyệt dùng cache theo quy tắc mặc định để website có thể kiểm tra tài nguyên đã hết hạn; không ép dùng HTML/JavaScript cũ và không tự tải lại trang khi bật/tắt. Chế độ này chưa nén dữ liệu như Chrome Lite mode trước đây."
             textSize = 12f
             setTextColor(muted)
             setPadding(dp(28), 0, 0, dp(8))
