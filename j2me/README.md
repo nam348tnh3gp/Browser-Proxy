@@ -1,40 +1,41 @@
 # TGFN BrowserMini J2ME
 
-Lightweight Java ME browser with a server-side compression proxy.
+Lightweight Java ME browser with a server-side compression + rendering proxy.
 
-## Important: Why you still see mostly text
+## SSR mode (Server-Side Rendering)
 
-The J2ME client **does not have a full HTML/CSS engine**.  
-Even when the proxy sends mode `FULL` (almost complete HTML + some CSS + links + compressed images), the client extracts the content and draws it as structured text + images on a Canvas.
+The client now requests **SSR** by default.
 
-This is a limitation of MIDP 2.0, not a bug. Real CSS layout (like Opera Mini's Presto server renderer) is not implemented.
+- Proxy fetches the page, parses HTML, extracts structured content (headings, text, lists, links, images).
+- Images are resized and JPEG-compressed.
+- Everything is packed into a compact binary format (`SSR1`).
+- Client paints the blocks with visual hierarchy (larger headings, underlined links, images).
 
-## What the current version does
+This is a pure-Go server-side layout extraction (no Chrome required). It is closer to Opera Mini's idea than plain HTML dumping, but it is still not a full Presto-style pixel layout engine.
 
-- Proxy can send:
-  - **FULL** mode: keeps most HTML structure, links, basic CSS, compresses images, gzips the result.
-  - **TBO1** mode: compact binary blocks (lighter).
-- Client renders:
-  - Title, headings (bold/larger), paragraphs, lists
-  - Clickable links
-  - Up to 8 compressed images
-  - Scrolling Canvas view
+## Modes available
 
-## How to get the best result
+| Mode | Header | What you get |
+|------|--------|--------------|
+| **SSR** (default) | `X-TGFN-Format: SSR` | Structured rendered blocks + compressed images |
+| FULL | `X-TGFN-Format: FULL` | Almost full HTML + gzip (client still extracts text) |
+| TBO1 | `X-TGFN-Format: TBO1` | Older compact binary |
+
+## How to use
 
 1. Run the proxy:
    ```bash
    cd go-proxy
    PROXY_LISTEN=0.0.0.0:8080 go run .
    ```
-2. In the J2ME app enable the proxy (LAN IP + port 8080).
-3. Prefer text-friendly or mobile sites for the best look.
+2. In the J2ME app: Menu → Proxy → enter LAN IP + port 8080 → enable.
+3. Open a page. The proxy will server-side render it.
 
-## Current limits
+## Limits
 
-- No real CSS positioning or complex layout
-- No JavaScript
-- Images are resized and JPEG-compressed on the server
-- Best on simple / mobile pages
+- No real CSS positioning (no absolute/float layout)
+- No JavaScript execution
+- Best results on text-friendly or mobile sites
+- Up to 8 images per page
 
-This is an open project inspired by the Opera Mini idea, not affiliated with Opera.
+Inspired by Opera Mini, not affiliated with Opera.
