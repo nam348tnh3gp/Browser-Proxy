@@ -30,8 +30,8 @@ var (
 	}
 	compactDropVoid   = regexp.MustCompile("(?is)<(link|input|source|meta|button)\\b[^>]*?/?>")
 	compactTags       = regexp.MustCompile("(?is)<[^>]*?>")
-	compactAttrs      = regexp.MustCompile("(?is)\\s+(href|src|alt|title|width|height)\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)")
-	compactWhitespace = regexp.MustCompile("[\\t\\r\\n ]+")
+	compactAttrs      = regexp.MustCompile("(?is)\\s+(href|src|alt|title|width|height)\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)"),
+	compactWhitespace = regexp.MustCompile("[\\t\\r\\n ]+"),
 )
 
 var compactAllowedTags = map[string]bool{
@@ -47,8 +47,13 @@ var compactAllowedTags = map[string]bool{
 
 // compactHTMLResponse transforms only requests explicitly made by the J2ME client.
 func compactHTMLResponse(resp *http.Response) error {
-	if resp != nil && resp.Request != nil && resp.Request.Header.Get("X-TGFN-Format") == "TBO1" {
-		return obmlResponse(resp)
+	if resp != nil && resp.Request != nil {
+		switch resp.Request.Header.Get("X-TGFN-Format") {
+		case "TBO1":
+			return obmlResponse(resp)
+		case "FULL":
+			return fullCompressResponse(resp)
+		}
 	}
 	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Compact") != "1" {
 		return nil
