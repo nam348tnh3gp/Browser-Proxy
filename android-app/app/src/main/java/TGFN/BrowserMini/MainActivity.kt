@@ -214,6 +214,10 @@ class MainActivity : Activity() {
             settings.loadsImagesAutomatically = true
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
+            settings.setSupportZoom(true)
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
+            settings.userAgentString = if (isDesktopModeEnabled()) DESKTOP_USER_AGENT else null
             settings.javaScriptCanOpenWindowsAutomatically = false
             settings.setSupportMultipleWindows(false)
         }
@@ -367,17 +371,27 @@ class MainActivity : Activity() {
         }
 
     private fun showBrowserMenu() {
-        val items = arrayOf("Tab mới", "Dấu trang", "Lịch sử", "Chia sẻ trang", "Cài đặt", "Đóng tab hiện tại")
+        val desktopLabel = if (isDesktopModeEnabled()) "Phiên bản máy tính: đang bật" else "Phiên bản máy tính"
+        val items = arrayOf(
+            "Tab mới", "Dịch trang", "Tìm trong trang", "Thu phóng",
+            desktopLabel, "Lưu/Bỏ dấu trang", "Dấu trang", "Lịch sử",
+            "Chia sẻ trang", "Cài đặt", "Đóng tab hiện tại"
+        )
         android.app.AlertDialog.Builder(this)
-            .setTitle("TGFN Browser")
+            .setTitle("TGFN Browser · Tiện ích")
             .setItems(items) { _, which ->
                 when (which) {
                     0 -> createTab(null, true)
-                    1 -> showBookmarks()
-                    2 -> showHistory()
-                    3 -> shareCurrentPage()
-                    4 -> showSettings()
-                    5 -> closeCurrentTab()
+                    1 -> translateCurrentPage()
+                    2 -> showFindInPage()
+                    3 -> showZoomControls()
+                    4 -> toggleDesktopMode()
+                    5 -> toggleBookmark()
+                    6 -> showBookmarks()
+                    7 -> showHistory()
+                    8 -> shareCurrentPage()
+                    9 -> showSettings()
+                    10 -> closeCurrentTab()
                 }
             }
             .show()
@@ -392,7 +406,7 @@ class MainActivity : Activity() {
             .setTitle("Các tab · ${tabs.size}")
             .setItems(labels) { _, which -> selectTab(which) }
             .setPositiveButton("Tab mới") { _, _ -> createTab(null, true) }
-            .setNegativeButton("Đóng tab hiện tại", null)
+            .setNegativeButton("Đóng tab hiện tại") { _, _ -> closeCurrentTab() }
             .show()
     }
 
@@ -412,6 +426,98 @@ class MainActivity : Activity() {
         updateTabButton()
     }
 
+    private fun isDesktopModeEnabled(): Boolean = prefs.getBoolean("desktop_mode", false)
+
+    private fun toggleDesktopMode() {
+        val enabled = !isDesktopModeEnabled()
+        prefs.edit().putBoolean("desktop_mode", enabled).apply()
+        tabs.forEach { tab ->
+            tab.webView.settings.userAgentString = if (enabled) DESKTOP_USER_AGENT else null
+        }
+        val current = currentWebView()
+        if (current != null) {
+            val url = current.url ?: ""
+            if (url == "https://tgfn.browser/") loadNewTabPage(current)
+            else if (url.startsWith("http://") || url.startsWith("https://")) current.reload()
+        }
+        status.text = if (enabled) "Đã bật phiên bản máy tính" else "Đã tắt phiên bản máy tính"
+        Toast.makeText(this, status.text, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun translateCurrentPage() {
+        val url = currentWebView()?.url.orEmpty()
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            Toast.makeText(this, "Mở một trang web trước khi dịch", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val languages = arrayOf("Tiếng Việt", "English", "日本語", "한국어", "Français", "Español")
+        val codes = arrayOf("vi", "en", "ja", "ko", "fr", "es")
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Dịch trang bằng Google Translate")
+            .setItems(languages) { _, which ->
+                val encodedUrl = java.net.URLEncoder.encode(url, "UTF-8")
+                currentWebView()?.loadUrl(
+                    "https://translate.google.com/translate?sl=auto&tl=" + codes[which] + "&u=" + encodedUrl
+                )
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    private fun showFindInPage() {
+        val web = currentWebView() ?: return
+        val query = EditText(this).apply {
+            hint = "Nhập từ hoặc cụm từ"
+            setSingleLine(true)
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+        }
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("Tìm trong trang")
+            .setView(query)
+            .setNegativeButton("Đóng", null)
+            .setPositiveButton("Tìm", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val term = query.text.toString().trim()
+                if (term.isBlank()) {
+                    query.error = "Nhập nội dung cần tìm"
+                } else {
+                    web.setFindListener { activeMatches, _, _ ->
+                        Toast.makeText(
+                            this,
+                            if (activeMatches > 0) "Tìm thấy " + activeMatches + " kết quả" else "Không tìm thấy kết quả",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    web.findAllAsync(term)
+                    dialog.dismiss()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showZoomControls() {
+        val web = currentWebView() ?: return
+        val options = arrayOf("Thu nhỏ", "Mức mặc định", "Phóng to")
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Thu phóng trang")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> web.zoomOut()
+                    1 -> {
+                        web.settings.textZoom = 100
+                        web.setInitialScale(0)
+                        web.reload()
+                    }
+                    2 -> web.zoomIn()
+                }
+            }
+            .setNegativeButton("Xong", null)
+            .show()
+    }
+
     private fun showSettings() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -429,6 +535,11 @@ class MainActivity : Activity() {
             isChecked = prefs.getBoolean("proxy_enabled", false)
         }
         content.addView(enabled)
+        val desktop = android.widget.CheckBox(this).apply {
+            text = "Yêu cầu phiên bản máy tính cho trang web"
+            isChecked = isDesktopModeEnabled()
+        }
+        content.addView(desktop)
         val proxyUrl = EditText(this).apply {
             hint = "Proxy URL: http://host:port"
             setSingleLine(true)
@@ -467,7 +578,11 @@ class MainActivity : Activity() {
                     return@setOnClickListener
                 }
                 prefs.edit().putBoolean("proxy_enabled", enabled.isChecked)
+                    .putBoolean("desktop_mode", desktop.isChecked)
                     .putString("proxy_url", rawProxy).putString("home_url", normalizedHome).apply()
+                tabs.forEach { tab ->
+                    tab.webView.settings.userAgentString = if (desktop.isChecked) DESKTOP_USER_AGENT else null
+                }
                 dialog.dismiss()
                 applySavedProxy { success ->
                     updateProxySummary()
@@ -621,6 +736,10 @@ class MainActivity : Activity() {
         try { URI(url ?: "").host ?: "TGFN Browser" } catch (_: Exception) { "TGFN Browser" }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putStringArrayList("tab_urls", ArrayList(tabs.map { it.webView.url ?: it.url }))
