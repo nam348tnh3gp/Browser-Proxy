@@ -302,7 +302,7 @@ class MainActivity : Activity() {
                 tab.url = if (tab.isNewTab) NEW_TAB_SESSION_URL else (url ?: tab.url)
                 tab.title = "Đang tải…"
                 if (isSelected(tab)) {
-                    status.text = "Đang tải trang…"
+                    status.text = tr("Đang tải trang…", "Loading page…")
                     if (!url.isNullOrBlank()) setAddress(url)
                     progress.visibility = View.VISIBLE
                 }
@@ -316,7 +316,7 @@ class MainActivity : Activity() {
                 tab.url = if (tab.isNewTab) NEW_TAB_SESSION_URL else (url ?: tab.url)
                 tab.title = view?.title?.takeIf { it.isNotBlank() } ?: hostLabel(url)
                 if (isSelected(tab)) {
-                    status.text = "Sẵn sàng"
+                    status.text = tr("Sẵn sàng", "Ready")
                     if (!url.isNullOrBlank()) setAddress(if (tab.isNewTab) "" else url)
                 }
                 rememberHistory(tab)
@@ -326,7 +326,7 @@ class MainActivity : Activity() {
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                 if (request?.isForMainFrame == true && isSelected(tab)) {
-                    status.text = "Không tải được trang: ${error?.description ?: "lỗi không xác định"}"
+                    status.text = tr("Không tải được trang: ${error?.description ?: "lỗi không xác định"}", "Could not load page: ${error?.description ?: "unknown error"}")
                 }
             }
         }
@@ -384,17 +384,17 @@ class MainActivity : Activity() {
         .brand span{color:#188038}.search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
         input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:14px}
         .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px 10px;margin-top:34px}.item{text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};text-align:center;font-size:12px}
-        .circle{width:52px;height:52px;border-radius:18px;background:${if (darkMode) "#303134" else "#f1f3f4"};margin:0 auto 9px;display:flex;align-items:center;justify-content:center;font-size:23px;color:#1a73e8;font-weight:600}
+        .circle{width:52px;height:52px;border-radius:18px;background:${if (darkMode) "#303134" else "#f1f3f4"};margin:0 auto 9px;display:flex;align-items:center;justify-content:center;overflow:hidden}.circle img{width:32px;height:32px;object-fit:contain}
         .note{text-align:center;color:#80868b;font-size:12px;margin-top:36px}
         </style></head><body><div class="wrap"><div class="brand">TGFN <span>Browser</span></div>
         <form class="search" action="https://www.google.com/search" method="get"><input name="q" placeholder="${tr("Tìm kiếm trên Google", "Search Google")}" autofocus><button class="go" type="submit">${tr("Tìm", "Search")}</button></form>
         <div class="grid">
-        <a class="item" href="https://www.google.com"><div class="circle">G</div>Google</a>
-        <a class="item" href="https://www.youtube.com"><div class="circle">▶</div>YouTube</a>
-        <a class="item" href="https://www.wikipedia.org"><div class="circle">W</div>Wikipedia</a>
-        <a class="item" href="https://github.com"><div class="circle">⌘</div>GitHub</a>
-        <a class="item" href="https://www.reddit.com"><div class="circle">r</div>Reddit</a>
-        <a class="item" href="https://www.bing.com"><div class="circle">b</div>Bing</a>
+        <a class="item" href="https://www.google.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.google.com&amp;sz=128" alt="Google"></div>Google</a>
+        <a class="item" href="https://www.youtube.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.youtube.com&amp;sz=128" alt="YouTube"></div>YouTube</a>
+        <a class="item" href="https://www.wikipedia.org"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.wikipedia.org&amp;sz=128" alt="Wikipedia"></div>Wikipedia</a>
+        <a class="item" href="https://github.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=github.com&amp;sz=128" alt="GitHub"></div>GitHub</a>
+        <a class="item" href="https://www.reddit.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.reddit.com&amp;sz=128" alt="Reddit"></div>Reddit</a>
+        <a class="item" href="https://www.bing.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.bing.com&amp;sz=128" alt="Bing"></div>Bing</a>
         </div><div class="note">${tr("Tìm kiếm nhanh · Duyệt web theo cách của bạn", "Quick search · Browse your way")}</div></div></body></html>
     """.trimIndent()
 
@@ -473,7 +473,7 @@ class MainActivity : Activity() {
 
     private fun showBrowserMenu() {
         val desktopLabel = if (isDesktopModeEnabled()) tr("Phiên bản máy tính: đang bật", "Desktop site: on") else tr("Phiên bản máy tính", "Desktop site")
-        val dataSaverLabel = if (isDataSaverEnabled()) "Data Saver: on" else "Data Saver: off"
+        val dataSaverLabel = if (isDataSaverEnabled()) "Data Saver: " + tr("bật", "on") else "Data Saver: " + tr("tắt", "off")
         val items = arrayOf(
             tr("Tab mới", "New tab"), tr("Tab ẩn danh mới", "New incognito tab"), tr("Dịch trang", "Translate page"), tr("Tìm trong trang", "Find in page"), tr("Thu phóng", "Zoom"),
             desktopLabel, tr("Lưu/Bỏ dấu trang", "Add/remove bookmark"), tr("Dấu trang", "Bookmarks"), tr("Lịch sử", "History"),
@@ -518,7 +518,7 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(4), dp(2), dp(12))
         }
         val heading = TextView(this).apply {
-            text = "Tab đang mở"
+            text = tr("Tab đang mở", "Open tabs")
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(ink)
@@ -593,7 +593,7 @@ class MainActivity : Activity() {
                             textSize = 22f
                             gravity = Gravity.CENTER
                             setTextColor(muted)
-                            contentDescription = "Đóng tab " + (tabIndex + 1)
+                            contentDescription = tr("Đóng tab ", "Close tab ") + (tabIndex + 1)
                             setPadding(dp(6), 0, dp(4), 0)
                             setOnClickListener {
                                 closeTabAt(tabIndex)
@@ -603,7 +603,7 @@ class MainActivity : Activity() {
                                 updateTabButton()
                                 if (tabs.isEmpty()) parentDialog?.dismiss() else {
                                     renderCards()
-                                    heading.text = "Tab đang mở"
+                                    heading.text = tr("Tab đang mở", "Open tabs")
                                 }
                             }
                         }
@@ -649,7 +649,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, 0)
         }
         val newTab = TextView(this).apply {
-            text = "+  Tab mới"
+            text = "+  " + tr("Tab mới", "New tab")
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
@@ -664,7 +664,7 @@ class MainActivity : Activity() {
         }
         footer.addView(newTab, LinearLayout.LayoutParams(0, dp(48), 1f))
         val done = TextView(this).apply {
-            text = "Xong"
+            text = tr("Xong", "Done")
             textSize = 14f
             gravity = Gravity.CENTER
             setTextColor(accent)
@@ -748,9 +748,9 @@ class MainActivity : Activity() {
         // Do not reload: changing this preference must not interrupt a page,
         // reset its desktop-site request, or trigger dynamic-page reload loops.
         status.text = if (enabled) {
-            "Data Saver bật: cache an toàn, giữ nguyên chức năng trang"
+            tr("Data Saver bật: cache an toàn, giữ nguyên chức năng trang", "Data Saver on: safe cache, preserve site functionality")
         } else {
-            "Data Saver đã tắt"
+            tr("Data Saver đã tắt", "Data Saver turned off")
         }
         Toast.makeText(this, status.text, Toast.LENGTH_LONG).show()
     }
@@ -767,7 +767,7 @@ class MainActivity : Activity() {
             if (url == "https://tgfn.browser/") loadNewTabPage(current)
             else if (url.startsWith("http://") || url.startsWith("https://")) current.reload()
         }
-        status.text = if (enabled) "Đã bật phiên bản máy tính" else "Đã tắt phiên bản máy tính"
+        status.text = if (enabled) tr("Đã bật phiên bản máy tính", "Desktop site enabled") else tr("Đã tắt phiên bản máy tính", "Desktop site disabled")
         Toast.makeText(this, status.text, Toast.LENGTH_SHORT).show()
     }
 
@@ -775,15 +775,15 @@ class MainActivity : Activity() {
         val web = currentWebView() ?: return
         val url = web.url.orEmpty()
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            Toast.makeText(this, "Mở một trang web trước khi dịch", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, tr("Mở một trang web trước khi dịch", "Open a website before translating"), Toast.LENGTH_SHORT).show()
             return
         }
         val languages = arrayOf("Tiếng Việt", "English", "日本語", "한국어", "Français", "Español")
         val codes = arrayOf("vi", "en", "ja", "ko", "fr", "es")
         android.app.AlertDialog.Builder(this)
-            .setTitle("Dịch ngay trên trang")
+            .setTitle(tr("Dịch ngay trên trang", "Translate page"))
             .setItems(languages) { _, which -> translatePageInPlace(web, codes[which], languages[which]) }
-            .setNeutralButton("Hiện bản gốc") { _, _ -> restoreOriginalPage(web) }
+            .setNeutralButton(tr("Hiện bản gốc", "Show original")) { _, _ -> restoreOriginalPage(web) }
             .setNegativeButton(tr("Hủy", "Cancel"), null)
             .show()
     }
@@ -814,17 +814,17 @@ class MainActivity : Activity() {
               } catch (e) { return '[]'; }
             })();
         """.trimIndent()
-        status.text = "Đang chuẩn bị dịch…"
+        status.text = tr("Đang chuẩn bị dịch…", "Preparing translation…")
         web.evaluateJavascript(collectScript) { raw ->
             try {
                 val decoded = org.json.JSONTokener(raw ?: "null").nextValue() as? String ?: "[]"
                 val originals = org.json.JSONArray(decoded)
                 if (originals.length() == 0) {
-                    status.text = "Không tìm thấy văn bản để dịch"
-                    Toast.makeText(this, "Không tìm thấy văn bản phù hợp trên trang", Toast.LENGTH_LONG).show()
+                    status.text = tr("Không tìm thấy văn bản để dịch", "No text found to translate")
+                    Toast.makeText(this, tr("Không tìm thấy văn bản phù hợp trên trang", "No suitable text found on this page"), Toast.LENGTH_LONG).show()
                     return@evaluateJavascript
                 }
-                status.text = "Đang dịch " + originals.length() + " đoạn…"
+                status.text = tr("Đang dịch ", "Translating ") + originals.length() + tr(" đoạn…", " text segments…")
                 Thread {
                     val translated = org.json.JSONArray()
                     for (index in 0 until originals.length()) translated.put("")
@@ -860,14 +860,14 @@ class MainActivity : Activity() {
                         """.trimIndent()
                         web.evaluateJavascript(applyScript) { result ->
                             val count = result?.toIntOrNull() ?: 0
-                            status.text = if (count > 0) "Đã dịch " + count + " đoạn · " + languageLabel else "Không dịch được nội dung"
-                            Toast.makeText(this, if (count > 0) "Đã dịch ngay trên trang. Dùng Menu → Dịch trang → Hiện bản gốc để hoàn tác." else "Dịch thất bại. Kiểm tra kết nối mạng rồi thử lại.", Toast.LENGTH_LONG).show()
+                            status.text = if (count > 0) tr("Đã dịch ", "Translated ") + count + tr(" đoạn · ", " segments · ") + languageLabel else tr("Không dịch được nội dung", "Could not translate content")
+                            Toast.makeText(this, if (count > 0) tr("Đã dịch ngay trên trang. Dùng Menu → Dịch trang → Hiện bản gốc để hoàn tác.", "Page translated. Use Menu → Translate page → Show original to undo.") else tr("Dịch thất bại. Kiểm tra kết nối mạng rồi thử lại.", "Translation failed. Check your connection and try again."), Toast.LENGTH_LONG).show()
                         }
                     }
                 }.start()
             } catch (e: Exception) {
-                status.text = "Không thể chuẩn bị nội dung dịch"
-                Toast.makeText(this, "Không thể đọc văn bản của trang này", Toast.LENGTH_LONG).show()
+                status.text = tr("Không thể chuẩn bị nội dung dịch", "Could not prepare page for translation")
+                Toast.makeText(this, tr("Không thể đọc văn bản của trang này", "Could not read text on this page"), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -906,34 +906,34 @@ class MainActivity : Activity() {
         web.evaluateJavascript(
             "(function(){var nodes=window.__tgfnTranslateNodes||[],count=0;nodes.forEach(function(item){if(item.node&&item.node.isConnected){item.node.nodeValue=item.original;count++;}});window.__tgfnTranslateNodes=null;return count;})();"
         ) { result ->
-            status.text = "Đã khôi phục bản gốc"
-            Toast.makeText(this, "Đã khôi phục văn bản gốc", Toast.LENGTH_SHORT).show()
+            status.text = tr("Đã khôi phục bản gốc", "Original text restored")
+            Toast.makeText(this, tr("Đã khôi phục văn bản gốc", "Original text restored"), Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun showFindInPage() {
         val web = currentWebView() ?: return
         val query = EditText(this).apply {
-            hint = "Nhập từ hoặc cụm từ"
+            hint = tr("Nhập từ hoặc cụm từ", "Enter a word or phrase")
             setSingleLine(true)
             setPadding(dp(20), dp(12), dp(20), dp(12))
         }
         val dialog = android.app.AlertDialog.Builder(this)
-            .setTitle("Tìm trong trang")
+            .setTitle(tr("Tìm trong trang", "Find in page"))
             .setView(query)
-            .setNegativeButton("Đóng", null)
-            .setPositiveButton("Tìm", null)
+            .setNegativeButton(tr("Đóng", "Close"), null)
+            .setPositiveButton(tr("Tìm", "Find"), null)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val term = query.text.toString().trim()
                 if (term.isBlank()) {
-                    query.error = "Nhập nội dung cần tìm"
+                    query.error = tr("Nhập nội dung cần tìm", "Enter text to find")
                 } else {
                     web.setFindListener { activeMatches, _, _ ->
                         Toast.makeText(
                             this,
-                            if (activeMatches > 0) "Tìm thấy " + activeMatches + " kết quả" else "Không tìm thấy kết quả",
+                            if (activeMatches > 0) tr("Tìm thấy ", "Found ") + activeMatches + tr(" kết quả", " matches") else tr("Không tìm thấy kết quả", "No matches found"),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -947,9 +947,9 @@ class MainActivity : Activity() {
 
     private fun showZoomControls() {
         val web = currentWebView() ?: return
-        val options = arrayOf("Thu nhỏ", "Mức mặc định", "Phóng to")
+        val options = arrayOf(tr("Thu nhỏ", "Zoom out"), tr("Mức mặc định", "Default zoom"), tr("Phóng to", "Zoom in"))
         android.app.AlertDialog.Builder(this)
-            .setTitle("Thu phóng trang")
+            .setTitle(tr("Thu phóng trang", "Page zoom"))
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> web.zoomOut()
@@ -961,7 +961,7 @@ class MainActivity : Activity() {
                     2 -> web.zoomIn()
                 }
             }
-            .setNegativeButton("Xong", null)
+            .setNegativeButton(tr("Xong", "Done"), null)
             .show()
     }
 
@@ -1049,7 +1049,7 @@ class MainActivity : Activity() {
         })
         val dialog = android.app.AlertDialog.Builder(this)
             .setView(ScrollView(this).apply { addView(content) })
-            .setNegativeButton("Hủy", null)
+            .setNegativeButton(tr("Hủy", "Cancel"), null)
             .setNeutralButton(tr("Tắt proxy", "Disable proxy"), null)
             .setPositiveButton(tr("Lưu", "Save"), null)
             .create()
@@ -1093,7 +1093,7 @@ class MainActivity : Activity() {
                 dialog.dismiss()
                 applySavedProxy { success ->
                     updateProxySummary()
-                    status.text = if (success) "Đã tắt proxy" else "Không thể đổi proxy trên WebView này"
+                    status.text = if (success) tr("Đã tắt proxy", "Proxy disabled") else tr("Không thể đổi proxy trên WebView này", "Could not change proxy in this WebView")
                 }
             }
         }
@@ -1107,21 +1107,21 @@ class MainActivity : Activity() {
         val bookmarks = (prefs.getStringSet("bookmarks", emptySet()) ?: emptySet()).toMutableSet()
         if (bookmarks.remove(url)) {
             prefs.edit().putStringSet("bookmarks", bookmarks).apply()
-            Toast.makeText(this, "Đã xóa dấu trang", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, tr("Đã xóa dấu trang", "Bookmark removed"), Toast.LENGTH_SHORT).show()
         } else {
             bookmarks.add(url)
             prefs.edit().putStringSet("bookmarks", bookmarks).apply()
-            Toast.makeText(this, "Đã lưu dấu trang", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, tr("Đã lưu dấu trang", "Bookmark saved"), Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun showBookmarks() {
         val bookmarks = (prefs.getStringSet("bookmarks", emptySet()) ?: emptySet()).toList().sorted()
         if (bookmarks.isEmpty()) {
-            Toast.makeText(this, "Chưa có dấu trang", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, tr("Chưa có dấu trang", "No bookmarks yet"), Toast.LENGTH_SHORT).show()
             return
         }
-        android.app.AlertDialog.Builder(this).setTitle("Dấu trang")
+        android.app.AlertDialog.Builder(this).setTitle(tr("Dấu trang", "Bookmarks"))
             .setItems(bookmarks.toTypedArray()) { _, which -> currentWebView()?.loadUrl(bookmarks[which]) }
             .setPositiveButton("Đóng", null).show()
     }
@@ -1176,14 +1176,14 @@ class MainActivity : Activity() {
     private fun showHistory() {
         val history = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toList().sortedDescending()
         if (history.isEmpty()) {
-            Toast.makeText(this, "Chưa có lịch sử duyệt web", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, tr("Chưa có lịch sử duyệt web", "No browsing history yet"), Toast.LENGTH_SHORT).show()
             return
         }
-        android.app.AlertDialog.Builder(this).setTitle("Lịch sử")
+        android.app.AlertDialog.Builder(this).setTitle(tr("Lịch sử", "History"))
             .setItems(history.toTypedArray()) { _, which -> currentWebView()?.loadUrl(history[which]) }
-            .setPositiveButton("Xóa lịch sử") { _, _ ->
+            .setPositiveButton(tr("Xóa lịch sử", "Clear history")) { _, _ ->
                 prefs.edit().remove("history").apply()
-                Toast.makeText(this, "Đã xóa lịch sử", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, tr("Đã xóa lịch sử", "History cleared"), Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Đóng", null).show()
     }
@@ -1197,7 +1197,7 @@ class MainActivity : Activity() {
             putExtra(Intent.EXTRA_SUBJECT, title)
             putExtra(Intent.EXTRA_TEXT, "$title\n$url")
         }
-        startActivity(Intent.createChooser(send, "Chia sẻ trang bằng"))
+        startActivity(Intent.createChooser(send, tr("Chia sẻ trang bằng", "Share page using")))
     }
 
     private fun parseProxyUrl(raw: String): Pair<String, Int>? {
@@ -1234,7 +1234,7 @@ class MainActivity : Activity() {
     private fun updateProxySummary() {
         if (!::proxySummary.isInitialized) return
         val enabled = prefs.getBoolean("proxy_enabled", false)
-        proxySummary.text = if (enabled) "● PROXY BẬT" else "● TRỰC TIẾP"
+        proxySummary.text = if (enabled) tr("● PROXY BẬT", "● PROXY ON") else tr("● TRỰC TIẾP", "● DIRECT")
         proxySummary.setTextColor(if (enabled) accent else Color.rgb(24, 128, 56))
         proxySummary.background = rounded(if (enabled) Color.rgb(232, 240, 254) else Color.rgb(232, 245, 233), dp(16))
     }
@@ -1263,7 +1263,7 @@ class MainActivity : Activity() {
         } else "https://$input"
         val normalized = normalizeHttpUrl(target)
         if (normalized == null) {
-            Toast.makeText(this, "Chỉ hỗ trợ URL HTTP/HTTPS hợp lệ", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, tr("Chỉ hỗ trợ URL HTTP/HTTPS hợp lệ", "Only valid HTTP/HTTPS URLs are supported"), Toast.LENGTH_SHORT).show()
             return
         }
         currentWebView()?.loadUrl(normalized)
