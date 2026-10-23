@@ -272,7 +272,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                             String label = cleanText(html.substring(end + 1, close));
                             if (label.length() > 0 && absolute.length() > 0) {
                                 result.links.addElement(new LinkItem(label, absolute));
-                                text.append("\n[").append(result.links.size()).append("] ").append(label).append("\n");
+                                text.append("\n");
                             }
                         }
                     }
