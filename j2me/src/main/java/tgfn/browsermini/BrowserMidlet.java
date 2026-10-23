@@ -240,6 +240,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         result.links = new Vector();
         result.images = new Vector();
         result.title = baseUrl;
+        result.blocks = parseRenderBlocks(baseUrl, html, result.links);
         String lower = html.toLowerCase();
         int titleStart = lower.indexOf("<title");
         if (titleStart >= 0) {
@@ -301,6 +302,67 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         result.text = cleanText(text.toString());
         if (result.text.length() == 0) result.text = "(No readable text was found. Try a simpler or mobile website.)";
         return result;
+    }
+
+    private Vector parseRenderBlocks(String baseUrl, String html, Vector pageLinks) {
+        Vector blocks = new Vector();
+        String lower = html.toLowerCase();
+        int pos = 0;
+        int style = 0;
+        while (pos < html.length() && blocks.size() < 700) {
+            int open = html.indexOf('<', pos);
+            if (open < 0) open = html.length();
+            if (open > pos) {
+                String value = cleanText(html.substring(pos, open));
+                if (value.length() > 0) {
+                    if (style == 3 && blocks.size() > 0) {
+                        RenderBlock prev = (RenderBlock)blocks.elementAt(blocks.size() - 1);
+                        if (prev.type == 3) prev.text += " " + value;
+                        else blocks.addElement(new RenderBlock(value, 3, null));
+                    } else {
+                        blocks.addElement(new RenderBlock(value, style, null));
+                    }
+                }
+            }
+            if (open >= html.length()) break;
+            int close = html.indexOf('>', open + 1);
+            if (close < 0) break;
+            String tag = html.substring(open + 1, close);
+            String t = tag.toLowerCase();
+            if (t.startsWith("script") || t.startsWith("style") || t.startsWith("noscript")) {
+                String endTag = t.startsWith("script") ? "</script>" : (t.startsWith("style") ? "</style>" : "</noscript>");
+                int skip = lower.indexOf(endTag, close + 1);
+                pos = skip < 0 ? html.length() : skip + endTag.length();
+                continue;
+            }
+            if (t.startsWith("a ") || t.startsWith("a\t")) {
+                String href = resolveUrl(baseUrl, attribute(tag, "href"));
+                int endA = lower.indexOf("</a>", close + 1);
+                if (endA > close) {
+                    String label = cleanText(html.substring(close + 1, endA));
+                    if (label.length() > 0 && href.length() > 0 && (href.startsWith("http://") || href.startsWith("https://"))) {
+                        LinkItem item = new LinkItem(label, href);
+                        pageLinks.addElement(item);
+                        blocks.addElement(new RenderBlock(label, 4, href));
+                    } else if (label.length() > 0) blocks.addElement(new RenderBlock(label, style, null));
+                    pos = endA + 4;
+                    continue;
+                }
+            }
+            if (t.startsWith("h1")) style = 1;
+            else if (t.startsWith("h2") || t.startsWith("h3") || t.startsWith("strong") || t.startsWith("b")) style = 2;
+            else if (t.startsWith("li")) { blocks.addElement(new RenderBlock("• ", 3, null)); style = 3; }
+            else if (t.startsWith("p") || t.startsWith("div") || t.startsWith("br") || t.startsWith("hr") ||
+                     t.startsWith("/p") || t.startsWith("/div") || t.startsWith("/li") ||
+                     t.startsWith("/h1") || t.startsWith("/h2") || t.startsWith("/h3") ||
+                     t.startsWith("/tr") || t.startsWith("tr")) {
+                if (blocks.size() > 0) blocks.addElement(new RenderBlock("", 0, null));
+                style = 0;
+            } else if (t.startsWith("/strong") || t.startsWith("/b")) style = 0;
+            else if (t.startsWith("/h1") || t.startsWith("/h2") || t.startsWith("/h3")) style = 0;
+            pos = close + 1;
+        }
+        return blocks;
     }
 
     private String attribute(String tag, String name) {
@@ -828,21 +890,38 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     }
                 }
             }
-            Vector lines = wrap(screenBody, normal, w - 14);
+            Vector lines = new Vector();
+            Vector sourceBlocks = lastPageResult != null && lastPageResult.blocks != null ? lastPageResult.blocks : null;
+            if (sourceBlocks == null || sourceBlocks.size() == 0) {
+                Vector plain = wrap(screenBody, normal, w - 14);
+                for (int i = 0; i < plain.size(); i++) lines.addElement(new RenderLine((String)plain.elementAt(i), 0, null));
+            } else {
+                for (int b = 0; b < sourceBlocks.size(); b++) {
+                    RenderBlock block = (RenderBlock)sourceBlocks.elementAt(b);
+                    if (block.text.length() == 0) { lines.addElement(new RenderLine("", 0, null)); continue; }
+                    Font bf = block.type == 1 ? Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM) :
+                              (block.type == 2 ? bold : normal);
+                    Vector wrapped = wrap(block.text, bf, w - 14);
+                    for (int j = 0; j < wrapped.size(); j++) lines.addElement(new RenderLine((String)wrapped.elementAt(j), block.type, block.url));
+                }
+            }
+            renderedLinkLines.removeAllElements();
             for (int i = 0; i < lines.size(); i++) {
-                String rawLine = (String)lines.elementAt(i);
-                boolean h1 = rawLine.length() > 0 && rawLine.charAt(0) == '\u0001';
-                boolean h2 = rawLine.length() > 0 && rawLine.charAt(0) == '\u0002';
-                String line = h1 || h2 ? rawLine.substring(1) : rawLine;
-                Font lineFont = h1 ? Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM) :
-                                (h2 ? bold : normal);
+                RenderLine line = (RenderLine)lines.elementAt(i);
+                Font lineFont = line.type == 1 ? Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM) :
+                                (line.type == 2 ? bold : normal);
                 g.setFont(lineFont);
-                boolean link = line.startsWith("http://") || line.startsWith("https://");
-                g.setColor(link ? 0 : (h1 || h2 ? 20 : 35),
-                           link ? 76 : (h1 || h2 ? 65 : 43),
-                           link ? 160 : (h1 || h2 ? 115 : 52));
-                g.drawString(line, 7, y, Graphics.TOP | Graphics.LEFT);
-                int lineHeight = lineFont.getHeight() + (h1 ? 3 : 1);
+                int lineHeight = lineFont.getHeight() + (line.type == 1 ? 3 : 1);
+                if (line.url != null) renderedLinkLines.addElement(new Integer(i));
+                boolean focused = line.url != null && renderedLinkLines.size() - 1 == selectedLink;
+                if (focused && y + lineHeight > contentY && y < contentY + contentH) {
+                    g.setColor(222, 237, 255); g.fillRect(5, y, w - 10, lineHeight);
+                }
+                g.setColor(line.url != null ? 0 : (line.type == 1 ? 20 : (line.type == 2 ? 30 : 35)),
+                           line.url != null ? 72 : (line.type == 1 ? 65 : (line.type == 2 ? 55 : 43)),
+                           line.url != null ? 160 : (line.type == 1 ? 115 : (line.type == 2 ? 90 : 52)));
+                g.drawString(line.text, 7, y, Graphics.TOP | Graphics.LEFT);
+                if (line.url != null) g.drawLine(7, y + lineFont.getHeight() - 1, 7 + lineFont.stringWidth(line.text), y + lineFont.getHeight() - 1);
                 y += lineHeight;
                 totalBodyHeight += lineHeight;
             }
@@ -900,9 +979,43 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 int visible = Math.max(1, getHeight() - 90);
                 scrollY = Math.min(Math.max(0, totalBodyHeight - visible), scrollY + 30); repaint();
             } else if (action == FIRE || keyCode == KEY_NUM5) {
-                showAddress();
-            } else if (action == LEFT && historyIndex > 0) {
+                if (selectedLink >= 0 && selectedLink < renderedLinkLines.size()) {
+                    int lineIndex = ((Integer)renderedLinkLines.elementAt(selectedLink)).intValue();
+                    Vector blocks = lastPageResult == null ? null : lastPageResult.blocks;
+                    int linkIndex = -1;
+                    if (blocks != null) {
+                        int seen = -1;
+                        for (int i = 0; i < blocks.size(); i++) {
+                            RenderBlock b = (RenderBlock)blocks.elementAt(i);
+                            if (b.url != null) {
+                                seen++;
+                                if (seen == selectedLink) { linkIndex = i; break; }
+                            }
+                        }
+                        if (linkIndex >= 0) navigate(((RenderBlock)blocks.elementAt(linkIndex)).url, true);
+                        else showAddress();
+                    } else showAddress();
+                } else if (renderedLinkLines.size() > 0) {
+                    selectedLink = 0;
+                    int lineIndex = ((Integer)renderedLinkLines.elementAt(0)).intValue();
+                    scrollY = Math.max(0, lineIndex * 14);
+                    repaint();
+                } else showAddress();
+            } else if (keyCode == KEY_NUM4 || action == LEFT) {
+                if (renderedLinkLines.size() > 0) {
+                    selectedLink = selectedLink <= 0 ? renderedLinkLines.size() - 1 : selectedLink - 1;
+                    int lineIndex = ((Integer)renderedLinkLines.elementAt(selectedLink)).intValue();
+                    scrollY = Math.max(0, lineIndex * 14);
+                    repaint();
+                } else if (historyIndex > 0) {
                 historyIndex--; navigate((String)history.elementAt(historyIndex), false);
+            } else if (keyCode == KEY_NUM6) {
+                if (renderedLinkLines.size() > 0) {
+                    selectedLink = (selectedLink + 1) % renderedLinkLines.size();
+                    int lineIndex = ((Integer)renderedLinkLines.elementAt(selectedLink)).intValue();
+                    scrollY = Math.max(0, lineIndex * 14);
+                    repaint();
+                }
             } else if (action == RIGHT && historyIndex >= 0 && historyIndex + 1 < history.size()) {
                 historyIndex++; navigate((String)history.elementAt(historyIndex), false);
             }
@@ -925,10 +1038,25 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         }
     }
 
+    private static final class RenderBlock {
+        String text;
+        int type;
+        String url;
+        RenderBlock(String text, int type, String url) { this.text = text; this.type = type; this.url = url; }
+    }
+
+    private static final class RenderLine {
+        String text;
+        int type;
+        String url;
+        RenderLine(String text, int type, String url) { this.text = text; this.type = type; this.url = url; }
+    }
+
     private static final class PageResult {
         String text;
         String title;
         Vector links;
         Vector images;
+        Vector blocks;
     }
 }
