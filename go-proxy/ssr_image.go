@@ -6,6 +6,8 @@ import (
 	"image/jpeg"
 	"io"
 	"net/http"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -14,9 +16,48 @@ import (
 
 const ssrImageMode = "SSRIMG"
 
+// Common Chrome/Chromium binary names and paths to try.
+var chromeCandidates = []string{
+	"google-chrome",
+	"google-chrome-stable",
+	"google-chrome-beta",
+	"google-chrome-unstable",
+	"chromium",
+	"chromium-browser",
+	"chrome",
+	"chrome.exe",
+	"chromium.exe",
+	"/usr/bin/google-chrome",
+	"/usr/bin/google-chrome-stable",
+	"/usr/bin/chromium",
+	"/usr/bin/chromium-browser",
+	"/usr/local/bin/chromium",
+	"/snap/bin/chromium",
+	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+	"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+	"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+}
+
+func findChromeBinary() string {
+	// Prefer explicit env override
+	if env := os.Getenv("CHROME_PATH"); env != "" {
+		if _, err := os.Stat(env); err == nil {
+			return env
+		}
+	}
+	for _, name := range chromeCandidates {
+		if path, err := exec.LookPath(name); err == nil {
+			return path
+		}
+		if _, err := os.Stat(name); err == nil {
+			return name
+		}
+	}
+	return ""
+}
+
 // ssrImageResponse renders the page with headless Chrome and returns a JPEG.
-// This is the closest practical way to deliver full HTML/CSS look to J2ME.
-// Requires Chrome/Chromium installed on the machine running the proxy.
+// Tries multiple common Chrome/Chromium binary names and paths.
 func ssrImageResponse(resp *http.Response) error {
 	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Format") != ssrImageMode {
 		return nil
@@ -29,17 +70,23 @@ func ssrImageResponse(resp *http.Response) error {
 		return nil
 	}
 
-	// We already have the HTML; for a real screenshot we re-navigate in Chrome.
 	pageURL := resp.Request.URL.String()
 	_ = resp.Body.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	chromePath := findChromeBinary()
+	if chromePath == "" {
+		return io.EOF // or a clearer error; caller will surface it
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath(chromePath),
 		chromedp.WindowSize(240, 400),
 		chromedp.DisableGPU,
 		chromedp.NoSandbox,
+		chromedp.Headless,
 	)
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
 	defer allocCancel()
@@ -49,11 +96,10 @@ func ssrImageResponse(resp *http.Response) error {
 	var buf []byte
 	err := chromedp.Run(chromeCtx,
 		chromedp.Navigate(pageURL),
-		chromedp.Sleep(2*time.Second),
+		chromedp.Sleep(2500*time.Millisecond),
 		chromedp.CaptureScreenshot(&buf),
 	)
 	if err != nil {
-		// Fallback: return a simple error image or original
 		return err
 	}
 
@@ -66,7 +112,7 @@ func ssrImageResponse(resp *http.Response) error {
 		return nil
 	}
 	var out bytes.Buffer
-	_ = jpeg.Encode(&out, img, &jpeg.Options{Quality: 50})
+	_ = jpeg.Encode(&out, img, &jpeg.Options{Quality: 45})
 
 	resp.Body = io.NopCloser(bytes.NewReader(out.Bytes()))
 	resp.ContentLength = int64(out.Len())
