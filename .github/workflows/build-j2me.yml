@@ -32,10 +32,26 @@ jobs:
           cache: maven
       - name: Build J2ME JAR
         run: mvn --batch-mode --no-transfer-progress clean package
-      - name: Upload JAR artifact
+      - name: Generate JAD descriptor
+        run: |
+          JAR="target/TGFN-BrowserMini-J2ME.jar"
+          SIZE="$(wc -c < "$JAR" | tr -d ' ')"
+          cat > target/TGFN-BrowserMini-J2ME.jad <<EOF
+          MIDlet-Name: TGFN BrowserMini
+          MIDlet-Vendor: TGFN
+          MIDlet-Version: 1.0.0
+          MIDlet-1: TGFN BrowserMini,,tgfn.browsermini.BrowserMidlet
+          MIDlet-Jar-URL: TGFN-BrowserMini-J2ME.jar
+          MIDlet-Jar-Size: $SIZE
+          MicroEdition-Configuration: CLDC-1.1
+          MicroEdition-Profile: MIDP-2.0
+          EOF
+      - name: Upload JAR and JAD artifacts
         uses: actions/upload-artifact@v4
         with:
           name: TGFN-BrowserMini-J2ME
-          path: j2me/target/TGFN-BrowserMini-J2ME.jar
+          path: |
+            j2me/target/TGFN-BrowserMini-J2ME.jar
+            j2me/target/TGFN-BrowserMini-J2ME.jad
           if-no-files-found: error
           retention-days: 14
