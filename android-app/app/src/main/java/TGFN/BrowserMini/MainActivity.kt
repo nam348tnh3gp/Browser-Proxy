@@ -59,18 +59,17 @@ class MainActivity : Activity() {
 
         val savedUrls = savedInstanceState?.getStringArrayList("tab_urls")
         val restoreIndex = savedInstanceState?.getInt("selected_tab", 0) ?: 0
-        if (!savedUrls.isNullOrEmpty()) {
-            savedUrls.forEachIndexed { index, url -> createTab(url, index == restoreIndex) }
-            selectedTab = restoreIndex.coerceIn(0, tabs.lastIndex)
-            selectTab(selectedTab)
-        } else {
-            createTab(null, true)
-        }
-
         applySavedProxy { success ->
             updateProxySummary()
             if (!success && prefs.getBoolean("proxy_enabled", false)) {
                 status.text = "WebView không hỗ trợ cấu hình proxy"
+            }
+            if (!savedUrls.isNullOrEmpty()) {
+                savedUrls.forEachIndexed { index, url -> createTab(url, index == restoreIndex) }
+                selectedTab = restoreIndex.coerceIn(0, tabs.lastIndex)
+                selectTab(selectedTab)
+            } else {
+                createTab(null, true)
             }
         }
     }
