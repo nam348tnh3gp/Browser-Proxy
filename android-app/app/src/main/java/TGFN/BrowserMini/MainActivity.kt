@@ -178,7 +178,7 @@ class MainActivity : Activity() {
             }
         }
         addressCard.addView(address, LinearLayout.LayoutParams(0, dp(42), 1f))
-        addressCard.addView(textButton("Đi  ↗", Color.WHITE, accent, dp(15)) { navigate() },
+        addressCard.addView(textButton("Đi  ↗", Color.WHITE, accent, 15) { navigate() },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)))
         root.addView(addressCard)
 
