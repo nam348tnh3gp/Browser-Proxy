@@ -47,6 +47,9 @@ var compactAllowedTags = map[string]bool{
 
 // compactHTMLResponse transforms only requests explicitly made by the J2ME client.
 func compactHTMLResponse(resp *http.Response) error {
+	if resp != nil && resp.Request != nil && resp.Request.Header.Get("X-TGFN-Format") == "TBO1" {
+		return obmlResponse(resp)
+	}
 	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Compact") != "1" {
 		return nil
 	}
