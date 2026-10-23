@@ -84,18 +84,44 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         if (!prefs.contains("language")) {
             var selectedLanguage = "vi"
-            android.app.AlertDialog.Builder(this)
-                .setTitle("Choose your language / Chọn ngôn ngữ")
-                .setMessage("Select one option / Hãy chọn một ngôn ngữ")
-                .setSingleChoiceItems(arrayOf("Tiếng Việt", "English"), 0) { _, which ->
-                    selectedLanguage = if (which == 1) "en" else "vi"
-                }
+            val languageContent = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(24), dp(8), dp(24), dp(8))
+            }
+            languageContent.addView(TextView(this).apply {
+                text = "Choose your language / Chọn ngôn ngữ"
+                textSize = 16f
+                setTextColor(Color.DKGRAY)
+                setPadding(0, 0, 0, dp(12))
+            })
+            val languageChoices = android.widget.RadioGroup(this).apply {
+                orientation = android.widget.RadioGroup.VERTICAL
+            }
+            val vietnameseOption = android.widget.RadioButton(this).apply {
+                id = View.generateViewId()
+                text = "Tiếng Việt"
+                isChecked = true
+            }
+            val englishOption = android.widget.RadioButton(this).apply {
+                id = View.generateViewId()
+                text = "English"
+            }
+            languageChoices.addView(vietnameseOption)
+            languageChoices.addView(englishOption)
+            languageChoices.setOnCheckedChangeListener { _, checkedId ->
+                selectedLanguage = if (checkedId == englishOption.id) "en" else "vi"
+            }
+            languageContent.addView(languageChoices)
+            val languageDialog = android.app.AlertDialog.Builder(this)
+                .setView(languageContent)
                 .setPositiveButton("Continue / Tiếp tục") { _, _ ->
                     prefs.edit().putString("language", selectedLanguage).apply()
                     initializeBrowser(savedInstanceState)
                 }
                 .setCancelable(false)
-                .show()
+                .create()
+            languageDialog.setTitle("TGFN Browser")
+            languageDialog.show()
         } else {
             initializeBrowser(savedInstanceState)
         }
@@ -249,7 +275,11 @@ class MainActivity : Activity() {
             settings.javaScriptCanOpenWindowsAutomatically = false
             settings.setSupportMultipleWindows(false)
         }
-        val tab = BrowserTab(web, "Tab mới", url ?: "")
+        val requestedUrl = url?.trim().orEmpty()
+        val shouldShowNewTab = requestedUrl.isBlank() ||
+            requestedUrl.equals("about:blank", ignoreCase = true) ||
+            requestedUrl == "https://tgfn.browser/"
+        val tab = BrowserTab(web, tr("Tab mới", "New tab"), if (shouldShowNewTab) "https://tgfn.browser/" else requestedUrl)
         tabs.add(tab)
         webContainer.addView(web, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
@@ -298,7 +328,7 @@ class MainActivity : Activity() {
             }
         }
         if (select) selectTab(tabs.lastIndex)
-        if (url.isNullOrBlank() || url == "https://tgfn.browser/") loadNewTabPage(web) else web.loadUrl(url)
+        if (shouldShowNewTab) loadNewTabPage(web) else web.loadUrl(requestedUrl)
     }
 
     private fun loadNewTabPage(web: WebView) {
@@ -1076,7 +1106,15 @@ class MainActivity : Activity() {
     private fun persistSession() {
         val urls = org.json.JSONArray()
         tabs.forEach { tab ->
-            urls.put(tab.webView.url ?: tab.url)
+            val webUrl = tab.webView.url.orEmpty()
+            val savedUrl = when {
+                webUrl.isBlank() || webUrl.equals("about:blank", ignoreCase = true) ->
+                    tab.url.takeIf { it.isNotBlank() && !it.equals("about:blank", ignoreCase = true) }
+                        ?: "https://tgfn.browser/"
+                webUrl == "https://tgfn.browser/" -> "https://tgfn.browser/"
+                else -> webUrl
+            }
+            urls.put(savedUrl)
         }
         prefs.edit()
             .putString("session_tab_urls", urls.toString())
