@@ -1001,12 +1001,19 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             if (lastPageResult != null && lastPageResult.images != null) {
                 for (int imageIndex = 0; imageIndex < lastPageResult.images.size() && imageIndex < 8; imageIndex++) {
                     ImageRef ref = (ImageRef)lastPageResult.images.elementAt(imageIndex);
-                    if (ref.image != null && ref.image.getWidth() <= w - 14 && ref.image.getHeight() <= 64) {
-                        if (y + ref.image.getHeight() > contentY && y < contentY + contentH) {
-                            g.drawImage(ref.image, 7, y, Graphics.TOP | Graphics.LEFT);
+                    if (ref.image != null) {
+                        Image toDraw = ref.image;
+                        // Scale down if wider than screen
+                        if (toDraw.getWidth() > w - 14) {
+                            int newH = toDraw.getHeight() * (w - 14) / toDraw.getWidth();
+                            if (newH < 1) newH = 1;
+                            toDraw = scaleImage(toDraw, w - 14, newH);
                         }
-                        y += ref.image.getHeight() + 4;
-                        totalBodyHeight += ref.image.getHeight() + 4;
+                        if (y + toDraw.getHeight() > contentY && y < contentY + contentH) {
+                            g.drawImage(toDraw, 7, y, Graphics.TOP | Graphics.LEFT);
+                        }
+                        y += toDraw.getHeight() + 4;
+                        totalBodyHeight += toDraw.getHeight() + 4;
                     }
                 }
             }
