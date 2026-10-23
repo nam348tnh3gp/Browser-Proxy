@@ -211,7 +211,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     private PageResult fetch(String url) throws IOException {
-        if (proxyEnabled && url.startsWith("http://")) return fetchViaProxy(url);
+        if (proxyEnabled && (url.startsWith("http://") || url.startsWith("https://"))) return fetchViaProxy(url);
         HttpConnection connection = null;
         InputStream input = null;
         try {
@@ -781,11 +781,20 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     private byte[] fetchProxyBytes(String url, int maxBytes) throws IOException {
-        if (!url.startsWith("http://")) throw new IOException("The HTTP proxy only accepts HTTP resources");
-        String rest = url.substring("http://".length());
-        int slash = rest.indexOf('/');
-        String hostPort = slash < 0 ? rest : rest.substring(0, slash);
-        String path = slash < 0 ? "/" : rest.substring(slash);
+        boolean remoteFetch = url.startsWith("https://");
+        if (!remoteFetch && !url.startsWith("http://")) throw new IOException("Only HTTP(S) resources are supported");
+        String rest = url.substring(remoteFetch ? "https://".length() : "http://".length());
+        int slash = rest.length();
+        int slashAt = rest.indexOf('/');
+        int queryAt = rest.indexOf('?');
+        int fragmentAt = rest.indexOf('#');
+        if (slashAt >= 0 && slashAt < slash) slash = slashAt;
+        if (queryAt >= 0 && queryAt < slash) slash = queryAt;
+        if (fragmentAt >= 0 && fragmentAt < slash) slash = fragmentAt;
+        String hostPort = rest.substring(0, slash);
+        String path = slash == rest.length() ? "/" : rest.substring(slash);
+        if (path.startsWith("?")) path = "/" + path;
+        if (path.startsWith("#")) path = "/";
         if (hostPort.indexOf('@') >= 0) throw new IOException("URL userinfo is not allowed");
         if (proxyHost.length() == 0 || proxyPort.length() == 0) throw new IOException("Proxy host/port is empty");
         SocketConnection socket = null;
@@ -797,10 +806,14 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             input = socket.openInputStream();
             output = socket.openOutputStream();
             OutputStreamWriter writer = new OutputStreamWriter(output, "ISO-8859-1");
-            writer.write("GET " + url + " HTTP/1.1\r\n");
-            writer.write("Host: " + hostPort + "\r\n");
-            writer.write("User-Agent: TGFN-BrowserMini-J2ME/1.0\r\n");
-            writer.write("Accept: application/x-tgfn-obml,text/html,text/plain,*/*\r\n");
+            String requestTarget = remoteFetch
+                ? "/__tgfn/fetch?url=" + encodeURLComponent(url)
+                : url;
+            String requestHost = remoteFetch ? proxyHost + ":" + proxyPort : hostPort;
+            writer.write("GET " + requestTarget + " HTTP/1.1\r\n");
+            writer.write("Host: " + requestHost + "\r\n");
+            writer.write("User-Agent: TGFN-BrowserMini-J2ME/2.0\r\n");
+            writer.write("Accept: application/x-tgfn-obml,text/html,text/plain,image/*,*/*\r\n");
             writer.write("X-TGFN-Format: TBO1\r\n");
             writer.write("Connection: close\r\n\r\n");
             writer.flush();
@@ -850,7 +863,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
 
     private Image loadImage(String url) throws IOException {
         byte[] data;
-        if (proxyEnabled && url.startsWith("http://")) {
+        if (proxyEnabled && (url.startsWith("http://") || url.startsWith("https://"))) {
             data = fetchProxyBytes(url, 12000);
         } else {
             HttpConnection connection = null;
@@ -872,6 +885,24 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
         }
         return Image.createImage(data, 0, data.length);
+    }
+
+    private String encodeURLComponent(String value) throws IOException {
+        byte[] data = value.getBytes("UTF-8");
+        StringBuffer out = new StringBuffer(data.length * 3);
+        final char[] hex = "0123456789ABCDEF".toCharArray();
+        for (int i = 0; i < data.length; i++) {
+            int b = data[i] & 255;
+            if ((b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') ||
+                (b >= '0' && b <= '9') || b == '-' || b == '_' || b == '.' || b == '~') {
+                out.append((char)b);
+            } else {
+                out.append('%');
+                out.append(hex[(b >> 4) & 15]);
+                out.append(hex[b & 15]);
+            }
+        }
+        return out.toString();
     }
 
     private String readAsciiLine(InputStream input) throws IOException {
