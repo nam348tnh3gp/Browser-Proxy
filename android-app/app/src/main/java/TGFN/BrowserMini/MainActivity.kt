@@ -240,7 +240,7 @@ class MainActivity : Activity() {
                 tab.title = view?.title?.takeIf { it.isNotBlank() } ?: hostLabel(url)
                 if (isSelected(tab)) {
                     status.text = "Sẵn sàng"
-                    if (!url.isNullOrBlank()) setAddress(url)
+                    if (!url.isNullOrBlank()) setAddress(if (url == "https://tgfn.browser/") "" else url)
                 }
                 rememberHistory(tab)
                 updateTabButton()
@@ -266,7 +266,7 @@ class MainActivity : Activity() {
             }
         }
         if (select) selectTab(tabs.lastIndex)
-        if (url.isNullOrBlank()) loadNewTabPage(web) else web.loadUrl(url)
+        if (url.isNullOrBlank() || url == "https://tgfn.browser/") loadNewTabPage(web) else web.loadUrl(url)
     }
 
     private fun loadNewTabPage(web: WebView) {
@@ -549,15 +549,17 @@ class MainActivity : Activity() {
         startActivity(Intent.createChooser(send, "Chia sẻ trang bằng"))
     }
 
-    private fun parseProxyUrl(raw: String): Pair<String, Int>? = try {
-        val uri = URI(raw)
-        if (!uri.scheme.equals("http", true) || uri.host.isNullOrBlank()) return null
-        if (uri.rawUserInfo != null || (uri.rawPath != null && uri.rawPath.isNotEmpty() && uri.rawPath != "/") ||
-            uri.rawQuery != null || uri.rawFragment != null) return null
-        val port = if (uri.port == -1) 8080 else uri.port
-        if (port !in 1..65535) null else uri.host to port
-    } catch (_: Exception) {
-        null
+    private fun parseProxyUrl(raw: String): Pair<String, Int>? {
+        return try {
+            val uri = URI(raw)
+            if (!uri.scheme.equals("http", true) || uri.host.isNullOrBlank()) return null
+            if (uri.rawUserInfo != null || (uri.rawPath != null && uri.rawPath.isNotEmpty() && uri.rawPath != "/") ||
+                uri.rawQuery != null || uri.rawFragment != null) return null
+            val port = if (uri.port == -1) 8080 else uri.port
+            if (port !in 1..65535) null else uri.host to port
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun applySavedProxy(callback: (Boolean) -> Unit) {
