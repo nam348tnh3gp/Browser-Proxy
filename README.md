@@ -7,10 +7,9 @@ A lightweight Android browser prototype with a Kotlin/WebView client and a stand
 ## Project layout
 
 - `android-app/` — Android application (Kotlin, WebView, AndroidX WebKit).
-- `go-proxy/` — standalone HTTP forward proxy with timeouts, HTTPS CONNECT tunneling, and opt-in server-side compact HTML mode for J2ME.
-- `j2me/` — standalone Java ME/MIDP 2.0 browser for compatible feature phones, with basic images/links, bookmarks, and optional HTTP proxy settings; separate from Android.
-- `.github/workflows/build.yml` — builds the Android debug APK and Go proxy on pushes and pull requests.
-- `.github/workflows/build-j2me.yml` — independently builds the J2ME development JAR.
+- `go-proxy/` — standalone HTTP forward proxy with timeouts and HTTPS CONNECT tunneling.
+- `.github/workflows/build.yml` — builds the Android debug APK and Go proxy on Android/proxy changes.
+- [J2ME branch](https://github.com/nam348tnh3gp/Browser-Proxy/tree/J2ME) — separate Java ME/MIDP 2.0 feature-phone browser and compact-page proxy integration.
 
 ## Browser features
 
@@ -39,11 +38,7 @@ gradle -p android-app assembleDebug
 
 ## J2ME feature-phone version
 
-A separate Java ME client is available in [`j2me/`](j2me/). It targets the MIDP 2.0 / CLDC 1.1 API and provides address/search entry, basic HTML text, clickable links, up to three small images, bookmarks, back/forward/home/reload controls, and persistent optional HTTP proxy settings. It remains separate from the Android app; when configured, HTTP requests can use the Go forward proxy.
-
-GitHub Actions builds a development JAR in the **Build TGFN BrowserMini J2ME** workflow. Open [Actions](https://github.com/nam348tnh3gp/Browser-Proxy/actions), select that workflow's successful run, and download the `TGFN-BrowserMini-J2ME` artifact.
-
-**Compatibility note:** J2ME runs only on phones with a compatible Java ME runtime. Many newer KaiOS and other feature phones do not include J2ME. This is a lightweight browser, not a modern JavaScript/CSS engine. The configured proxy currently handles HTTP only for the J2ME client; HTTP HTML requests opt into server-side compact mode. HTTPS uses the phone's direct TLS connection because portable TLS-over-CONNECT is not available in standard MIDP. Read [`j2me/README.md`](j2me/README.md) for build and handset limitations.
+The Java ME client has been separated into the dedicated [`J2ME` branch](https://github.com/nam348tnh3gp/Browser-Proxy/tree/J2ME), including its own build workflow and server-side compact HTML integration. Switch to that branch to build the JAR/JAD and read its handset limitations.
 
 ## Run the Go proxy
 
@@ -59,7 +54,6 @@ By default it listens on `127.0.0.1:8080`. To allow a phone to connect over a tr
 - WebView proxy override is a WebView feature and may not be available on every device/WebView version.
 - Open **Settings** in the app to enable/disable a proxy and enter its URL, e.g. `http://192.168.1.10:8080`; the setting is saved across launches. Use a reachable HTTP proxy endpoint; `localhost` refers to the Android device itself. Proxy URLs with paths, credentials, queries, or fragments are not accepted.
 - The Go proxy supports HTTPS tunneling with standard HTTP CONNECT and does not decrypt HTTPS traffic. WebView proxy override must be supported by the device's WebView provider.
-- The Go proxy offers an opt-in compact HTML mode for the J2ME client: it strips scripts/styles and heavy page regions, removes unsupported markup/attributes, and preserves basic text, links and images. This reduces HTML payloads but is not Opera Mini's proprietary cloud rendering/OBML system and does not recompress image bytes.
 - In-page translation currently translates up to 36 visible text nodes per action. Dynamic content, complex pages, protected text, and some site layouts may not translate perfectly; network access to Google's translation endpoint is required.
 - The app uses a WebView browser engine and does not implement Opera Mini's proprietary OBML protocol.
 
