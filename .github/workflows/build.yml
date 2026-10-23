@@ -85,18 +85,29 @@ jobs:
         id: signing
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         shell: bash
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            mkdir -p "$RUNNER_TEMP/android-signing"
-            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/android-signing/release.jks"
-            test -s "$RUNNER_TEMP/android-signing/release.jks"
-            echo "available=true" >> "$GITHUB_OUTPUT"
-            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/android-signing/release.jks" >> "$GITHUB_ENV"
-          else
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            if [ -n "$KEYSTORE_PASSWORD$KEY_ALIAS$KEY_PASSWORD" ]; then
+              echo "Signing secrets are incomplete: provide all four ANDROID_* secrets." >&2
+              exit 1
+            fi
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "No signing keystore secret found; will build a debug APK."
+            echo "No signing keystore configured; will build a debug APK."
+            exit 0
           fi
+          if [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "Signing keystore exists but one or more signing secrets are missing." >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/android-signing"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/android-signing/release.jks"
+          test -s "$RUNNER_TEMP/android-signing/release.jks"
+          echo "available=true" >> "$GITHUB_OUTPUT"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/android-signing/release.jks" >> "$GITHUB_ENV"
 
       - name: Build signed release APK
         if: steps.signing.outputs.available == 'true'
