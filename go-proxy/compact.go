@@ -55,6 +55,8 @@ func compactHTMLResponse(resp *http.Response) error {
 			return fullCompressResponse(resp)
 		case "SSR":
 			return ssrResponse(resp)
+		case "SSRIMG":
+			return ssrImageResponse(resp)
 		}
 	}
 	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Compact") != "1" {
