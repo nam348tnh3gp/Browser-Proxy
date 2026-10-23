@@ -839,7 +839,7 @@ class MainActivity : Activity() {
             setPadding(0, 0, 0, dp(12))
         })
         val enabled = android.widget.CheckBox(this).apply {
-            text = "Bật HTTP proxy"
+            text = "Bật HTTP/HTTPS proxy"
             isChecked = prefs.getBoolean("proxy_enabled", false)
         }
         content.addView(enabled)
@@ -862,7 +862,7 @@ class MainActivity : Activity() {
         }
         content.addView(home)
         content.addView(TextView(this).apply {
-            text = "Proxy chỉ được dùng khi bật. Khi tắt, trình duyệt kết nối Internet trực tiếp. Proxy phải hỗ trợ HTTP CONNECT để tải HTTPS."
+            text = "Khi bật, HTTP đi qua proxy và HTTPS dùng đường hầm CONNECT. Khi tắt, trình duyệt kết nối trực tiếp. Proxy cần hỗ trợ HTTP CONNECT để tải HTTPS."
             textSize = 13f
             setTextColor(muted)
             setPadding(0, dp(8), 0, dp(8))
