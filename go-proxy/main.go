@@ -31,14 +31,14 @@ func main() {
 
 func proxyHandler() http.Handler {
 	proxy := &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
+		Director:       func(req *http.Request) {
 			req.Header.Del("Proxy-Connection")
 			req.Header.Set("Via", "1.1 TGFN.BrowserMini")
 		},
-		FlushInterval: 100 * time.Millisecond,
+		FlushInterval:  100 * time.Millisecond,
 		ModifyResponse: compactHTMLResponse,
-		ErrorLog:      log.New(os.Stderr, "proxy: ", log.LstdFlags),
-		Transport: &http.Transport{
+		ErrorLog:       log.New(os.Stderr, "proxy: ", log.LstdFlags),
+		Transport:      &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          100,
