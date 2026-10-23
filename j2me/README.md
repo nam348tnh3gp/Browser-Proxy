@@ -1,35 +1,40 @@
-# TGFN BrowserMini J2ME (Opera Mini 4.x-style)
+# TGFN BrowserMini J2ME
 
-Lightweight Java ME browser that uses a server-side proxy to compress pages (text + images) before sending them to the phone — similar in concept to Opera Mini 4.x.
+Lightweight Java ME browser with a server-side compression proxy.
 
-## New in this update
+## Important: Why you still see mostly text
 
-- **Server-side image compression**: Images are automatically resized (max 240px wide) and re-encoded as JPEG quality 60 via `/__tgfn/img`. Pages become much lighter and load faster on feature phones.
-- **Fuller content extraction** with `golang.org/x/net/html` (more text, headings, lists, links kept).
-- **TBO1 binary protocol**: Compact block format inspired by Opera Mini's OBML. Client receives structured content instead of raw HTML.
-- Higher capacity (up to 2500 blocks).
+The J2ME client **does not have a full HTML/CSS engine**.  
+Even when the proxy sends mode `FULL` (almost complete HTML + some CSS + links + compressed images), the client extracts the content and draws it as structured text + images on a Canvas.
 
-## How it works (like Opera Mini)
+This is a limitation of MIDP 2.0, not a bug. Real CSS layout (like Opera Mini's Presto server renderer) is not implemented.
 
-1. J2ME client requests a page through the proxy.
-2. Proxy fetches the real page, extracts content, compresses images, and packs everything into a small TBO1 binary.
-3. Client renders the blocks (title, text, headings, links, compressed images).
+## What the current version does
 
-Result: lighter pages and a more usable web view on old phones than plain HTML dumping.
+- Proxy can send:
+  - **FULL** mode: keeps most HTML structure, links, basic CSS, compresses images, gzips the result.
+  - **TBO1** mode: compact binary blocks (lighter).
+- Client renders:
+  - Title, headings (bold/larger), paragraphs, lists
+  - Clickable links
+  - Up to 8 compressed images
+  - Scrolling Canvas view
 
-## Usage
+## How to get the best result
 
-1. Run the Go proxy (`PROXY_LISTEN=0.0.0.0:8080 go run .` in `go-proxy/`).
-2. In the J2ME app: Menu → Proxy → enter LAN IP + port 8080 → enable.
-3. Open any HTTP/HTTPS site. The proxy will compress it.
+1. Run the proxy:
+   ```bash
+   cd go-proxy
+   PROXY_LISTEN=0.0.0.0:8080 go run .
+   ```
+2. In the J2ME app enable the proxy (LAN IP + port 8080).
+3. Prefer text-friendly or mobile sites for the best look.
 
-**Important**: Use only a trusted proxy. The proxy can see requested URLs and content.
+## Current limits
 
-## Limitations (honest)
+- No real CSS positioning or complex layout
+- No JavaScript
+- Images are resized and JPEG-compressed on the server
+- Best on simple / mobile pages
 
-- Still not a full layout engine (no real CSS positioning like Opera Mini's Presto server renderer).
-- Client currently shows a structured page (text + links + images) rather than pixel-perfect layout.
-- JavaScript is not executed on the server.
-- Best results on text-friendly or mobile pages.
-
-This is an open re-implementation of the Opera Mini idea, not affiliated with Opera.
+This is an open project inspired by the Opera Mini idea, not affiliated with Opera.
