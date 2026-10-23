@@ -14,24 +14,24 @@ const maxCompactHTMLBytes = 4 << 20
 
 var (
 	compactDropBlocks = []*regexp.Regexp{
-		regexp.MustCompile("(?is)<!--.*?-->"),
-		regexp.MustCompile("(?is)<script\\b[^>]*>.*?</script\\s*>"),
-		regexp.MustCompile("(?is)<style\\b[^>]*>.*?</style\\s*>"),
-		regexp.MustCompile("(?is)<noscript\\b[^>]*>.*?</noscript\\s*>"),
-		regexp.MustCompile("(?is)<iframe\\b[^>]*>.*?</iframe\\s*>"),
-		regexp.MustCompile("(?is)<svg\\b[^>]*>.*?</svg\\s*>"),
-		regexp.MustCompile("(?is)<canvas\\b[^>]*>.*?</canvas\\s*>"),
-		regexp.MustCompile("(?is)<video\\b[^>]*>.*?</video\\s*>"),
-		regexp.MustCompile("(?is)<audio\\b[^>]*>.*?</audio\\s*>"),
-		regexp.MustCompile("(?is)<form\\b[^>]*>.*?</form\\s*>"),
-		regexp.MustCompile("(?is)<nav\\b[^>]*>.*?</nav\\s*>"),
-		regexp.MustCompile("(?is)<footer\\b[^>]*>.*?</footer\\s*>"),
-		regexp.MustCompile("(?is)<header\\b[^>]*>.*?</header\\s*>"),
+		regexp.MustCompile(`(?is)<!--.*?-->`),
+		regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script\s*>`),
+		regexp.MustCompile(`(?is)<style\b[^>]*>.*?</style\s*>`),
+		regexp.MustCompile(`(?is)<noscript\b[^>]*>.*?</noscript\s*>`),
+		regexp.MustCompile(`(?is)<iframe\b[^>]*>.*?</iframe\s*>`),
+		regexp.MustCompile(`(?is)<svg\b[^>]*>.*?</svg\s*>`),
+		regexp.MustCompile(`(?is)<canvas\b[^>]*>.*?</canvas\s*>`),
+		regexp.MustCompile(`(?is)<video\b[^>]*>.*?</video\s*>`),
+		regexp.MustCompile(`(?is)<audio\b[^>]*>.*?</audio\s*>`),
+		regexp.MustCompile(`(?is)<form\b[^>]*>.*?</form\s*>`),
+		regexp.MustCompile(`(?is)<nav\b[^>]*>.*?</nav\s*>`),
+		regexp.MustCompile(`(?is)<footer\b[^>]*>.*?</footer\s*>`),
+		regexp.MustCompile(`(?is)<header\b[^>]*>.*?</header\s*>`),
 	}
-	compactDropVoid   = regexp.MustCompile("(?is)<(link|input|source|meta|button)\\b[^>]*?/?>")
-	compactTags       = regexp.MustCompile("(?is)<[^>]*?>")
-	compactAttrs      = regexp.MustCompile("(?is)\\s+(href|src|alt|title|width|height)\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)"),
-	compactWhitespace = regexp.MustCompile("[\\t\\r\\n ]+"),
+	compactDropVoid   = regexp.MustCompile(`(?is)<(link|input|source|meta|button)\b[^>]*?/?>`)
+	compactTags       = regexp.MustCompile(`(?is)<[^>]*?>`)
+	compactAttrs      = regexp.MustCompile(`(?is)\s+(href|src|alt|title|width|height)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)`)
+	compactWhitespace = regexp.MustCompile(`[\t\r\n ]+`)
 )
 
 var compactAllowedTags = map[string]bool{
