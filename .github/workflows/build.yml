@@ -45,46 +45,30 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Bump Android version
+      - name: Load version from files
         id: version
         shell: bash
         run: |
-          python3 - <<'PY'
-          import pathlib
-          import re
-
+          set -euo pipefail
+          VERSION_NAME="$(tr -d '\r\n' < versionname.txt)"
+          VERSION_CODE="$(tr -d '\r\n' < versioncode.txt)"
+          [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid versionname.txt: $VERSION_NAME" >&2; exit 1; }
+          [[ "$VERSION_CODE" =~ ^[0-9]+$ ]] || { echo "Invalid versioncode.txt: $VERSION_CODE" >&2; exit 1; }
+          VERSION_CODE=$((10#$VERSION_CODE))
+          python3 - "$VERSION_NAME" "$VERSION_CODE" <<'PY'
+          import pathlib, re, sys
           path = pathlib.Path("android-app/app/build.gradle.kts")
           text = path.read_text()
-          code_match = re.search(r'(?m)^\s*versionCode\s*=\s*(\d+)\s*$', text)
-          name_match = re.search(r'(?m)^\s*versionName\s*=\s*"([0-9]+)\.([0-9]+)\.([0-9]+)"\s*$', text)
-          if not code_match or not name_match:
-              raise SystemExit("Cannot parse versionCode/versionName in build.gradle.kts")
-
-          version_code = int(code_match.group(1)) + 1
-          major, minor, patch = map(int, name_match.groups())
-          version_name = f"{major}.{minor}.{patch + 1}"
-          text = re.sub(r'(?m)^(\s*versionCode\s*=\s*)\d+\s*$', rf'\g<1>{version_code}', text, count=1)
-          text = re.sub(r'(?m)^(\s*versionName\s*=\s*")[0-9]+\.[0-9]+\.[0-9]+("\s*)$', rf'\g<1>{version_name}\2', text, count=1)
+          name, code = sys.argv[1], int(sys.argv[2])
+          text, n_code = re.subn(r'(?m)^(\s*versionCode\s*=\s*)\d+\s*$', rf'\g<1>{code}', text, count=1)
+          text, n_name = re.subn(r'(?m)^(\s*versionName\s*=\s*")[^"]+("\s*)$', rf'\g<1>{name}\2', text, count=1)
+          if n_code != 1 or n_name != 1:
+              raise SystemExit("Could not set versionCode/versionName in build.gradle.kts")
           path.write_text(text)
-          print(f"versionCode={version_code}")
-          print(f"versionName={version_name}")
-          with open(__import__("os").environ["GITHUB_OUTPUT"], "a") as out:
-              out.write(f"version_code={version_code}\n")
-              out.write(f"version_name={version_name}\n")
           PY
-
-      - name: Commit version bump to main
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add android-app/app/build.gradle.kts
-          if ! git diff --cached --quiet; then
-            git commit -m "chore(android): bump version to ${{ steps.version.outputs.version_name }} [skip ci]"
-            git push origin HEAD:main
-          fi
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "Building versionName=$VERSION_NAME versionCode=$VERSION_CODE"
 
       - name: Prepare release signing key
         id: signing
@@ -144,7 +128,7 @@ jobs:
         if: steps.signing.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: TGFN-BrowserMini-release-v${{ steps.version.outputs.version_name }}
+          name: TGFN-BrowserMini-release-v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.version_code }}
           path: android-app/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
@@ -153,10 +137,34 @@ jobs:
         if: steps.signing.outputs.available != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: TGFN-BrowserMini-debug-v${{ steps.version.outputs.version_name }}
+          name: TGFN-BrowserMini-debug-v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.version_code }}
           path: android-app/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      # Increment only after a successful APK build. A rerun of an older workflow
+      # has GITHUB_SHA != origin/main and therefore cannot bump the counter again.
+      - name: Increment version code after successful build
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            echo "Skipping version-code increment: this is a rerun or main has advanced."
+            exit 0
+          fi
+          CURRENT_CODE="$(tr -d '\r\n' < versioncode.txt)"
+          [[ "$CURRENT_CODE" =~ ^[0-9]+$ ]] || { echo "Invalid versioncode.txt" >&2; exit 1; }
+          NEXT_CODE=$((10#$CURRENT_CODE + 1))
+          printf '%s\n' "$NEXT_CODE" > versioncode.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add versioncode.txt
+          git commit -m "chore(version): increment version code to $NEXT_CODE [skip ci]"
+          git push origin HEAD:main
 
   go-proxy:
     name: Test Go proxy
