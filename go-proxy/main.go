@@ -2,6 +2,9 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"context"
 	"errors"
 	"io"
@@ -15,13 +18,18 @@ import (
 )
 
 func main() {
+	username := os.Getenv("PROXY_USERNAME")
+	password := os.Getenv("PROXY_PASSWORD")
+	if (username == "") != (password == "") {
+		log.Fatal("PROXY_USERNAME and PROXY_PASSWORD must both be set, or both be empty")
+	}
 	addr := os.Getenv("PROXY_LISTEN")
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           proxyHandler(),
+		Handler:           proxyHandlerWithAuth(username, password),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       90 * time.Second,
 	}
@@ -42,8 +50,13 @@ func (t *requestTrackingTransport) RoundTrip(req *http.Request) (*http.Response,
 }
 
 func proxyHandler() http.Handler {
+	return proxyHandlerWithAuth(os.Getenv("PROXY_USERNAME"), os.Getenv("PROXY_PASSWORD"))
+}
+
+func proxyHandlerWithAuth(username, password string) http.Handler {
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
+			req.Header.Del("Proxy-Authorization")
 			req.Header.Del("Proxy-Connection")
 			req.Header.Set("Via", "1.1 TGFN.BrowserMini")
 		},
@@ -63,6 +76,12 @@ func proxyHandler() http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
+		if username != "" && !validProxyAuthorization(r.Header.Get("Proxy-Authorization"), username, password) {
+			w.Header().Set("Proxy-Authenticate", `Basic realm="TGFN.BrowserMini"`)
+			http.Error(w, "Proxy authentication required", http.StatusProxyAuthRequired)
+			log.Printf("request rejected method=%s client=%q reason=proxy_auth status=%d", r.Method, safeLogValue(r.RemoteAddr), http.StatusProxyAuthRequired)
+			return
+		}
 		if r.Method == http.MethodConnect {
 			log.Printf("request method=CONNECT client=%q target=%q", r.RemoteAddr, safeLogValue(r.Host))
 			handleConnect(w, r)
@@ -92,6 +111,29 @@ func proxyHandler() http.Handler {
 		r2.Host = r.URL.Host
 		proxy.ServeHTTP(logWriter, r2)
 	})
+}
+
+func validProxyAuthorization(header, username, password string) bool {
+	const prefix = "Basic "
+	if !strings.HasPrefix(header, prefix) {
+		return false
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(strings.TrimPrefix(header, prefix)))
+	if err != nil {
+		return false
+	}
+	separator := strings.IndexByte(string(decoded), ':')
+	if separator < 0 {
+		return false
+	}
+	gotUser := string(decoded[:separator])
+	gotPassword := string(decoded[separator+1:])
+	wantUser := sha256.Sum256([]byte(username))
+	wantPassword := sha256.Sum256([]byte(password))
+	actualUser := sha256.Sum256([]byte(gotUser))
+	actualPassword := sha256.Sum256([]byte(gotPassword))
+	return subtle.ConstantTimeCompare(wantUser[:], actualUser[:]) == 1 &&
+		subtle.ConstantTimeCompare(wantPassword[:], actualPassword[:]) == 1
 }
 
 type statusLoggingWriter struct {
