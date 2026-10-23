@@ -37,17 +37,17 @@ func serveRemoteFetch(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	transport := &http.Transport{
-		Proxy: nil,
-		ForceAttemptHTTP2: true,
-		TLSHandshakeTimeout: 10 * time.Second,
+		Proxy:                 nil,
+		ForceAttemptHTTP2:     true,
+		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 15 * time.Second,
-		DisableCompression: false,
-		DialContext: safeRemoteDial,
+		DisableCompression:    false,
+		DialContext:           safeRemoteDial,
 	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{
 		Transport: transport,
-		Timeout: 25 * time.Second,
+		Timeout:   25 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 5 {
 				return errors.New("too many redirects")
