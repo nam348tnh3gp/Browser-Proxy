@@ -22,7 +22,7 @@ class IncognitoActivity : Activity() {
  private val prefs by lazy { getSharedPreferences("browser_settings", MODE_PRIVATE) }
  private val darkMode get() = prefs.getBoolean("dark_mode", false)
  private val isEnglish get() = prefs.getString("language", "vi") == "en"
- private val surface get() = if (darkMode) Color.rgb(32,33,36) else surface
+ private val surface: Int get() = if (darkMode) Color.rgb(32,33,36) else Color.WHITE
  private val pageBackground get() = if (darkMode) Color.rgb(32,33,36) else Color.rgb(248,245,255)
  private val textColor get() = if (darkMode) Color.rgb(232,234,237) else Color.rgb(32,33,36)
  private val purple = Color.rgb(103,58,183)
@@ -31,7 +31,9 @@ class IncognitoActivity : Activity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   if (Build.VERSION.SDK_INT >= 28) WebView.setDataDirectorySuffix("tgfn_incognito")
   super.onCreate(savedInstanceState)
-  window.statusBarColor = pageBackground\n  @Suppress("DEPRECATION")\n  window.decorView.systemUiVisibility = if (darkMode) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+  window.statusBarColor = pageBackground
+  @Suppress("DEPRECATION")
+  window.decorView.systemUiVisibility = if (darkMode) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
   clearPrivateData()
   val root = LinearLayout(this).apply { orientation=1; setBackgroundColor(pageBackground) }
   root.addView(TextView(this).apply { text=tr("◉  Ẩn danh · Không lưu lịch sử","◉  Incognito · No history saved"); textSize=13f; setTextColor(purple); setPadding(dp(12),dp(10),dp(12),dp(8)) })
