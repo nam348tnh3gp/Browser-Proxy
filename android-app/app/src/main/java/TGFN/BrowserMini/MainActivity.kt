@@ -215,6 +215,7 @@ class MainActivity : Activity() {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.loadsImagesAutomatically = true
+            applyDataSaverSettings(settings)
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
             settings.setSupportZoom(true)
@@ -377,10 +378,11 @@ class MainActivity : Activity() {
 
     private fun showBrowserMenu() {
         val desktopLabel = if (isDesktopModeEnabled()) "Phiên bản máy tính: đang bật" else "Phiên bản máy tính"
+        val dataSaverLabel = if (isDataSaverEnabled()) "Data Saver: đang bật" else "Data Saver: tắt"
         val items = arrayOf(
             "Tab mới", "Dịch trang", "Tìm trong trang", "Thu phóng",
             desktopLabel, "Lưu/Bỏ dấu trang", "Dấu trang", "Lịch sử",
-            "Chia sẻ trang", "Cài đặt", "Đóng tab hiện tại"
+            "Chia sẻ trang", "Cài đặt", "Đóng tab hiện tại", dataSaverLabel
         )
         android.app.AlertDialog.Builder(this)
             .setTitle("TGFN Browser · Tiện ích")
@@ -397,6 +399,7 @@ class MainActivity : Activity() {
                     8 -> shareCurrentPage()
                     9 -> showSettings()
                     10 -> closeCurrentTab()
+                    11 -> toggleDataSaver()
                 }
             }
             .show()
@@ -621,6 +624,36 @@ class MainActivity : Activity() {
     }
 
     private fun isDesktopModeEnabled(): Boolean = prefs.getBoolean("desktop_mode", false)
+
+    private fun isDataSaverEnabled(): Boolean = prefs.getBoolean("data_saver_enabled", false)
+
+    /**
+     * Data Saver avoids automatic image downloads and prefers cached resources.
+     * It does not inspect or rewrite HTTPS traffic.
+     */
+    private fun applyDataSaverSettings(settings: android.webkit.WebSettings) {
+        val enabled = isDataSaverEnabled()
+        settings.loadsImagesAutomatically = !enabled
+        settings.blockNetworkImage = enabled
+        settings.cacheMode = if (enabled) {
+            android.webkit.WebSettings.LOAD_CACHE_ELSE_NETWORK
+        } else {
+            android.webkit.WebSettings.LOAD_DEFAULT
+        }
+    }
+
+    private fun toggleDataSaver() {
+        val enabled = !isDataSaverEnabled()
+        prefs.edit().putBoolean("data_saver_enabled", enabled).apply()
+        tabs.forEach { tab -> applyDataSaverSettings(tab.webView.settings) }
+        currentWebView()?.reload()
+        status.text = if (enabled) {
+            "Data Saver bật: chặn ảnh, ưu tiên cache"
+        } else {
+            "Data Saver đã tắt"
+        }
+        Toast.makeText(this, status.text, Toast.LENGTH_LONG).show()
+    }
 
     private fun toggleDesktopMode() {
         val enabled = !isDesktopModeEnabled()
@@ -849,6 +882,17 @@ class MainActivity : Activity() {
             isChecked = prefs.getBoolean("proxy_enabled", false)
         }
         content.addView(enabled)
+        val dataSaver = android.widget.CheckBox(this).apply {
+            text = "Data Saver: chặn ảnh và ưu tiên cache"
+            isChecked = isDataSaverEnabled()
+        }
+        content.addView(dataSaver)
+        content.addView(TextView(this).apply {
+            text = "Khi bật, trình duyệt không tự tải ảnh và ưu tiên tài nguyên trong cache. Một số trang có thể hiển thị thiếu ảnh; nội dung chưa có trong cache vẫn cần tải qua mạng."
+            textSize = 12f
+            setTextColor(muted)
+            setPadding(dp(28), 0, 0, dp(8))
+        })
         val desktop = android.widget.CheckBox(this).apply {
             text = "Yêu cầu phiên bản máy tính cho trang web"
             isChecked = isDesktopModeEnabled()
@@ -893,9 +937,11 @@ class MainActivity : Activity() {
                 }
                 prefs.edit().putBoolean("proxy_enabled", enabled.isChecked)
                     .putBoolean("desktop_mode", desktop.isChecked)
+                    .putBoolean("data_saver_enabled", dataSaver.isChecked)
                     .putString("proxy_url", rawProxy).putString("home_url", normalizedHome).apply()
                 tabs.forEach { tab ->
                     tab.webView.settings.userAgentString = if (desktop.isChecked) DESKTOP_USER_AGENT else null
+                    applyDataSaverSettings(tab.webView.settings)
                 }
                 dialog.dismiss()
                 applySavedProxy { success ->
