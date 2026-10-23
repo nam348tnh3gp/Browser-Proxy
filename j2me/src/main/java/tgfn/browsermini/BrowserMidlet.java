@@ -719,7 +719,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
 
     private PageResult fetchViaProxy(String url) throws IOException {
         byte[] response = fetchProxyBytes(url, MAX_PAGE_CHARS * 3);
-        if (response.length >= 4 && response[0] == 'T' && response[1] == 'B' &&
+        if (response.length >= 4 && response[0] == 'S' || response[0] == 'T' && response[1] == 'B' &&
             response[2] == 'O' && response[3] == '1') {
             return parseTBO1(url, response);
         }
@@ -814,7 +814,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             writer.write("Host: " + requestHost + "\r\n");
             writer.write("User-Agent: TGFN-BrowserMini-J2ME/2.0\r\n");
             writer.write("Accept: application/x-tgfn-obml,text/html,text/plain,image/*,*/*\r\n");
-            writer.write("X-TGFN-Format: FULL\r\n");
+            writer.write("X-TGFN-Format: SSR\r\n");
             writer.write("Connection: close\r\n\r\n");
             writer.flush();
             String status = readAsciiLine(input);
