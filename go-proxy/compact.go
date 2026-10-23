@@ -13,10 +13,24 @@ import (
 const maxCompactHTMLBytes = 4 << 20
 
 var (
-	compactDropBlocks = []*regexp.Regexp{regexp.MustCompile("(?is)<!--.*?-->"), regexp.MustCompile("(?is)<script\\b[^>]*>.*?</script\\s*>"), regexp.MustCompile("(?is)<style\\b[^>]*>.*?</style\\s*>"), regexp.MustCompile("(?is)<noscript\\b[^>]*>.*?</noscript\\s*>"), regexp.MustCompile("(?is)<iframe\\b[^>]*>.*?</iframe\\s*>"), regexp.MustCompile("(?is)<svg\\b[^>]*>.*?</svg\\s*>"), regexp.MustCompile("(?is)<canvas\\b[^>]*>.*?</canvas\\s*>"), regexp.MustCompile("(?is)<video\\b[^>]*>.*?</video\\s*>"), regexp.MustCompile("(?is)<audio\\b[^>]*>.*?</audio\\s*>"), regexp.MustCompile("(?is)<form\\b[^>]*>.*?</form\\s*>"), regexp.MustCompile("(?is)<nav\\b[^>]*>.*?</nav\\s*>"), regexp.MustCompile("(?is)<footer\\b[^>]*>.*?</footer\\s*>"), regexp.MustCompile("(?is)<header\\b[^>]*>.*?</header\\s*>") }
-	compactDropVoid = regexp.MustCompile("(?is)<(link|input|source|meta|button)\\b[^>]*?/?>")
-	compactTags = regexp.MustCompile("(?is)<[^>]*?>")
-	compactAttrs = regexp.MustCompile("(?is)\\s+(href|src|alt|title|width|height)\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)")
+	compactDropBlocks = []*regexp.Regexp{
+		regexp.MustCompile("(?is)<!--.*?-->"),
+		regexp.MustCompile("(?is)<script\\b[^>]*>.*?</script\\s*>"),
+		regexp.MustCompile("(?is)<style\\b[^>]*>.*?</style\\s*>"),
+		regexp.MustCompile("(?is)<noscript\\b[^>]*>.*?</noscript\\s*>"),
+		regexp.MustCompile("(?is)<iframe\\b[^>]*>.*?</iframe\\s*>"),
+		regexp.MustCompile("(?is)<svg\\b[^>]*>.*?</svg\\s*>"),
+		regexp.MustCompile("(?is)<canvas\\b[^>]*>.*?</canvas\\s*>"),
+		regexp.MustCompile("(?is)<video\\b[^>]*>.*?</video\\s*>"),
+		regexp.MustCompile("(?is)<audio\\b[^>]*>.*?</audio\\s*>"),
+		regexp.MustCompile("(?is)<form\\b[^>]*>.*?</form\\s*>"),
+		regexp.MustCompile("(?is)<nav\\b[^>]*>.*?</nav\\s*>"),
+		regexp.MustCompile("(?is)<footer\\b[^>]*>.*?</footer\\s*>"),
+		regexp.MustCompile("(?is)<header\\b[^>]*>.*?</header\\s*>"),
+	}
+	compactDropVoid   = regexp.MustCompile("(?is)<(link|input|source|meta|button)\\b[^>]*?/?>")
+	compactTags       = regexp.MustCompile("(?is)<[^>]*?>")
+	compactAttrs      = regexp.MustCompile("(?is)\\s+(href|src|alt|title|width|height)\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)")
 	compactWhitespace = regexp.MustCompile("[\\t\\r\\n ]+")
 )
 
@@ -33,12 +47,20 @@ var compactAllowedTags = map[string]bool{
 
 // compactHTMLResponse transforms only requests explicitly made by the J2ME client.
 func compactHTMLResponse(resp *http.Response) error {
-	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Compact") != "1" { return nil }
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 || resp.Body == nil { return nil }
+	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Compact") != "1" {
+		return nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 || resp.Body == nil {
+		return nil
+	}
 	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
-	if err != nil || (!strings.EqualFold(mediaType, "text/html") && !strings.EqualFold(mediaType, "application/xhtml+xml")) { return nil }
+	if err != nil || (!strings.EqualFold(mediaType, "text/html") && !strings.EqualFold(mediaType, "application/xhtml+xml")) {
+		return nil
+	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCompactHTMLBytes+1))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if len(data) > maxCompactHTMLBytes {
 		resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(data), resp.Body))
 		return nil
@@ -55,19 +77,34 @@ func compactHTMLResponse(resp *http.Response) error {
 }
 
 func compactHTML(input string) string {
-	for _, pattern := range compactDropBlocks { input = pattern.ReplaceAllString(input, " ") }
+	for _, pattern := range compactDropBlocks {
+		input = pattern.ReplaceAllString(input, " ")
+	}
 	input = compactDropVoid.ReplaceAllString(input, "")
 	input = compactTags.ReplaceAllStringFunc(input, func(tag string) string {
-		if len(tag) < 3 || tag[1] == '!' || tag[1] == '?' { return "" }
+		if len(tag) < 3 || tag[1] == '!' || tag[1] == '?' {
+			return ""
+		}
 		closing := tag[1] == '/'
 		start := 1
-		if closing { start++ }
+		if closing {
+			start++
+		}
 		end := start
-		for end < len(tag) && ((tag[end] >= 'a' && tag[end] <= 'z') || (tag[end] >= 'A' && tag[end] <= 'Z') || (tag[end] >= '0' && tag[end] <= '9')) { end++ }
-		if end == start { return "" }
+		for end < len(tag) && ((tag[end] >= 'a' && tag[end] <= 'z') ||
+			(tag[end] >= 'A' && tag[end] <= 'Z') || (tag[end] >= '0' && tag[end] <= '9')) {
+			end++
+		}
+		if end == start {
+			return ""
+		}
 		name := strings.ToLower(tag[start:end])
-		if !compactAllowedTags[name] { return "" }
-		if closing { return "</" + name + ">" }
+		if !compactAllowedTags[name] {
+			return ""
+		}
+		if closing {
+			return "</" + name + ">"
+		}
 		matches := compactAttrs.FindAllStringSubmatch(tag[end:], -1)
 		attrs := ""
 		for _, match := range matches {
