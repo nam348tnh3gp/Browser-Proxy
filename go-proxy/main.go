@@ -29,6 +29,18 @@ func main() {
 	log.Fatal(server.ListenAndServe())
 }
 
+type requestTrackingTransport struct {
+	base http.RoundTripper
+}
+
+func (t *requestTrackingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.base.RoundTrip(req)
+	if resp != nil {
+		resp.Request = req
+	}
+	return resp, err
+}
+
 func proxyHandler() http.Handler {
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
@@ -38,7 +50,7 @@ func proxyHandler() http.Handler {
 		FlushInterval:  100 * time.Millisecond,
 		ModifyResponse: compactHTMLResponse,
 		ErrorLog:       log.New(os.Stderr, "proxy: ", log.LstdFlags),
-		Transport: &http.Transport{
+		Transport: &requestTrackingTransport{base: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          100,
@@ -46,7 +58,7 @@ func proxyHandler() http.Handler {
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			DisableCompression:    false,
-		},
+		}},
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
