@@ -288,6 +288,8 @@ class MainActivity : Activity() {
             isNewTab = shouldShowNewTab
         )
         tabs.add(tab)
+        // Update the visible tab counter immediately, before WebView callbacks run.
+        updateTabButton()
         webContainer.addView(web, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ))
@@ -521,7 +523,7 @@ class MainActivity : Activity() {
             setTextColor(ink)
         }
         header.addView(heading, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(TextView(this).apply {
+        val countLabel = TextView(this).apply {
             text = tabs.size.toString()
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
@@ -529,7 +531,8 @@ class MainActivity : Activity() {
             setTextColor(accent)
             background = rounded(Color.rgb(232, 240, 254), dp(16))
             setPadding(dp(12), dp(6), dp(12), dp(6))
-        })
+        }
+        header.addView(countLabel)
         dialogContent.addView(header)
 
         val scroll = ScrollView(this).apply {
@@ -595,10 +598,11 @@ class MainActivity : Activity() {
                                 closeTabAt(tabIndex)
                                 val parentDialog = dialogContent.tag as? android.app.AlertDialog
                                 if (tabs.isEmpty()) createTab(null, true)
+                                countLabel.text = tabs.size.toString()
+                                updateTabButton()
                                 if (tabs.isEmpty()) parentDialog?.dismiss() else {
                                     renderCards()
                                     heading.text = "Tab đang mở"
-                                    updateTabButton()
                                 }
                             }
                         }
