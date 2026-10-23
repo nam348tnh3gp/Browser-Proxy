@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"image"
 	"image/jpeg"
-	"image/png"
+	_ "image/png"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 )
 
 const imageCompressPath = "/__tgfn/img"
@@ -56,7 +55,7 @@ func serveCompressedImage(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 
-	img, format, err := image.Decode(bytes.NewReader(data))
+	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		http.Error(w, "Unsupported image format", http.StatusBadRequest)
 		return true
@@ -79,7 +78,6 @@ func serveCompressedImage(w http.ResponseWriter, r *http.Request) bool {
 	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(buf.Bytes())
-	_ = format // silence unused
 	return true
 }
 
