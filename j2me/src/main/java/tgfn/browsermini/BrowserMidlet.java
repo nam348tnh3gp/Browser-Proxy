@@ -22,6 +22,9 @@ import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.Form;
 import javax.microedition.lcdui.List;
 import javax.microedition.lcdui.ChoiceGroup;
+import javax.microedition.lcdui.Canvas;
+import javax.microedition.lcdui.Graphics;
+import javax.microedition.lcdui.Font;
 import javax.microedition.lcdui.Item;
 import javax.microedition.lcdui.ItemCommandListener;
 import javax.microedition.lcdui.Image;
@@ -45,6 +48,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private String currentUrl = "https://lite.duckduckgo.com/lite/";
     private String currentTitle = "TGFN BrowserMini J2ME";
     private Form page;
+    private BrowserCanvas browserCanvas;
+    private String visibleBody = "Welcome to BrowserMini.";
     private List linkList;
     private TextBox addressBox;
     private boolean loading;
@@ -78,6 +83,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
 
     public void startApp() {
         loadSettings();
+        browserCanvas = new BrowserCanvas();
         showHome();
     }
 
@@ -88,18 +94,11 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     private void showHome() {
-        page = new Form("TGFN BrowserMini");
-        page.append(new StringItem("Lightweight J2ME browser", "For Java ME feature phones\n\nEnter a web address or search query. This browser shows readable text and basic links; complex modern sites may not work."));
-        page.append(new StringItem("Address", currentUrl));
-        page.append(new StringItem("Proxy", proxyEnabled ? "ON: " + proxyHost + ":" + proxyPort + " (HTTP only)" : "OFF"));
-        page.addCommand(openCommand);
-        page.addCommand(addressCommand);
-        page.addCommand(homeCommand);
-        page.addCommand(proxyCommand);
-        page.addCommand(bookmarksCommand);
-        page.addCommand(exitCommand);
-        page.setCommandListener(this);
-        display.setCurrent(page);
+        currentTitle = "TGFN BrowserMini";
+        visibleBody = "Welcome to BrowserMini\n\nA lightweight browser for Java ME feature phones.\n\nChoose Address to open a website or search.\n\nUse Links to browse links on the current page.\n\nProxy: " + (proxyEnabled ? "ON - " + proxyHost + ":" + proxyPort : "OFF");
+        if (browserCanvas == null) browserCanvas = new BrowserCanvas();
+        browserCanvas.setContent(currentTitle, visibleBody);
+        display.setCurrent(browserCanvas);
     }
 
     private void showAddress() {
@@ -387,49 +386,10 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     private void showPage(String title, String body) {
-        page = new Form(title.length() > 0 ? title : "Web page");
-        page.append(new StringItem("Address", currentUrl));
-        if (proxyEnabled && currentUrl.startsWith("https://")) {
-            page.append(new StringItem("Proxy", "HTTPS uses the phone's direct secure connection; Java ME cannot safely layer TLS over this HTTP proxy."));
-        } else if (proxyEnabled) {
-            page.append(new StringItem("Proxy", "HTTP proxy: " + proxyHost + ":" + proxyPort));
-        }
-        page.append(new StringItem("", body));
-        pageImageItems.removeAllElements();
-        PageResult displayResult = lastPageResult;
-        if (displayResult != null) {
-            for (int imageIndex = 0; imageIndex < displayResult.images.size(); imageIndex++) {
-                ImageRef imageRef = (ImageRef)displayResult.images.elementAt(imageIndex);
-                if (imageRef.image != null) {
-                    ImageItem imageItem = new ImageItem(imageRef.alt.length() > 0 ? imageRef.alt : "Image", imageRef.image, ImageItem.LAYOUT_CENTER, imageRef.alt);
-                    pageImageItems.addElement(imageItem);
-                    page.append(imageItem);
-                }
-            }
-        }
-        pageLinkItems.removeAllElements();
-        for (int i = 0; i < links.size(); i++) {
-            LinkItem link = (LinkItem)links.elementAt(i);
-            String label = link.label;
-            if (label.length() > 70) label = label.substring(0, 67) + "...";
-            StringItem linkItem = new StringItem("Link", label, Item.HYPERLINK);
-            linkItem.setDefaultCommand(openLinkCommand);
-            linkItem.setItemCommandListener(this);
-            pageLinkItems.addElement(linkItem);
-            page.append(linkItem);
-        }
-        page.addCommand(backCommand);
-        page.addCommand(forwardCommand);
-        page.addCommand(homeCommand);
-        page.addCommand(linksCommand);
-        page.addCommand(addressCommand);
-        page.addCommand(reloadCommand);
-        page.addCommand(bookmarkCommand);
-        page.addCommand(proxyCommand);
-        page.addCommand(bookmarksCommand);
-        page.addCommand(exitCommand);
-        page.setCommandListener(this);
-        display.setCurrent(page);
+        visibleBody = body == null ? "" : body;
+        if (browserCanvas == null) browserCanvas = new BrowserCanvas();
+        browserCanvas.setContent(title, visibleBody);
+        display.setCurrent(browserCanvas);
     }
 
     private void showLinks() {
@@ -468,7 +428,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 if (url.length() == 0) showError("Invalid address", "Enter a valid HTTP/HTTPS URL or a search query.");
                 else navigate(url, true);
             } else {
-                if (page != null) display.setCurrent(page); else showHome();
+                if (browserCanvas != null) display.setCurrent(browserCanvas); else showHome();
             }
         } else if (source == proxyForm) {
             if (command == saveProxyCommand) {
@@ -502,7 +462,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     navigate(((LinkItem)links.elementAt(selected)).url, true);
                 }
             } else if (command == backCommand) {
-                if (page != null) display.setCurrent(page);
+                if (browserCanvas != null) display.setCurrent(browserCanvas);
             } else if (command == addressCommand) showAddress();
         } else if (command == openCommand || command == addressCommand) {
             showAddress();
@@ -529,8 +489,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 navigate((String)history.elementAt(historyIndex), false);
             }
         } else if (command == cancelCommand) {
-            if (source == linkList && page != null) display.setCurrent(page);
-            else if (page != null) display.setCurrent(page);
+            if (browserCanvas != null) display.setCurrent(browserCanvas);
             else showHome();
         }
     }
@@ -740,6 +699,128 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         }
         if (!sawAnything && line.length() == 0) return null;
         return line.toString();
+    }
+
+
+    /** Painted browser shell for small-screen Java ME phones. */
+    private final class BrowserCanvas extends Canvas {
+        private String screenTitle = "TGFN BrowserMini";
+        private String screenBody = "";
+        private int scrollY;
+        private final Command canvasAddress = new Command("Address", Command.SCREEN, 1);
+        private final Command canvasOpen = new Command("Open", Command.OK, 1);
+        private final Command canvasLinks = new Command("Links", Command.SCREEN, 2);
+        private final Command canvasBack = new Command("Back", Command.BACK, 3);
+        private final Command canvasForward = new Command("Forward", Command.SCREEN, 4);
+        private final Command canvasHome = new Command("Home", Command.SCREEN, 5);
+        private final Command canvasReload = new Command("Reload", Command.SCREEN, 6);
+        private final Command canvasProxy = new Command("Proxy", Command.SCREEN, 7);
+        private final Command canvasBookmarks = new Command("Bookmarks", Command.SCREEN, 8);
+        private final Command canvasBookmark = new Command("Bookmark", Command.SCREEN, 9);
+        private final Command canvasExit = new Command("Exit", Command.EXIT, 10);
+
+        BrowserCanvas() {
+            addCommand(canvasAddress); addCommand(canvasOpen); addCommand(canvasLinks);
+            addCommand(canvasBack); addCommand(canvasForward); addCommand(canvasHome);
+            addCommand(canvasReload); addCommand(canvasBookmark); addCommand(canvasProxy);
+            addCommand(canvasBookmarks); addCommand(canvasExit);
+            setCommandListener(BrowserMidlet.this);
+        }
+
+        void setContent(String title, String body) {
+            screenTitle = title == null || title.length() == 0 ? "Web page" : title;
+            screenBody = body == null ? "" : body;
+            scrollY = 0;
+            repaint();
+        }
+
+        protected void paint(Graphics g) {
+            int w = getWidth(), h = getHeight();
+            Font normal = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL);
+            Font bold = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL);
+            g.setColor(246, 248, 251); g.fillRect(0, 0, w, h);
+            g.setColor(22, 35, 55); g.fillRect(0, 0, w, 27);
+            g.setFont(bold); g.setColor(255, 255, 255);
+            g.drawString("TGFN BrowserMini", 7, 5, Graphics.TOP | Graphics.LEFT);
+            g.setFont(normal); g.setColor(220, 230, 242);
+            g.drawString(proxyEnabled ? "PROXY ON" : "READY", w - 7, 7, Graphics.TOP | Graphics.RIGHT);
+
+            g.setColor(255, 255, 255); g.fillRoundRect(5, 32, w - 10, 27, 7, 7);
+            g.setColor(177, 190, 207); g.drawRoundRect(5, 32, w - 10, 27, 7, 7);
+            g.setColor(38, 58, 83);
+            g.drawString(shorten(currentUrl, w - 26, normal), 12, 39, Graphics.TOP | Graphics.LEFT);
+
+            g.setColor(226, 233, 242); g.fillRoundRect(5, 64, w - 10, 23, 6, 6);
+            g.setColor(34, 53, 78); g.setFont(bold);
+            g.drawString("< Back", 10, 69, Graphics.TOP | Graphics.LEFT);
+            g.drawString("Home", w / 2, 69, Graphics.TOP | Graphics.HCENTER);
+            g.drawString("Reload", w - 10, 69, Graphics.TOP | Graphics.RIGHT);
+
+            int top = 93;
+            g.setColor(255, 255, 255); g.fillRoundRect(5, top, w - 10, h - top - 4, 7, 7);
+            g.setColor(213, 220, 230); g.drawRoundRect(5, top, w - 10, h - top - 4, 7, 7);
+            g.setClip(8, top + 4, w - 16, h - top - 12);
+            int y = top + 8 - scrollY;
+            g.setFont(bold); g.setColor(28, 54, 86);
+            Vector headings = wrap(screenTitle, normal, w - 24);
+            for (int i = 0; i < headings.size(); i++) {
+                g.drawString((String)headings.elementAt(i), 12, y, Graphics.TOP | Graphics.LEFT);
+                y += normal.getHeight();
+            }
+            y += 5; g.setFont(normal);
+            Vector lines = wrap(screenBody, normal, w - 24);
+            for (int i = 0; i < lines.size(); i++) {
+                g.setColor(44, 53, 66);
+                g.drawString((String)lines.elementAt(i), 12, y, Graphics.TOP | Graphics.LEFT);
+                y += normal.getHeight() + 2;
+            }
+            g.setClip(0, 0, w, h);
+            g.setColor(112, 126, 145);
+            g.drawString("Menu: Address / Links / Proxy", w / 2, h - 2, Graphics.BOTTOM | Graphics.HCENTER);
+        }
+
+        private Vector wrap(String value, Font font, int maxWidth) {
+            Vector out = new Vector();
+            int pos = 0;
+            while (pos < value.length()) {
+                int end = value.indexOf('\n', pos);
+                if (end < 0) end = value.length();
+                if (end == pos) { out.addElement(""); pos++; continue; }
+                while (pos < end) {
+                    int fit = pos, lastSpace = -1;
+                    while (fit < end && font.stringWidth(value.substring(pos, fit + 1)) <= maxWidth) {
+                        if (value.charAt(fit) == ' ') lastSpace = fit;
+                        fit++;
+                    }
+                    if (fit == pos) fit++;
+                    if (fit < end && lastSpace >= pos) fit = lastSpace;
+                    out.addElement(value.substring(pos, fit));
+                    pos = fit;
+                    while (pos < end && value.charAt(pos) == ' ') pos++;
+                }
+                pos = end + 1;
+            }
+            return out;
+        }
+
+        private String shorten(String value, int width, Font font) {
+            if (font.stringWidth(value) <= width) return value;
+            int end = value.length();
+            while (end > 0 && font.stringWidth(value.substring(0, end) + "...") > width) end--;
+            return value.substring(0, end) + "...";
+        }
+
+        protected void keyPressed(int keyCode) {
+            int action = getGameAction(keyCode);
+            if (action == UP) { scrollY = Math.max(0, scrollY - 35); repaint(); }
+            else if (action == DOWN) { scrollY += 35; repaint(); }
+            else if (action == FIRE) showAddress();
+            else if (action == LEFT && historyIndex > 0) {
+                historyIndex--; navigate((String)history.elementAt(historyIndex), false);
+            } else if (action == RIGHT && historyIndex >= 0 && historyIndex + 1 < history.size()) {
+                historyIndex++; navigate((String)history.elementAt(historyIndex), false);
+            }
+        }
     }
 
     private static final class LinkItem {
