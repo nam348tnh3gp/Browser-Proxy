@@ -32,8 +32,8 @@ By default it listens on `127.0.0.1:8080`. To allow a phone to connect over a tr
 ## Important limitations
 
 - WebView proxy override is a WebView feature and may not be available on every device/WebView version.
-- The app lets you enter an HTTP proxy host and port. Use a reachable proxy endpoint; `localhost` refers to the Android device itself.
-- HTTPS destinations are forwarded using the standard HTTP CONNECT method. The proxy does not decrypt HTTPS traffic.
+- Open **Settings** in the app to enable/disable a proxy and enter its URL, e.g. `http://192.168.1.10:8080`; the setting is saved across launches. Use a reachable HTTP proxy endpoint; `localhost` refers to the Android device itself. Proxy URLs with paths, credentials, queries, or fragments are not accepted.
+- The Go proxy supports HTTPS tunneling with standard HTTP CONNECT and does not decrypt HTTPS traffic. WebView proxy override must be supported by the device's WebView provider.
 - Compression is negotiated with upstream servers; the proxy does not transcode pages or images like Opera Mini's cloud compression system.
 - The app uses a WebView browser engine and does not implement Opera Mini's proprietary OBML protocol.
 
