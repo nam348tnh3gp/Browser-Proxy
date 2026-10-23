@@ -83,7 +83,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		}
 
 		tag := strings.ToLower(n.Data)
-		if tag == "script" || tag == "style" || tag == "noscript" || tag == "iframe" || tag == "svg" || tag == "canvas" || tag == "video" || tag == "audio" {
+		if tag == "script" || tag == "style" || tag == "noscript" || tag == "iframe" || tag == "svg" || tag == "canvas" || tag == "video" || tag == "audio" || tag == "nav" || tag == "footer" || tag == "header" || tag == "form" {
 			return
 		}
 
