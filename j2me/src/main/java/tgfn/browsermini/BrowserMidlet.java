@@ -976,41 +976,41 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         protected void keyPressed(int keyCode) {
             int action = getGameAction(keyCode);
             if (action == UP || keyCode == KEY_NUM2) {
-                scrollY = Math.max(0, scrollY - 30); repaint();
+                scrollY = Math.max(0, scrollY - 30);
+                repaint();
             } else if (action == DOWN || keyCode == KEY_NUM8) {
                 int visible = Math.max(1, getHeight() - 90);
-                scrollY = Math.min(Math.max(0, totalBodyHeight - visible), scrollY + 30); repaint();
+                scrollY = Math.min(Math.max(0, totalBodyHeight - visible), scrollY + 30);
+                repaint();
             } else if (action == FIRE || keyCode == KEY_NUM5) {
-                if (selectedLink >= 0 && selectedLink < renderedLinkLines.size()) {
-                    int lineIndex = ((Integer)renderedLinkLines.elementAt(selectedLink)).intValue();
-                    Vector blocks = lastPageResult == null ? null : lastPageResult.blocks;
-                    int linkIndex = -1;
-                    if (blocks != null) {
-                        int seen = -1;
-                        for (int i = 0; i < blocks.size(); i++) {
-                            RenderBlock b = (RenderBlock)blocks.elementAt(i);
-                            if (b.url != null) {
-                                seen++;
-                                if (seen == selectedLink) { linkIndex = i; break; }
-                            }
+                if (selectedLink >= 0 && lastPageResult != null && lastPageResult.blocks != null) {
+                    int seen = -1;
+                    for (int i = 0; i < lastPageResult.blocks.size(); i++) {
+                        RenderBlock b = (RenderBlock)lastPageResult.blocks.elementAt(i);
+                        if (b.url != null && ++seen == selectedLink) {
+                            navigate(b.url, true);
+                            return;
                         }
-                        if (linkIndex >= 0) navigate(((RenderBlock)blocks.elementAt(linkIndex)).url, true);
-                        else showAddress();
-                    } else showAddress();
+                    }
+                    showAddress();
                 } else if (renderedLinkLines.size() > 0) {
                     selectedLink = 0;
                     int lineIndex = ((Integer)renderedLinkLines.elementAt(0)).intValue();
                     scrollY = Math.max(0, lineIndex * 14);
                     repaint();
-                } else showAddress();
-            } else if (keyCode == KEY_NUM4 || action == LEFT) {
+                } else {
+                    showAddress();
+                }
+            } else if (keyCode == KEY_NUM4) {
                 if (renderedLinkLines.size() > 0) {
                     selectedLink = selectedLink <= 0 ? renderedLinkLines.size() - 1 : selectedLink - 1;
                     int lineIndex = ((Integer)renderedLinkLines.elementAt(selectedLink)).intValue();
                     scrollY = Math.max(0, lineIndex * 14);
                     repaint();
                 } else if (historyIndex > 0) {
-                historyIndex--; navigate((String)history.elementAt(historyIndex), false);
+                    historyIndex--;
+                    navigate((String)history.elementAt(historyIndex), false);
+                }
             } else if (keyCode == KEY_NUM6) {
                 if (renderedLinkLines.size() > 0) {
                     selectedLink = (selectedLink + 1) % renderedLinkLines.size();
@@ -1018,8 +1018,12 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     scrollY = Math.max(0, lineIndex * 14);
                     repaint();
                 }
+            } else if (action == LEFT && historyIndex > 0) {
+                historyIndex--;
+                navigate((String)history.elementAt(historyIndex), false);
             } else if (action == RIGHT && historyIndex >= 0 && historyIndex + 1 < history.size()) {
-                historyIndex++; navigate((String)history.elementAt(historyIndex), false);
+                historyIndex++;
+                navigate((String)history.elementAt(historyIndex), false);
             }
         }
     }
