@@ -10,9 +10,20 @@ A lightweight Android browser prototype with a Kotlin/WebView client and a stand
 - `go-proxy/` — standalone HTTP forward proxy with timeouts and compression negotiation.
 - `.github/workflows/build.yml` — builds the Android debug APK and Go proxy on pushes and pull requests.
 
+## Browser features
+
+- Chrome-inspired address/search bar, reload, back/forward and home controls.
+- New-tab page with Google search and quick links to popular sites.
+- Multiple WebView tabs with tab switching and closing.
+- Bookmarks, browsing history, and page sharing.
+- Optional HTTP proxy configuration; direct browsing remains available when the proxy is disabled.
+- Settings for the home page and proxy endpoint.
+
+The browser uses Android System WebView; it is not the full Chromium desktop/mobile browser and does not provide Chrome account sync or extensions.
+
 ## Build Android APK
 
-GitHub Actions builds `android-app` automatically. Download the `TGFN-BrowserMini-debug-apk` artifact from the workflow run.
+GitHub Actions builds `android-app` automatically. Open [Actions](https://github.com/nam348tnh3gp/Browser-Proxy/actions), select the latest successful **Build TGFN.BrowserMini** run, then download the `TGFN-BrowserMini-debug-apk` artifact from the **Artifacts** section. Extract the ZIP to get the debug APK. Failed runs do not upload an APK.
 
 To build locally with Gradle 8.9 and JDK 17:
 
