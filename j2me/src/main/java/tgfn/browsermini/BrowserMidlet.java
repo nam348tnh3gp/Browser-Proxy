@@ -474,7 +474,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             if (command == saveProxyCommand) {
                 String host = trim(proxyHostField.getString());
                 String port = trim(proxyPortField.getString());
-                if (host.length() == 0 || port.length() == 0 || host.indexOf("/") >= 0 || host.indexOf(" ") >= 0 || host.indexOf("\\r") >= 0 || host.indexOf("\\n") >= 0) {
+                if (host.length() == 0 || port.length() == 0 || host.indexOf("/") >= 0 || host.indexOf(" ") >= 0 || host.indexOf("\r") >= 0 || host.indexOf("\n") >= 0) {
                     showError("Invalid proxy", "Enter both proxy host and port.");
                     return;
                 }
