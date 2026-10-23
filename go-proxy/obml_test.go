@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -17,7 +18,7 @@ func TestBuildOBMLPageCreatesCompactBinaryBlocks(t *testing.T) {
 	if len(packet) < 8 || string(packet[:4]) != obmlMagic {
 		t.Fatalf("invalid packet header: %q", packet[:4])
 	}
-	for _, value := range []string{"Example & Test", "Welcome", "the next page", "http://example.test/next", "http://example.test/small.png"} {
+	for _, value := range []string{"Example & Test", "Welcome", "the next page", "http://example.test/next", imageCompressPath + "?url=" + url.QueryEscape("http://example.test/small.png")} {
 		if !bytes.Contains(packet, []byte(value)) {
 			t.Errorf("packet missing %q", value)
 		}
