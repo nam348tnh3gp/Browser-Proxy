@@ -51,6 +51,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private BrowserCanvas browserCanvas;
     private String visibleBody = "Welcome to BrowserMini.";
     private List linkList;
+    private List browserMenu;
+    private final Command menuCommand = new Command("Menu", Command.SCREEN, 1);
     private TextBox addressBox;
     private boolean loading;
     private PageResult lastPageResult;
@@ -392,6 +394,40 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         display.setCurrent(browserCanvas);
     }
 
+    private void showBrowserMenu() {
+        browserMenu = new List("Browser menu", List.IMPLICIT);
+        browserMenu.append("Open address / search", null);
+        browserMenu.append("Page links", null);
+        browserMenu.append("Bookmarks", null);
+        browserMenu.append("Add bookmark", null);
+        browserMenu.append("Reload page", null);
+        browserMenu.append("Home", null);
+        browserMenu.append("Forward", null);
+        browserMenu.append("Proxy settings", null);
+        browserMenu.append("Exit", null);
+        browserMenu.addCommand(backCommand);
+        browserMenu.setCommandListener(this);
+        display.setCurrent(browserMenu);
+    }
+
+    private void handleBrowserMenu(Command command) {
+        if (command == backCommand) { display.setCurrent(browserCanvas); return; }
+        if (command != List.SELECT_COMMAND) return;
+        int selected = browserMenu.getSelectedIndex();
+        if (selected == 0) showAddress();
+        else if (selected == 1) showLinks();
+        else if (selected == 2) showBookmarks();
+        else if (selected == 3) addBookmark(currentUrl);
+        else if (selected == 4) navigate(currentUrl, false);
+        else if (selected == 5) navigate("https://lite.duckduckgo.com/lite/", true);
+        else if (selected == 6) {
+            if (historyIndex >= 0 && historyIndex + 1 < history.size()) {
+                historyIndex++; navigate((String)history.elementAt(historyIndex), false);
+            } else showError("Forward", "There is no next page in history.");
+        } else if (selected == 7) showProxySettings();
+        else if (selected == 8) notifyDestroyed();
+    }
+
     private void showLinks() {
         if (links.size() == 0) {
             showError("No links", "This page did not expose any simple HTML links.");
@@ -420,7 +456,13 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     public void commandAction(Command command, Displayable source) {
-        if (command == exitCommand) {
+        if (source == browserCanvas && command == menuCommand) {
+            showBrowserMenu();
+        } else if (source == browserCanvas && command == backCommand) {
+            if (historyIndex > 0) { historyIndex--; navigate((String)history.elementAt(historyIndex), false); }
+        } else if (source == browserMenu) {
+            handleBrowserMenu(command);
+        } else if (command == exitCommand) {
             notifyDestroyed();
         } else if (source == addressBox) {
             if (command == openCommand) {
@@ -703,24 +745,16 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
 
 
     /** Painted browser shell for small-screen Java ME phones. */
+    /** Compact, keypad-first browser chrome inspired by classic mobile browsers. */
     private final class BrowserCanvas extends Canvas {
         private String screenTitle = "TGFN BrowserMini";
         private String screenBody = "";
         private int scrollY;
-
+        private int totalBodyHeight;
 
         BrowserCanvas() {
-            addCommand(openCommand);
-            addCommand(addressCommand);
-            addCommand(linksCommand);
+            addCommand(menuCommand);
             addCommand(backCommand);
-            addCommand(forwardCommand);
-            addCommand(homeCommand);
-            addCommand(reloadCommand);
-            addCommand(bookmarkCommand);
-            addCommand(proxyCommand);
-            addCommand(bookmarksCommand);
-            addCommand(exitCommand);
             setCommandListener(BrowserMidlet.this);
         }
 
@@ -735,45 +769,54 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             int w = getWidth(), h = getHeight();
             Font normal = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL);
             Font bold = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL);
-            g.setColor(246, 248, 251); g.fillRect(0, 0, w, h);
-            g.setColor(22, 35, 55); g.fillRect(0, 0, w, 27);
+            int footerH = Math.max(16, normal.getHeight() + 7);
+            int headerH = 23;
+            int addressH = 23;
+            int titleH = normal.getHeight() + 8;
+            g.setColor(232, 237, 244); g.fillRect(0, 0, w, h);
+            g.setColor(0, 65, 126); g.fillRect(0, 0, w, headerH);
+            g.setColor(22, 103, 173); g.fillRect(0, headerH - 5, w, 5);
             g.setFont(bold); g.setColor(255, 255, 255);
-            g.drawString("TGFN BrowserMini", 7, 5, Graphics.TOP | Graphics.LEFT);
-            g.setFont(normal); g.setColor(220, 230, 242);
-            g.drawString(proxyEnabled ? "PROXY ON" : "READY", w - 7, 7, Graphics.TOP | Graphics.RIGHT);
+            g.drawString("mini", 5, 4, Graphics.TOP | Graphics.LEFT);
+            g.setFont(normal);
+            g.drawString(proxyEnabled ? "P" : "", w - 5, 5, Graphics.TOP | Graphics.RIGHT);
 
-            g.setColor(255, 255, 255); g.fillRoundRect(5, 32, w - 10, 27, 7, 7);
-            g.setColor(177, 190, 207); g.drawRoundRect(5, 32, w - 10, 27, 7, 7);
-            g.setColor(38, 58, 83);
-            g.drawString(shorten(currentUrl, w - 26, normal), 12, 39, Graphics.TOP | Graphics.LEFT);
+            int addressY = headerH + 3;
+            g.setColor(255, 255, 255); g.fillRoundRect(4, addressY, w - 8, addressH, 4, 4);
+            g.setColor(126, 151, 177); g.drawRoundRect(4, addressY, w - 8, addressH, 4, 4);
+            g.setColor(31, 51, 72);
+            g.drawString(shorten(currentUrl, w - 18, normal), 9, addressY + 5, Graphics.TOP | Graphics.LEFT);
 
-            g.setColor(226, 233, 242); g.fillRoundRect(5, 64, w - 10, 23, 6, 6);
-            g.setColor(34, 53, 78); g.setFont(bold);
-            g.drawString("< Back", 10, 69, Graphics.TOP | Graphics.LEFT);
-            g.drawString("Home", w / 2, 69, Graphics.TOP | Graphics.HCENTER);
-            g.drawString("Reload", w - 10, 69, Graphics.TOP | Graphics.RIGHT);
+            int titleY = addressY + addressH + 2;
+            g.setColor(214, 226, 238); g.fillRect(0, titleY, w, titleH);
+            g.setColor(40, 70, 101); g.setFont(bold);
+            g.drawString(shorten(screenTitle, w - 12, normal), 6, titleY + 3, Graphics.TOP | Graphics.LEFT);
 
-            int top = 93;
-            g.setColor(255, 255, 255); g.fillRoundRect(5, top, w - 10, h - top - 4, 7, 7);
-            g.setColor(213, 220, 230); g.drawRoundRect(5, top, w - 10, h - top - 4, 7, 7);
-            g.setClip(8, top + 4, w - 16, h - top - 12);
-            int y = top + 8 - scrollY;
-            g.setFont(bold); g.setColor(28, 54, 86);
-            Vector headings = wrap(screenTitle, normal, w - 24);
-            for (int i = 0; i < headings.size(); i++) {
-                g.drawString((String)headings.elementAt(i), 12, y, Graphics.TOP | Graphics.LEFT);
-                y += normal.getHeight();
-            }
-            y += 5; g.setFont(normal);
-            Vector lines = wrap(screenBody, normal, w - 24);
+            int contentY = titleY + titleH;
+            int contentH = h - contentY - footerH;
+            g.setColor(255, 255, 255); g.fillRect(0, contentY, w, contentH);
+            g.setClip(4, contentY + 3, w - 8, Math.max(0, contentH - 6));
+            int y = contentY + 4 - scrollY;
+            g.setFont(normal);
+            Vector lines = wrap(screenBody, normal, w - 14);
+            totalBodyHeight = lines.size() * (normal.getHeight() + 1);
             for (int i = 0; i < lines.size(); i++) {
-                g.setColor(44, 53, 66);
-                g.drawString((String)lines.elementAt(i), 12, y, Graphics.TOP | Graphics.LEFT);
-                y += normal.getHeight() + 2;
+                String line = (String)lines.elementAt(i);
+                g.setColor(line.startsWith("http://") || line.startsWith("https://") ? 0 : 35,
+                           line.startsWith("http://") || line.startsWith("https://") ? 76 : 43,
+                           line.startsWith("http://") || line.startsWith("https://") ? 160 : 52);
+                g.drawString(line, 7, y, Graphics.TOP | Graphics.LEFT);
+                y += normal.getHeight() + 1;
             }
             g.setClip(0, 0, w, h);
-            g.setColor(112, 126, 145);
-            g.drawString("Menu: Address / Links / Proxy", w / 2, h - 2, Graphics.BOTTOM | Graphics.HCENTER);
+            g.setColor(0, 55, 108); g.fillRect(0, h - footerH, w, footerH);
+            g.setColor(255, 255, 255); g.setFont(bold);
+            g.drawString("Menu", 5, h - footerH + 3, Graphics.TOP | Graphics.LEFT);
+            g.drawString("Select", w - 5, h - footerH + 3, Graphics.TOP | Graphics.RIGHT);
+            if (loading) {
+                g.setFont(normal);
+                g.drawString("Loading...", w / 2, h - footerH + 3, Graphics.TOP | Graphics.HCENTER);
+            }
         }
 
         private Vector wrap(String value, Font font, int maxWidth) {
@@ -809,10 +852,14 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
 
         protected void keyPressed(int keyCode) {
             int action = getGameAction(keyCode);
-            if (action == UP) { scrollY = Math.max(0, scrollY - 35); repaint(); }
-            else if (action == DOWN) { scrollY += 35; repaint(); }
-            else if (action == FIRE) showAddress();
-            else if (action == LEFT && historyIndex > 0) {
+            if (action == UP || keyCode == KEY_NUM2) {
+                scrollY = Math.max(0, scrollY - 30); repaint();
+            } else if (action == DOWN || keyCode == KEY_NUM8) {
+                int visible = Math.max(1, getHeight() - 90);
+                scrollY = Math.min(Math.max(0, totalBodyHeight - visible), scrollY + 30); repaint();
+            } else if (action == FIRE || keyCode == KEY_NUM5) {
+                showAddress();
+            } else if (action == LEFT && historyIndex > 0) {
                 historyIndex--; navigate((String)history.elementAt(historyIndex), false);
             } else if (action == RIGHT && historyIndex >= 0 && historyIndex + 1 < history.size()) {
                 historyIndex++; navigate((String)history.elementAt(historyIndex), false);
