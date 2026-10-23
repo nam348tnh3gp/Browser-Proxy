@@ -60,7 +60,10 @@ jobs:
           test -z "$(gofmt -l go-proxy/*.go)"
       - name: Test
         working-directory: go-proxy
-        run: go test ./...
+        run: go test -race ./...
+      - name: Vet
+        working-directory: go-proxy
+        run: go vet ./...
       - name: Build
         working-directory: go-proxy
         run: |
