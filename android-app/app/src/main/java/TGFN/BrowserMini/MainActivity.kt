@@ -304,15 +304,15 @@ class MainActivity : Activity() {
     private fun newTabHtml(): String = """
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
         <style>
-        *{box-sizing:border-box}body{margin:0;background:#fff;color:#202124;font:16px Roboto,'Arial',sans-serif}
+        *{box-sizing:border-box}body{margin:0;background:${if (darkMode) "#202124" else "#fff"};color:${if (darkMode) "#e8eaed" else "#202124"};font:16px Roboto,'Arial',sans-serif}
         .wrap{max-width:560px;margin:0 auto;padding:12vh 22px 32px}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:26px}
         .brand span{color:#188038}.search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
-        input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:#202124}.go{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:14px}
-        .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px 10px;margin-top:34px}.item{text-decoration:none;color:#3c4043;text-align:center;font-size:12px}
-        .circle{width:52px;height:52px;border-radius:18px;background:#f1f3f4;margin:0 auto 9px;display:flex;align-items:center;justify-content:center;font-size:23px;color:#1a73e8;font-weight:600}
+        input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:14px}
+        .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px 10px;margin-top:34px}.item{text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};text-align:center;font-size:12px}
+        .circle{width:52px;height:52px;border-radius:18px;background:${if (darkMode) "#303134" else "#f1f3f4"};margin:0 auto 9px;display:flex;align-items:center;justify-content:center;font-size:23px;color:#1a73e8;font-weight:600}
         .note{text-align:center;color:#80868b;font-size:12px;margin-top:36px}
         </style></head><body><div class="wrap"><div class="brand">TGFN <span>Browser</span></div>
-        <form class="search" action="https://www.google.com/search" method="get"><input name="q" placeholder="Tìm kiếm trên Google" autofocus><button class="go" type="submit">Tìm</button></form>
+        <form class="search" action="https://www.google.com/search" method="get"><input name="q" placeholder="${tr("Tìm kiếm trên Google", "Search Google")}" autofocus><button class="go" type="submit">${tr("Tìm", "Search")}</button></form>
         <div class="grid">
         <a class="item" href="https://www.google.com"><div class="circle">G</div>Google</a>
         <a class="item" href="https://www.youtube.com"><div class="circle">▶</div>YouTube</a>
@@ -320,7 +320,7 @@ class MainActivity : Activity() {
         <a class="item" href="https://github.com"><div class="circle">⌘</div>GitHub</a>
         <a class="item" href="https://www.reddit.com"><div class="circle">r</div>Reddit</a>
         <a class="item" href="https://www.bing.com"><div class="circle">b</div>Bing</a>
-        </div><div class="note">Tìm kiếm nhanh · Duyệt web theo cách của bạn</div></div></body></html>
+        </div><div class="note">${tr("Tìm kiếm nhanh · Duyệt web theo cách của bạn", "Quick search · Browse your way")}</div></div></body></html>
     """.trimIndent()
 
     private fun isSelected(tab: BrowserTab): Boolean = tabs.getOrNull(selectedTab) === tab
@@ -375,7 +375,7 @@ class MainActivity : Activity() {
             text = symbol
             textSize = 25f
             gravity = Gravity.CENTER
-            setTextColor(if (label == "Tab mới") accent else ink)
+            setTextColor(if (label == tr("Tab mới", "New tab")) accent else ink)
             typeface = Typeface.DEFAULT
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(31)))
         item.addView(TextView(this).apply {
