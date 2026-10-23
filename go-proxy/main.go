@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -12,7 +13,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"mime"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -61,7 +64,12 @@ func proxyHandlerWithAuth(username, password string) http.Handler {
 			req.Header.Set("Via", "1.1 TGFN.BrowserMini")
 		},
 		FlushInterval:  100 * time.Millisecond,
-		ModifyResponse: compactHTMLResponse,
+		ModifyResponse: func(resp *http.Response) error {
+			if err := compactHTMLResponse(resp); err != nil {
+				return err
+			}
+			return gzipTextResponse(resp)
+		},
 		ErrorLog:       log.New(os.Stderr, "proxy: ", log.LstdFlags),
 		Transport: &requestTrackingTransport{base: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
@@ -111,6 +119,114 @@ func proxyHandlerWithAuth(username, password string) http.Handler {
 		r2.Host = r.URL.Host
 		proxy.ServeHTTP(logWriter, r2)
 	})
+}
+
+// multiReadCloser preserves the unread upstream body after a bounded read.
+type multiReadCloser struct {
+	io.Reader
+	closer io.Closer
+}
+
+func (m *multiReadCloser) Close() error { return m.closer.Close() }
+
+// gzipTextResponse compresses eligible uncompressed text responses only when the
+// client explicitly advertises gzip support. HTTPS CONNECT tunnels remain opaque.
+func gzipTextResponse(resp *http.Response) error {
+	if resp == nil || resp.Request == nil || resp.Body == nil ||
+		resp.StatusCode != http.StatusOK || resp.Request.Method != http.MethodGet ||
+		resp.Request.Header.Get("Range") != "" ||
+		!acceptsGzip(resp.Request.Header.Get("Accept-Encoding")) ||
+		resp.Header.Get("Content-Encoding") != "" {
+		return nil
+	}
+	if strings.Contains(strings.ToLower(resp.Header.Get("Cache-Control")), "no-transform") {
+		return nil
+	}
+	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err != nil || !isCompressibleText(mediaType) {
+		return nil
+	}
+	const maxBytes = 8 << 20
+	originalBody := resp.Body
+	data, err := io.ReadAll(io.LimitReader(originalBody, maxBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(data) > maxBytes {
+		resp.Body = &multiReadCloser{Reader: io.MultiReader(bytes.NewReader(data), originalBody), closer: originalBody}
+		return nil
+	}
+	var compressed bytes.Buffer
+	zw := gzip.NewWriter(&compressed)
+	if _, err := zw.Write(data); err != nil {
+		_ = zw.Close()
+		_ = originalBody.Close()
+		return err
+	}
+	if err := zw.Close(); err != nil {
+		_ = originalBody.Close()
+		return err
+	}
+	if compressed.Len() >= len(data) {
+		_ = originalBody.Close()
+		resp.Body = io.NopCloser(bytes.NewReader(data))
+		return nil
+	}
+	_ = originalBody.Close()
+	resp.Body = io.NopCloser(bytes.NewReader(compressed.Bytes()))
+	resp.ContentLength = int64(compressed.Len())
+	resp.Header.Set("Content-Encoding", "gzip")
+	resp.Header.Set("Content-Length", strconv.Itoa(compressed.Len()))
+	resp.Header.Del("Content-MD5")
+	resp.Header.Del("ETag")
+	resp.Header.Del("Content-Range")
+	addVary(resp.Header, "Accept-Encoding")
+	return nil
+}
+
+func acceptsGzip(header string) bool {
+	for _, item := range strings.Split(header, ",") {
+		parts := strings.Split(strings.TrimSpace(item), ";")
+		if !strings.EqualFold(strings.TrimSpace(parts[0]), "gzip") {
+			continue
+		}
+		allowed := true
+		for _, parameter := range parts[1:] {
+			pair := strings.SplitN(strings.TrimSpace(parameter), "=", 2)
+			if len(pair) == 2 && strings.EqualFold(strings.TrimSpace(pair[0]), "q") {
+				if q, err := strconv.ParseFloat(strings.TrimSpace(pair[1]), 64); err == nil && q <= 0 {
+					allowed = false
+				}
+			}
+		}
+		if allowed {
+			return true
+		}
+	}
+	return false
+}
+
+func isCompressibleText(mediaType string) bool {
+	mediaType = strings.ToLower(mediaType)
+	return strings.HasPrefix(mediaType, "text/") ||
+		mediaType == "application/javascript" ||
+		mediaType == "application/x-javascript" ||
+		mediaType == "application/json" ||
+		mediaType == "application/manifest+json" ||
+		mediaType == "application/xml" ||
+		mediaType == "application/xhtml+xml" ||
+		mediaType == "image/svg+xml"
+}
+
+func addVary(header http.Header, value string) {
+	for _, existing := range header.Values("Vary") {
+		for _, token := range strings.Split(existing, ",") {
+			if strings.EqualFold(strings.TrimSpace(token), value) {
+				return
+			}
+		}
+	}
+	header.Add("Vary", value)
 }
 
 func validProxyAuthorization(header, username, password string) bool {
