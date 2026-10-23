@@ -445,7 +445,8 @@ class MainActivity : Activity() {
     }
 
     private fun translateCurrentPage() {
-        val url = currentWebView()?.url.orEmpty()
+        val web = currentWebView() ?: return
+        val url = web.url.orEmpty()
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             Toast.makeText(this, "Mở một trang web trước khi dịch", Toast.LENGTH_SHORT).show()
             return
@@ -453,15 +454,134 @@ class MainActivity : Activity() {
         val languages = arrayOf("Tiếng Việt", "English", "日本語", "한국어", "Français", "Español")
         val codes = arrayOf("vi", "en", "ja", "ko", "fr", "es")
         android.app.AlertDialog.Builder(this)
-            .setTitle("Dịch trang bằng Google Translate")
-            .setItems(languages) { _, which ->
-                val encodedUrl = java.net.URLEncoder.encode(url, "UTF-8")
-                currentWebView()?.loadUrl(
-                    "https://translate.google.com/translate?sl=auto&tl=" + codes[which] + "&u=" + encodedUrl
-                )
-            }
+            .setTitle("Dịch ngay trên trang")
+            .setItems(languages) { _, which -> translatePageInPlace(web, codes[which], languages[which]) }
+            .setNeutralButton("Hiện bản gốc") { _, _ -> restoreOriginalPage(web) }
             .setNegativeButton("Hủy", null)
             .show()
+    }
+
+    private fun translatePageInPlace(web: WebView, targetLanguage: String, languageLabel: String) {
+        val collectScript = """
+            (function() {
+              try {
+                if (window.__tgfnTranslateNodes) {
+                  window.__tgfnTranslateNodes.forEach(function(item) {
+                    if (item.node && item.node.isConnected) item.node.nodeValue = item.original;
+                  });
+                }
+                var walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
+                var nodes = [], node;
+                var excluded = /^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA|INPUT|SELECT|OPTION|CODE|PRE|SVG|BUTTON)$/;
+                while ((node = walker.nextNode()) && nodes.length < 36) {
+                  var parent = node.parentElement;
+                  if (!parent || excluded.test(parent.tagName) ||
+                      parent.closest('[contenteditable="true"],[translate="no"],[aria-hidden="true"]')) continue;
+                  var text = node.nodeValue || '';
+                  if (text.trim().length < 2 || text.trim().length > 350) continue;
+                  if (!parent.getClientRects().length) continue;
+                  nodes.push({node: node, original: text});
+                }
+                window.__tgfnTranslateNodes = nodes;
+                return JSON.stringify(nodes.map(function(item) { return item.original; }));
+              } catch (e) { return '[]'; }
+            })();
+        """.trimIndent()
+        status.text = "Đang chuẩn bị dịch…"
+        web.evaluateJavascript(collectScript) { raw ->
+            try {
+                val decoded = org.json.JSONTokener(raw ?: "null").nextValue() as? String ?: "[]"
+                val originals = org.json.JSONArray(decoded)
+                if (originals.length() == 0) {
+                    status.text = "Không tìm thấy văn bản để dịch"
+                    Toast.makeText(this, "Không tìm thấy văn bản phù hợp trên trang", Toast.LENGTH_LONG).show()
+                    return@evaluateJavascript
+                }
+                status.text = "Đang dịch " + originals.length() + " đoạn…"
+                Thread {
+                    val translated = org.json.JSONArray()
+                    for (index in 0 until originals.length()) translated.put("")
+                    val pool = java.util.concurrent.Executors.newFixedThreadPool(4)
+                    try {
+                        val jobs = (0 until originals.length()).map { index ->
+                            pool.submit<Pair<Int, String>> {
+                                index to translateText(originals.getString(index), targetLanguage)
+                            }
+                        }
+                        jobs.forEach { job ->
+                            try {
+                                val (index, value) = job.get()
+                                if (value.isNotBlank()) translated.put(index, value)
+                            } catch (_: Exception) { }
+                        }
+                    } finally {
+                        pool.shutdownNow()
+                    }
+                    runOnUiThread {
+                        if (isFinishing || web !== currentWebView()) return@runOnUiThread
+                        val payload = translated.toString()
+                        val applyScript = """
+                            (function(values) {
+                              var nodes = window.__tgfnTranslateNodes || [], count = 0;
+                              nodes.forEach(function(item, i) {
+                                if (item.node && item.node.isConnected && values[i]) {
+                                  item.node.nodeValue = values[i]; count++;
+                                }
+                              });
+                              return count;
+                            })($payload);
+                        """.trimIndent()
+                        web.evaluateJavascript(applyScript) { result ->
+                            val count = result?.toIntOrNull() ?: 0
+                            status.text = if (count > 0) "Đã dịch " + count + " đoạn · " + languageLabel else "Không dịch được nội dung"
+                            Toast.makeText(this, if (count > 0) "Đã dịch ngay trên trang. Dùng Menu → Dịch trang → Hiện bản gốc để hoàn tác." else "Dịch thất bại. Kiểm tra kết nối mạng rồi thử lại.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.start()
+            } catch (e: Exception) {
+                status.text = "Không thể chuẩn bị nội dung dịch"
+                Toast.makeText(this, "Không thể đọc văn bản của trang này", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun translateText(text: String, targetLanguage: String): String {
+        var connection: java.net.HttpURLConnection? = null
+        return try {
+            val query = java.net.URLEncoder.encode(text, "UTF-8")
+            val url = java.net.URL(
+                "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=" + targetLanguage + "&dt=t&q=" + query
+            )
+            connection = (url.openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 7000
+                readTimeout = 7000
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
+            }
+            if (connection.responseCode !in 200..299) return ""
+            val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val root = org.json.JSONArray(body)
+            val segments = root.optJSONArray(0) ?: return ""
+            buildString {
+                for (i in 0 until segments.length()) {
+                    val segment = segments.optJSONArray(i)
+                    if (segment != null) append(segment.optString(0))
+                }
+            }
+        } catch (_: Exception) {
+            ""
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun restoreOriginalPage(web: WebView) {
+        web.evaluateJavascript(
+            "(function(){var nodes=window.__tgfnTranslateNodes||[],count=0;nodes.forEach(function(item){if(item.node&&item.node.isConnected){item.node.nodeValue=item.original;count++;}});window.__tgfnTranslateNodes=null;return count;})();"
+        ) { result ->
+            status.text = "Đã khôi phục bản gốc"
+            Toast.makeText(this, "Đã khôi phục văn bản gốc", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showFindInPage() {
