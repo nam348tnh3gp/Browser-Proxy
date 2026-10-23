@@ -963,14 +963,13 @@ class MainActivity : Activity() {
     }
 
     private fun persistSession() {
-        if (tabs.isEmpty()) return
         val urls = org.json.JSONArray()
         tabs.forEach { tab ->
             urls.put(tab.webView.url ?: tab.url)
         }
         prefs.edit()
             .putString("session_tab_urls", urls.toString())
-            .putInt("session_selected_tab", selectedTab.coerceIn(0, tabs.lastIndex))
+            .putInt("session_selected_tab", if (tabs.isEmpty()) 0 else selectedTab.coerceIn(0, tabs.lastIndex))
             .apply()
     }
 
@@ -1101,6 +1100,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        persistSession()
         tabs.forEach { tab ->
             (tab.webView.parent as? ViewGroup)?.removeView(tab.webView)
             tab.webView.stopLoading()
