@@ -52,6 +52,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private String proxyHost = "127.0.0.1";
     private String proxyPort = "8080";
     private boolean proxyEnabled;
+    private boolean showingBookmarks;
     private Form proxyForm;
     private TextField proxyHostField;
     private TextField proxyPortField;
@@ -436,6 +437,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             showError("No links", "This page did not expose any simple HTML links.");
             return;
         }
+        showingBookmarks = false;
         linkList = new List("Page links", List.IMPLICIT);
         for (int i = 0; i < links.size(); i++) {
             LinkItem link = (LinkItem)links.elementAt(i);
@@ -472,7 +474,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             if (command == saveProxyCommand) {
                 String host = trim(proxyHostField.getString());
                 String port = trim(proxyPortField.getString());
-                if (host.length() == 0 || port.length() == 0) {
+                if (host.length() == 0 || port.length() == 0 || host.indexOf("/") >= 0 || host.indexOf(" ") >= 0 || host.indexOf("\\r") >= 0 || host.indexOf("\\n") >= 0) {
                     showError("Invalid proxy", "Enter both proxy host and port.");
                     return;
                 }
@@ -494,9 +496,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         } else if (source == linkList) {
             if (command == List.SELECT_COMMAND) {
                 int selected = linkList.getSelectedIndex();
-                if (selected >= 0 && selected < bookmarks.size() && bookmarks.contains(linkList.getString(selected))) {
+                if (selected >= 0 && showingBookmarks && selected < bookmarks.size()) {
                     navigate((String)bookmarks.elementAt(selected), true);
-                } else if (selected >= 0 && selected < links.size()) {
+                } else if (selected >= 0 && !showingBookmarks && selected < links.size()) {
                     navigate(((LinkItem)links.elementAt(selected)).url, true);
                 }
             } else if (command == backCommand) {
@@ -564,6 +566,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             showError("No bookmarks", "Open a page and choose Bookmark to save it.");
             return;
         }
+        showingBookmarks = true;
         List list = new List("Bookmarks", List.IMPLICIT);
         for (int i = 0; i < bookmarks.size(); i++) list.append((String)bookmarks.elementAt(i), null);
         list.addCommand(backCommand);
@@ -589,7 +592,6 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 String saved = new String(data, "UTF-8");
                 int end = saved.indexOf('\n');
                 if (end >= 0) {
-                    String[] unused = new String[0];
                     String header = saved.substring(0, end);
                     int first = header.indexOf('|');
                     int second = first < 0 ? -1 : header.indexOf('|', first + 1);
