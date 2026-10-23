@@ -812,7 +812,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             g.setColor(0, 55, 108); g.fillRect(0, h - footerH, w, footerH);
             g.setColor(255, 255, 255); g.setFont(bold);
             g.drawString("Menu", 5, h - footerH + 3, Graphics.TOP | Graphics.LEFT);
-            g.drawString("Select", w - 5, h - footerH + 3, Graphics.TOP | Graphics.RIGHT);
+            g.drawString("Back", w - 5, h - footerH + 3, Graphics.TOP | Graphics.RIGHT);
             if (loading) {
                 g.setFont(normal);
                 g.drawString("Loading...", w / 2, h - footerH + 3, Graphics.TOP | Graphics.HCENTER);
