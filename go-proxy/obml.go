@@ -68,7 +68,7 @@ func obmlAbsolute(base, ref string) string {
 		return ""
 	}
 	u := b.ResolveReference(r)
-	if u.Scheme != "http" && u.Scheme != "https" {
+	if (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
 		return ""
 	}
 	u.Fragment = ""
@@ -190,6 +190,9 @@ func writeOBMLString(out *bytes.Buffer, value string) {
 	}
 	if len(value) > maxOBMLString {
 		value = value[:maxOBMLString]
+		for !utf8.ValidString(value) {
+			value = value[:len(value)-1]
+		}
 	}
 	_ = binary.Write(out, binary.BigEndian, uint16(len(value)))
 	out.WriteString(value)
