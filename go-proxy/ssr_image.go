@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -18,6 +19,7 @@ import (
 )
 
 const ssrImageMode = "SSRIMG"
+const imglMagic = "IMGL"
 
 var chromeCandidates = []string{
 	"/data/data/com.termux/files/usr/bin/chromium-browser",
@@ -34,33 +36,30 @@ var chromeCandidates = []string{
 func findChromeBinary() string {
 	if env := os.Getenv("CHROME_PATH"); env != "" {
 		if _, err := os.Stat(env); err == nil {
-			fmt.Println("[SSRIMG] Using CHROME_PATH:", env)
 			return env
 		}
 	}
 	for _, name := range chromeCandidates {
 		if path, err := exec.LookPath(name); err == nil {
-			fmt.Println("[SSRIMG] Found via PATH:", path)
 			return path
 		}
 		if _, err := os.Stat(name); err == nil {
-			fmt.Println("[SSRIMG] Found at path:", name)
 			return name
 		}
 	}
-	fmt.Println("[SSRIMG] No Chrome/Chromium binary found")
 	return ""
 }
 
+type pageLink struct {
+	text string
+	url  string
+}
+
 func ssrImageResponse(resp *http.Response) error {
-	if resp == nil || resp.Request == nil {
+	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Format") != ssrImageMode {
 		return nil
 	}
-	fmt.Println("[SSRIMG] Header X-TGFN-Format =", resp.Request.Header.Get("X-TGFN-Format"))
-	if resp.Request.Header.Get("X-TGFN-Format") != ssrImageMode {
-		return nil
-	}
-	fmt.Println("[SSRIMG] SSRIMG requested for", resp.Request.URL.String())
+	fmt.Println("[SSRIMG] requested for", resp.Request.URL.String())
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || resp.Body == nil {
 		return nil
@@ -78,7 +77,7 @@ func ssrImageResponse(resp *http.Response) error {
 		return fmt.Errorf("no Chrome/Chromium")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
 	defer cancel()
 
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
@@ -95,10 +94,25 @@ func ssrImageResponse(resp *http.Response) error {
 	defer chromeCancel()
 
 	var buf []byte
+	var links []pageLink
 	err := chromedp.Run(chromeCtx,
 		chromedp.Navigate(pageURL),
 		chromedp.Sleep(3*time.Second),
 		chromedp.CaptureScreenshot(&buf),
+		chromedp.Evaluate(`
+			(function() {
+				var out = [];
+				var as = document.querySelectorAll('a[href]');
+				for (var i = 0; i < as.length && out.length < 80; i++) {
+					var a = as[i];
+					var t = (a.innerText || a.textContent || '').replace(/\s+/g, ' ').trim();
+					if (t.length > 1 && t.length < 120) {
+						out.push({text: t, url: a.href});
+					}
+				}
+				return out;
+			})()
+		`, &links),
 	)
 	if err != nil {
 		fmt.Println("[SSRIMG] chromedp error:", err)
@@ -108,24 +122,42 @@ func ssrImageResponse(resp *http.Response) error {
 		return fmt.Errorf("empty screenshot")
 	}
 
-	// chromedp.CaptureScreenshot returns PNG by default
 	img, _, err := image.Decode(bytes.NewReader(buf))
 	if err != nil {
-		fmt.Println("[SSRIMG] Image decode failed:", err)
+		return err
+	}
+	var jpegBuf bytes.Buffer
+	if err := jpeg.Encode(&jpegBuf, img, &jpeg.Options{Quality: 38}); err != nil {
 		return err
 	}
 
-	var out bytes.Buffer
-	if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: 40}); err != nil {
-		fmt.Println("[SSRIMG] JPEG encode failed:", err)
-		return err
+	// Build IMGL packet: magic + jpegLen(4) + jpeg + linkCount(2) + links
+	var packet bytes.Buffer
+	packet.WriteString(imglMagic)
+	_ = binary.Write(&packet, binary.BigEndian, uint32(jpegBuf.Len()))
+	packet.Write(jpegBuf.Bytes())
+	if len(links) > 80 {
+		links = links[:80]
+	}
+	_ = binary.Write(&packet, binary.BigEndian, uint16(len(links)))
+	for _, l := range links {
+		writeLenStr(&packet, l.text)
+		writeLenStr(&packet, l.url)
 	}
 
-	resp.Body = io.NopCloser(bytes.NewReader(out.Bytes()))
-	resp.ContentLength = int64(out.Len())
-	resp.Header.Set("Content-Type", "image/jpeg")
-	resp.Header.Set("Content-Length", itoa(out.Len()))
+	resp.Body = io.NopCloser(bytes.NewReader(packet.Bytes()))
+	resp.ContentLength = int64(packet.Len())
+	resp.Header.Set("Content-Type", "application/x-tgfn-imgl")
+	resp.Header.Set("Content-Length", itoa(packet.Len()))
 	resp.Header.Del("Content-Encoding")
-	fmt.Println("[SSRIMG] Success, JPEG bytes:", out.Len())
+	fmt.Println("[SSRIMG] Success, JPEG", jpegBuf.Len(), "links", len(links))
 	return nil
+}
+
+func writeLenStr(b *bytes.Buffer, s string) {
+	if len(s) > 2000 {
+		s = s[:2000]
+	}
+	_ = binary.Write(b, binary.BigEndian, uint16(len(s)))
+	b.WriteString(s)
 }
