@@ -54,7 +54,9 @@ jobs:
           go-version: '1.22.x'
           cache-dependency-path: go-proxy/go.mod
       - name: Format check
-        run: test -z "$(gofmt -l go-proxy/*.go)"
+        run: |
+          gofmt -l go-proxy/*.go
+          test -z "$(gofmt -l go-proxy/*.go)"
       - name: Test
         working-directory: go-proxy
         run: go test ./...
