@@ -5,9 +5,14 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.util.Vector;
 import javax.microedition.io.Connector;
 import javax.microedition.io.HttpConnection;
+import javax.microedition.io.SocketConnection;
+import javax.microedition.rms.RecordStore;
+import javax.microedition.rms.RecordStoreException;
 import javax.microedition.lcdui.Alert;
 import javax.microedition.lcdui.AlertType;
 import javax.microedition.lcdui.Command;
@@ -16,6 +21,9 @@ import javax.microedition.lcdui.Display;
 import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.Form;
 import javax.microedition.lcdui.List;
+import javax.microedition.lcdui.ChoiceGroup;
+import javax.microedition.lcdui.Item;
+import javax.microedition.lcdui.ItemCommandListener;
 import javax.microedition.lcdui.StringItem;
 import javax.microedition.lcdui.TextBox;
 import javax.microedition.lcdui.TextField;
@@ -25,7 +33,7 @@ import javax.microedition.midlet.MIDlet;
  * Small MIDP 2.0 browser for Java ME feature phones.
  * It intentionally renders readable text and links instead of attempting a full HTML engine.
  */
-public final class BrowserMidlet extends MIDlet implements CommandListener {
+public final class BrowserMidlet extends MIDlet implements CommandListener, ItemCommandListener {
     private static final int MAX_PAGE_CHARS = 18000;
     private final Display display = Display.getDisplay(this);
     private final Vector history = new Vector();
@@ -38,6 +46,20 @@ public final class BrowserMidlet extends MIDlet implements CommandListener {
     private List linkList;
     private TextBox addressBox;
     private boolean loading;
+    private String proxyHost = "127.0.0.1";
+    private String proxyPort = "8080";
+    private boolean proxyEnabled;
+    private Form proxyForm;
+    private TextField proxyHostField;
+    private TextField proxyPortField;
+    private ChoiceGroup proxyEnabledChoice;
+    private final Vector bookmarks = new Vector();
+    private final Vector pageLinkItems = new Vector();
+    private final Command proxyCommand = new Command("Proxy", Command.SCREEN, 8);
+    private final Command bookmarksCommand = new Command("Bookmarks", Command.SCREEN, 8);
+    private final Command bookmarkCommand = new Command("Bookmark", Command.SCREEN, 8);
+    private final Command saveProxyCommand = new Command("Save", Command.OK, 1);
+    private final Command openLinkCommand = new Command("Open", Command.ITEM, 1);
 
     private final Command openCommand = new Command("Open", Command.OK, 1);
     private final Command backCommand = new Command("Back", Command.BACK, 2);
@@ -50,6 +72,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener {
     private final Command cancelCommand = new Command("Cancel", Command.BACK, 1);
 
     public void startApp() {
+        loadSettings();
         showHome();
     }
 
@@ -63,9 +86,12 @@ public final class BrowserMidlet extends MIDlet implements CommandListener {
         page = new Form("TGFN BrowserMini");
         page.append(new StringItem("Lightweight J2ME browser", "For Java ME feature phones\n\nEnter a web address or search query. This browser shows readable text and basic links; complex modern sites may not work."));
         page.append(new StringItem("Address", currentUrl));
+        page.append(new StringItem("Proxy", proxyEnabled ? "ON: " + proxyHost + ":" + proxyPort + " (HTTP only)" : "OFF"));
         page.addCommand(openCommand);
         page.addCommand(addressCommand);
         page.addCommand(homeCommand);
+        page.addCommand(proxyCommand);
+        page.addCommand(bookmarksCommand);
         page.addCommand(exitCommand);
         page.setCommandListener(this);
         display.setCurrent(page);
@@ -172,6 +198,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener {
     }
 
     private PageResult fetch(String url) throws IOException {
+        if (proxyEnabled && url.startsWith("http://")) return fetchViaProxy(url);
         HttpConnection connection = null;
         InputStream input = null;
         try {
@@ -342,14 +369,33 @@ public final class BrowserMidlet extends MIDlet implements CommandListener {
 
     private void showPage(String title, String body) {
         page = new Form(title.length() > 0 ? title : "Web page");
-        page.append(new StringItem("URL", currentUrl));
+        page.append(new StringItem("Address", currentUrl));
+        if (proxyEnabled && currentUrl.startsWith("https://")) {
+            page.append(new StringItem("Proxy", "HTTPS uses the phone's direct secure connection; Java ME cannot safely layer TLS over this HTTP proxy."));
+        } else if (proxyEnabled) {
+            page.append(new StringItem("Proxy", "HTTP proxy: " + proxyHost + ":" + proxyPort));
+        }
         page.append(new StringItem("", body));
+        pageLinkItems.removeAllElements();
+        for (int i = 0; i < links.size(); i++) {
+            LinkItem link = (LinkItem)links.elementAt(i);
+            String label = link.label;
+            if (label.length() > 70) label = label.substring(0, 67) + "...";
+            StringItem linkItem = new StringItem("Link", label, Item.HYPERLINK);
+            linkItem.setDefaultCommand(openLinkCommand);
+            linkItem.setItemCommandListener(this);
+            pageLinkItems.addElement(linkItem);
+            page.append(linkItem);
+        }
         page.addCommand(backCommand);
         page.addCommand(forwardCommand);
         page.addCommand(homeCommand);
         page.addCommand(linksCommand);
         page.addCommand(addressCommand);
         page.addCommand(reloadCommand);
+        page.addCommand(bookmarkCommand);
+        page.addCommand(proxyCommand);
+        page.addCommand(bookmarksCommand);
         page.addCommand(exitCommand);
         page.setCommandListener(this);
         display.setCurrent(page);
@@ -392,15 +438,48 @@ public final class BrowserMidlet extends MIDlet implements CommandListener {
             } else {
                 if (page != null) display.setCurrent(page); else showHome();
             }
+        } else if (source == proxyForm) {
+            if (command == saveProxyCommand) {
+                String host = trim(proxyHostField.getString());
+                String port = trim(proxyPortField.getString());
+                if (host.length() == 0 || port.length() == 0) {
+                    showError("Invalid proxy", "Enter both proxy host and port.");
+                    return;
+                }
+                try {
+                    int number = Integer.parseInt(port);
+                    if (number < 1 || number > 65535) throw new NumberFormatException();
+                } catch (NumberFormatException badPort) {
+                    showError("Invalid port", "Port must be between 1 and 65535.");
+                    return;
+                }
+                proxyHost = host;
+                proxyPort = port;
+                proxyEnabled = proxyEnabledChoice.isSelected(0);
+                saveSettings();
+                showHome();
+            } else {
+                showHome();
+            }
         } else if (source == linkList) {
             if (command == List.SELECT_COMMAND) {
                 int selected = linkList.getSelectedIndex();
-                if (selected >= 0 && selected < links.size()) navigate(((LinkItem)links.elementAt(selected)).url, true);
+                if (selected >= 0 && selected < bookmarks.size() && bookmarks.contains(linkList.getString(selected))) {
+                    navigate((String)bookmarks.elementAt(selected), true);
+                } else if (selected >= 0 && selected < links.size()) {
+                    navigate(((LinkItem)links.elementAt(selected)).url, true);
+                }
             } else if (command == backCommand) {
                 if (page != null) display.setCurrent(page);
             } else if (command == addressCommand) showAddress();
         } else if (command == openCommand || command == addressCommand) {
             showAddress();
+        } else if (command == proxyCommand) {
+            showProxySettings();
+        } else if (command == bookmarksCommand) {
+            showBookmarks();
+        } else if (command == bookmarkCommand) {
+            addBookmark(currentUrl);
         } else if (command == homeCommand) {
             navigate("https://lite.duckduckgo.com/lite/", true);
         } else if (command == reloadCommand) {
@@ -422,6 +501,183 @@ public final class BrowserMidlet extends MIDlet implements CommandListener {
             else if (page != null) display.setCurrent(page);
             else showHome();
         }
+    }
+
+    public void commandAction(Command command, Item item) {
+        if (command == openLinkCommand) {
+            int index = pageLinkItems.indexOf(item);
+            if (index >= 0 && index < links.size()) {
+                navigate(((LinkItem)links.elementAt(index)).url, true);
+            }
+        }
+    }
+
+    private void showProxySettings() {
+        proxyForm = new Form("Proxy settings");
+        proxyHostField = new TextField("Proxy host", proxyHost, 100, TextField.ANY);
+        proxyPortField = new TextField("Proxy port", proxyPort, 5, TextField.NUMERIC);
+        proxyEnabledChoice = new ChoiceGroup("Use HTTP proxy", ChoiceGroup.MULTIPLE);
+        proxyEnabledChoice.append("Enable proxy", null);
+        proxyEnabledChoice.setSelectedIndex(0, proxyEnabled);
+        proxyForm.append(new StringItem("Note", "HTTP pages use the configured forward proxy. HTTPS stays direct because standard MIDP cannot safely layer TLS over an HTTP CONNECT socket."));
+        proxyForm.append(proxyHostField);
+        proxyForm.append(proxyPortField);
+        proxyForm.append(proxyEnabledChoice);
+        proxyForm.addCommand(saveProxyCommand);
+        proxyForm.addCommand(cancelCommand);
+        proxyForm.setCommandListener(this);
+        display.setCurrent(proxyForm);
+    }
+
+    private void showBookmarks() {
+        if (bookmarks.size() == 0) {
+            showError("No bookmarks", "Open a page and choose Bookmark to save it.");
+            return;
+        }
+        List list = new List("Bookmarks", List.IMPLICIT);
+        for (int i = 0; i < bookmarks.size(); i++) list.append((String)bookmarks.elementAt(i), null);
+        list.addCommand(backCommand);
+        list.addCommand(addressCommand);
+        list.setCommandListener(this);
+        display.setCurrent(list);
+        linkList = list;
+    }
+
+    private void addBookmark(String url) {
+        if (url == null || url.length() == 0) return;
+        if (!bookmarks.contains(url)) bookmarks.addElement(url);
+        saveSettings();
+        showError("Bookmark saved", url);
+    }
+
+    private void loadSettings() {
+        RecordStore store = null;
+        try {
+            store = RecordStore.openRecordStore("browsermini", true);
+            if (store.getNumRecords() > 0) {
+                byte[] data = store.getRecord(1);
+                String saved = new String(data, "UTF-8");
+                int end = saved.indexOf('\n');
+                if (end >= 0) {
+                    String[] unused = new String[0];
+                    String header = saved.substring(0, end);
+                    int first = header.indexOf('|');
+                    int second = first < 0 ? -1 : header.indexOf('|', first + 1);
+                    if (first >= 0 && second > first) {
+                        proxyEnabled = header.substring(0, first).equals("1");
+                        proxyHost = header.substring(first + 1, second);
+                        proxyPort = header.substring(second + 1);
+                    }
+                    int pos = end + 1;
+                    while (pos < saved.length()) {
+                        int next = saved.indexOf('\n', pos);
+                        if (next < 0) next = saved.length();
+                        String value = saved.substring(pos, next);
+                        if (value.length() > 0 && !bookmarks.contains(value)) bookmarks.addElement(value);
+                        pos = next + 1;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (store != null) try { store.closeRecordStore(); } catch (Exception ignored) {}
+        }
+    }
+
+    private void saveSettings() {
+        RecordStore store = null;
+        try {
+            store = RecordStore.openRecordStore("browsermini", true);
+            StringBuffer saved = new StringBuffer();
+            saved.append(proxyEnabled ? "1" : "0").append('|').append(proxyHost).append('|').append(proxyPort).append('\n');
+            for (int i = 0; i < bookmarks.size(); i++) saved.append((String)bookmarks.elementAt(i)).append('\n');
+            byte[] data = saved.toString().getBytes("UTF-8");
+            if (store.getNumRecords() == 0) store.addRecord(data, 0, data.length);
+            else store.setRecord(1, data, 0, data.length);
+        } catch (Exception ignored) {
+        } finally {
+            if (store != null) try { store.closeRecordStore(); } catch (Exception ignored) {}
+        }
+    }
+
+    private PageResult fetchViaProxy(String url) throws IOException {
+        String rest = url.substring("http://".length());
+        int slash = rest.indexOf('/');
+        String hostPort = slash < 0 ? rest : rest.substring(0, slash);
+        String path = slash < 0 ? "/" : rest.substring(slash);
+        if (hostPort.indexOf('@') >= 0) throw new IOException("URL userinfo is not allowed");
+        if (proxyHost.length() == 0 || proxyPort.length() == 0) throw new IOException("Proxy host/port is empty");
+        SocketConnection socket = null;
+        InputStream input = null;
+        OutputStream output = null;
+        try {
+            socket = (SocketConnection)Connector.open("socket://" + proxyHost + ":" + proxyPort, Connector.READ_WRITE, true);
+            socket.setSocketOption(SocketConnection.LINGER, 0);
+            input = socket.openInputStream();
+            output = socket.openOutputStream();
+            OutputStreamWriter writer = new OutputStreamWriter(output, "ISO-8859-1");
+            writer.write("GET " + url + " HTTP/1.1\r\n");
+            writer.write("Host: " + hostPort + "\r\n");
+            writer.write("User-Agent: TGFN-BrowserMini-J2ME/1.0\r\n");
+            writer.write("Accept: text/html,text/plain,*/*\r\n");
+            writer.write("Connection: close\r\n\r\n");
+            writer.flush();
+            String status = readAsciiLine(input);
+            if (status == null || status.indexOf(" 2") < 0 && status.indexOf(" 3") < 0) throw new IOException("Proxy response: " + status);
+            boolean chunked = false;
+            String line;
+            while ((line = readAsciiLine(input)) != null && line.length() > 0) {
+                String lower = line.toLowerCase();
+                if (lower.startsWith("transfer-encoding:") && lower.indexOf("chunked") >= 0) chunked = true;
+            }
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            if (chunked) {
+                while (bytes.size() < MAX_PAGE_CHARS * 3) {
+                    String sizeLine = readAsciiLine(input);
+                    if (sizeLine == null) break;
+                    int semicolon = sizeLine.indexOf(';');
+                    if (semicolon >= 0) sizeLine = sizeLine.substring(0, semicolon);
+                    int size;
+                    try { size = Integer.parseInt(sizeLine.trim(), 16); } catch (Exception badSize) { throw new IOException("Invalid chunked response"); }
+                    if (size <= 0) {
+                        while ((line = readAsciiLine(input)) != null && line.length() > 0) {}
+                        break;
+                    }
+                    for (int i = 0; i < size && bytes.size() < MAX_PAGE_CHARS * 3; i++) {
+                        int b = input.read();
+                        if (b < 0) break;
+                        bytes.write(b);
+                    }
+                    readAsciiLine(input);
+                }
+            } else {
+                byte[] buffer = new byte[512];
+                int count;
+                while (bytes.size() < MAX_PAGE_CHARS * 3 && (count = input.read(buffer)) != -1) {
+                    int allowed = MAX_PAGE_CHARS * 3 - bytes.size();
+                    bytes.write(buffer, 0, count > allowed ? allowed : count);
+                }
+            }
+            String html = new String(bytes.toByteArray(), "UTF-8");
+            return parsePage(url, html);
+        } finally {
+            if (input != null) try { input.close(); } catch (IOException ignored) {}
+            if (output != null) try { output.close(); } catch (IOException ignored) {}
+            if (socket != null) try { socket.close(); } catch (IOException ignored) {}
+        }
+    }
+
+    private String readAsciiLine(InputStream input) throws IOException {
+        StringBuffer line = new StringBuffer();
+        int value;
+        boolean sawAnything = false;
+        while ((value = input.read()) != -1) {
+            sawAnything = true;
+            if (value == '\n') break;
+            if (value != '\r') line.append((char)value);
+        }
+        if (!sawAnything && line.length() == 0) return null;
+        return line.toString();
     }
 
     private static final class LinkItem {
