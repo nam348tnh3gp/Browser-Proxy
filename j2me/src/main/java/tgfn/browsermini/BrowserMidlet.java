@@ -1190,4 +1190,22 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         Vector images;
         Vector blocks;
     }
+
+    private Image scaleImage(Image src, int newW, int newH) {
+        if (src == null || newW < 1 || newH < 1) return src;
+        Image dst = Image.createImage(newW, newH);
+        Graphics g = dst.getGraphics();
+        int srcW = src.getWidth();
+        int srcH = src.getHeight();
+        for (int y = 0; y < newH; y++) {
+            int sy = y * srcH / newH;
+            for (int x = 0; x < newW; x++) {
+                int sx = x * srcW / newW;
+                g.setClip(x, y, 1, 1);
+                g.drawImage(src, x - sx, y - sy, Graphics.TOP | Graphics.LEFT);
+            }
+        }
+        return dst;
+    }
+
 }
