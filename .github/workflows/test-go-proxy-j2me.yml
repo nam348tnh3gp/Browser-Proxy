@@ -29,7 +29,8 @@ jobs:
           cache-dependency-path: go-proxy/go.mod
       - name: Check formatting
         run: |
-          gofmt -d go-proxy/obml.go
+          gofmt -d go-proxy/*.go
+          gofmt -l go-proxy/*.go
           test -z "$(gofmt -l go-proxy/*.go)"
       - name: Test
         working-directory: go-proxy
