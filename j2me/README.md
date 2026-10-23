@@ -1,22 +1,34 @@
-# TGFN BrowserMini J2ME — Real Render Mode
+# TGFN BrowserMini J2ME
 
-Client now uses **SSRIMG** by default.
+Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP browsers.
 
-## What SSRIMG does
+## Inspiration
 
-1. Proxy opens the page in headless Chrome.
-2. Chrome renders the real page (full HTML + CSS + layout).
-3. Proxy takes a screenshot, compresses it to JPEG, and sends it to the phone.
-4. J2ME client displays the JPEG.
+- **Opera Mini / OBML** — server-side rendering with Presto, compact binary delivery, link regions.  
+  Reference: [grawity/obml-parser](https://github.com/grawity/obml-parser)
+- **PicoBrowser / picomidp** — simple cHTML MIDP browser with good key navigation.  
+  Reference: [karthikeyann/picomidp](https://github.com/karthikeyann/picomidp)
+- Other J2ME clients (GitHub-j2me, J2METube) for proxy patterns and UI ideas.
 
-This is the closest practical way to show a real web page look on a feature phone.
+## Current modes
 
-## Requirements
+| Mode | Description |
+|------|-------------|
+| **SSRIMG** (default) | Chrome renders the real page → JPEG + link list (IMGL). Closest to Opera Mini visual look. |
+| SSR | Structured text blocks |
+| FULL | HTML + gzip |
+| TBO1 | Compact binary blocks |
 
-- **Chrome or Chromium** must be installed on the machine running the Go proxy.
-- If Chrome is missing, the request will fail.
+## How SSRIMG works (Opera Mini style)
 
-## How to run
+1. Client requests page with `X-TGFN-Format: SSRIMG`
+2. Proxy opens the page in headless Chrome
+3. Chrome renders full HTML/CSS
+4. Proxy captures screenshot + extracts links
+5. Sends **IMGL** packet (JPEG + links) to the phone
+6. Client shows the image and lets you open links via the **Links** menu
+
+## Usage
 
 ```bash
 cd go-proxy
@@ -24,13 +36,17 @@ go mod tidy
 PROXY_LISTEN=0.0.0.0:8080 go run .
 ```
 
-In the J2ME app enable the proxy (LAN IP + 8080), then open a page.
+In the app: Menu → Proxy → enable, then open a page.  
+Use **Menu → Links** to navigate.
 
-## Notes
+## Requirements for SSRIMG
 
-- The result is a picture of the page, not an interactive DOM.
-- Links are still available via the Links menu in the client.
-- Images and layout come from the real rendered page.
-- This mode is heavier on the proxy server than the text modes.
+- Chrome or Chromium on the proxy machine (Termux path is supported)
 
-Inspired by Opera Mini's server-side rendering idea.
+## Limits
+
+- Screenshot is static (no live JavaScript after load)
+- Interaction is through the link list (not pixel-perfect click map yet)
+- Best on text-friendly or mobile sites
+
+Not affiliated with Opera.
