@@ -8,6 +8,11 @@
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
+            android:name=".IncognitoActivity"
+            android:process=":incognito"
+            android:exported="false"
+            android:excludeFromRecents="true" />
+        <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true">
