@@ -1,11 +1,53 @@
 package main
 
 import (
+	"compress/gzip"
 	"encoding/base64"
+	"io"
+	"strings"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+func TestGzipTextResponse(t *testing.T) {
+	body := strings.Repeat("html content repeated for compression ", 100)
+	req := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/html; charset=utf-8"}}, Body: io.NopCloser(strings.NewReader(body)), Request: req, ContentLength: int64(len(body))}
+	if err := gzipTextResponse(resp); err != nil { t.Fatal(err) }
+	if resp.Header.Get("Content-Encoding") != "gzip" { t.Fatalf("Content-Encoding = %q, want gzip", resp.Header.Get("Content-Encoding")) }
+	if !strings.Contains(strings.Join(resp.Header.Values("Vary"), ","), "Accept-Encoding") { t.Fatal("Vary must include Accept-Encoding") }
+	reader, err := gzip.NewReader(resp.Body)
+	if err != nil { t.Fatal(err) }
+	decoded, err := io.ReadAll(reader)
+	if err != nil { t.Fatal(err) }
+	if string(decoded) != body { t.Fatal("decompressed response differs from original") }
+}
+
+func TestGzipTextResponseSkipsUnsafeResponses(t *testing.T) {
+	cases := []struct{name, accept, contentType, encoding string; status int; rangeHeader string; wantGzip bool}{
+		{name:"client does not accept gzip", accept:"identity", contentType:"text/html", status:200},
+		{name:"already compressed", accept:"gzip", contentType:"text/html", encoding:"br", status:200},
+		{name:"binary image", accept:"gzip", contentType:"image/png", status:200},
+		{name:"partial response", accept:"gzip", contentType:"text/html", status:206, rangeHeader:"bytes=0-10"},
+		{name:"gzip refused by quality", accept:"gzip;q=0", contentType:"text/html", status:200},
+		{name:"compress text", accept:"gzip", contentType:"text/html", status:200, wantGzip:true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+			req.Header.Set("Accept-Encoding", tc.accept)
+			if tc.rangeHeader != "" { req.Header.Set("Range", tc.rangeHeader) }
+			header := http.Header{"Content-Type": []string{tc.contentType}}
+			if tc.encoding != "" { header.Set("Content-Encoding", tc.encoding) }
+			resp := &http.Response{StatusCode:tc.status, Header:header, Body:io.NopCloser(strings.NewReader(strings.Repeat("x", 200))), Request:req}
+			if err := gzipTextResponse(resp); err != nil { t.Fatal(err) }
+			got := resp.Header.Get("Content-Encoding") == "gzip"
+			if got != tc.wantGzip { t.Fatalf("gzip = %v, want %v", got, tc.wantGzip) }
+		})
+	}
+}
 
 func TestValidProxyAuthorization(t *testing.T) {
 	good := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:secret"))
