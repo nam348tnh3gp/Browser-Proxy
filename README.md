@@ -22,7 +22,7 @@ A lightweight Android browser prototype with a Kotlin/WebView client and a stand
 - Desktop-site mode using a desktop browser user agent and wide viewport settings; websites may still adapt their layout independently.
 - In-page translation to Vietnamese, English, Japanese, Korean, French, or Spanish without navigating away; the user can restore the original text. Translation uses Google's online translation endpoint and is not offline.
 - Optional HTTP proxy configuration; direct browsing remains available when the proxy is disabled.
-- Optional Data Saver mode that keeps images enabled and prefers cached WebView resources; the setting persists across launches and can be toggled from the browser menu.
+- Optional Data Saver toggle that keeps images and network access enabled, uses WebView's normal cache validation to avoid stale-page failures, and persists across launches.
 - Settings for the home page, proxy endpoint, and desktop-site preference.
 
 The browser uses Android System WebView; it is not the full Chromium desktop/mobile browser and does not provide Chrome account sync or extensions.
@@ -55,7 +55,7 @@ By default it listens on `127.0.0.1:8080`. To allow a phone to connect over a tr
 - WebView proxy override is a WebView feature and may not be available on every device/WebView version.
 - Open **Settings** in the app to enable/disable a proxy and enter its URL, e.g. `http://192.168.1.10:8080`; the setting is saved across launches. Use a reachable HTTP proxy endpoint; `localhost` refers to the Android device itself. Proxy URLs with paths, credentials, queries, or fragments are not accepted.
 - The Go proxy supports HTTPS tunneling with standard HTTP CONNECT and does not decrypt HTTPS traffic. WebView proxy override must be supported by the device's WebView provider.
-- Data Saver keeps images enabled and prefers WebView cache, but does not provide Chrome-Lite-style server-side page compression, image transcoding, or guaranteed data-savings percentages.
+- Data Saver keeps images and network access enabled and uses WebView's normal cache policy (it does not force expired cached HTML/JavaScript). This safety mode does not provide Chrome-Lite-style server-side page compression, image transcoding, or guaranteed data-savings percentages; real transfer reduction requires optimization support on the proxy/server.
 - In-page translation currently translates up to 36 visible text nodes per action. Dynamic content, complex pages, protected text, and some site layouts may not translate perfectly; network access to Google's translation endpoint is required.
 - The app uses a WebView browser engine and does not implement Opera Mini's proprietary OBML protocol.
 
