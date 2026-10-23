@@ -263,6 +263,7 @@ class MainActivity : Activity() {
         val web = WebView(this).apply {
             setBackgroundColor(canvas)
             settings.javaScriptEnabled = true
+            configureWebViewTheme(settings)
             settings.domStorageEnabled = true
             settings.loadsImagesAutomatically = true
             applyDataSaverSettings(settings)
@@ -341,6 +342,26 @@ class MainActivity : Activity() {
         }
         if (select) selectTab(tabs.lastIndex)
         if (shouldShowNewTab) loadNewTabPage(web) else web.loadUrl(requestedUrl)
+    }
+
+    /** Match web content darkening to the browser's own theme preference. */
+    private fun configureWebViewTheme(settings: android.webkit.WebSettings) {
+        if (darkMode) {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, true)
+            } else if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+                @Suppress("DEPRECATION")
+                WebSettingsCompat.setForceDark(settings, WebSettingsCompat.FORCE_DARK_ON)
+            }
+        } else {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, false)
+            }
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+                @Suppress("DEPRECATION")
+                WebSettingsCompat.setForceDark(settings, WebSettingsCompat.FORCE_DARK_OFF)
+            }
+        }
     }
 
     private fun loadNewTabPage(web: WebView) {
