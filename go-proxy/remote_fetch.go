@@ -155,15 +155,23 @@ func lookupPublicIPs(ctx context.Context, host string) ([]net.IP, error) {
 }
 
 func isPublicIP(ip net.IP) bool {
-	if ip == nil || !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() ||
+	if ip == nil {
+		return false
+	}
+	// Normalize IPv4-mapped IPv6 addresses before applying IPv4 policy.
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
+	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() ||
 		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
 		return false
 	}
 	// Also reject shared-address, benchmarking and documentation ranges that
 	// Go's generic IsGlobalUnicast check alone does not classify as private.
 	blocked := []string{
-		"100.64.0.0/10", "198.18.0.0/15", "192.0.2.0/24",
-		"198.51.100.0/24", "203.0.113.0/24", "2001:db8::/32",
+		"100.64.0.0/10", "198.18.0.0/15", "192.0.0.0/24",
+		"192.0.2.0/24", "192.88.99.0/24", "198.51.100.0/24",
+		"203.0.113.0/24", "240.0.0.0/4", "2001:db8::/32",
 	}
 	for _, cidr := range blocked {
 		_, network, _ := net.ParseCIDR(cidr)
