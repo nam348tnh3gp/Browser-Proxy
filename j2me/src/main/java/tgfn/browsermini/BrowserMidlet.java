@@ -310,7 +310,24 @@ public final class BrowserMidlet extends MIDlet implements CommandListener {
     }
 
     private String decodeEntities(String s) {
-        return s.replace('&amp;', '&').replace('&quot;', '"').replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">");
+        s = replaceToken(s, "&amp;", "&");
+        s = replaceToken(s, "&quot;", "\"");
+        s = replaceToken(s, "&#39;", "'");
+        s = replaceToken(s, "&lt;", "<");
+        return replaceToken(s, "&gt;", ">");
+    }
+
+    private String replaceToken(String input, String token, String replacement) {
+        StringBuffer out = new StringBuffer();
+        int start = 0;
+        int found;
+        while ((found = input.indexOf(token, start)) >= 0) {
+            out.append(input.substring(start, found));
+            out.append(replacement);
+            start = found + token.length();
+        }
+        out.append(input.substring(start));
+        return out.toString();
     }
 
     private String decodeEntity(String entity) {
