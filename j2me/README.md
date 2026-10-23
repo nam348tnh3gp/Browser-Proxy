@@ -1,41 +1,38 @@
 # TGFN BrowserMini J2ME
 
-Lightweight Java ME browser with a server-side compression + rendering proxy.
+## Why you only see text
 
-## SSR mode (Server-Side Rendering)
+The J2ME client has **no HTML/CSS engine**. It can only draw text, links and images.  
+That is a hard limit of MIDP 2.0. No amount of proxy changes can make the current client render real CSS layout.
 
-The client now requests **SSR** by default.
+## Closest solution: Screenshot SSR (SSRIMG)
 
-- Proxy fetches the page, parses HTML, extracts structured content (headings, text, lists, links, images).
-- Images are resized and JPEG-compressed.
-- Everything is packed into a compact binary format (`SSR1`).
-- Client paints the blocks with visual hierarchy (larger headings, underlined links, images).
+A new optional mode renders the page on the server with headless Chrome and sends a JPEG of the real page (with CSS applied).
 
-This is a pure-Go server-side layout extraction (no Chrome required). It is closer to Opera Mini's idea than plain HTML dumping, but it is still not a full Presto-style pixel layout engine.
+**Requirements**
+- Chrome or Chromium must be installed on the machine running the proxy.
+- The client must request `X-TGFN-Format: SSRIMG`.
 
-## Modes available
-
-| Mode | Header | What you get |
-|------|--------|--------------|
-| **SSR** (default) | `X-TGFN-Format: SSR` | Structured rendered blocks + compressed images |
-| FULL | `X-TGFN-Format: FULL` | Almost full HTML + gzip (client still extracts text) |
-| TBO1 | `X-TGFN-Format: TBO1` | Older compact binary |
-
-## How to use
-
-1. Run the proxy:
-   ```bash
-   cd go-proxy
-   PROXY_LISTEN=0.0.0.0:8080 go run .
+**How to try**
+1. Install Chrome/Chromium on the proxy machine.
+2. In `BrowserMidlet.java` change the header to:
+   ```java
+   writer.write("X-TGFN-Format: SSRIMG\r\n");
    ```
-2. In the J2ME app: Menu → Proxy → enter LAN IP + port 8080 → enable.
-3. Open a page. The proxy will server-side render it.
+3. Rebuild the JAR and open a page. You should receive a JPEG screenshot of the rendered page.
 
-## Limits
+## Current default modes
 
-- No real CSS positioning (no absolute/float layout)
-- No JavaScript execution
-- Best results on text-friendly or mobile sites
-- Up to 8 images per page
+| Mode | Result |
+|------|--------|
+| SSR (default) | Structured text + links + images |
+| FULL | HTML (client still extracts text) |
+| SSRIMG | Real rendered JPEG (needs Chrome) |
 
-Inspired by Opera Mini, not affiliated with Opera.
+## Honest limits
+
+- True interactive CSS layout on the phone is not possible with the current client.
+- Screenshot mode gives the visual look of the real page but links become a separate list (or you tap the image and use the Links menu).
+- Best long-term path for "full web" on old phones is the Opera Mini model: heavy server renderer + very thin client painter.
+
+This project is an open experiment, not affiliated with Opera.
