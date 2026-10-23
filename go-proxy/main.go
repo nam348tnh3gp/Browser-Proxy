@@ -36,6 +36,7 @@ func proxyHandler() http.Handler {
 			req.Header.Set("Via", "1.1 TGFN.BrowserMini")
 		},
 		FlushInterval: 100 * time.Millisecond,
+		ModifyResponse: compactHTMLResponse,
 		ErrorLog:      log.New(os.Stderr, "proxy: ", log.LstdFlags),
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
