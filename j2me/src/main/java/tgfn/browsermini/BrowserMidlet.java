@@ -273,7 +273,6 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                         if (close > end) {
                             String label = cleanText(html.substring(end + 1, close));
                             if (label.length() > 0 && absolute.length() > 0) {
-                                result.links.addElement(new LinkItem(label, absolute));
                                 text.append("\n");
                             }
                         }
@@ -315,10 +314,13 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             if (open > pos) {
                 String value = cleanText(html.substring(pos, open));
                 if (value.length() > 0) {
-                    if (style == 3 && blocks.size() > 0) {
+                    if (blocks.size() > 0) {
                         RenderBlock prev = (RenderBlock)blocks.elementAt(blocks.size() - 1);
-                        if (prev.type == 3) prev.text += " " + value;
-                        else blocks.addElement(new RenderBlock(value, 3, null));
+                        if (prev.url == null && prev.type == style && prev.text.length() > 0) {
+                            prev.text += " " + value;
+                        } else {
+                            blocks.addElement(new RenderBlock(value, style, null));
+                        }
                     } else {
                         blocks.addElement(new RenderBlock(value, style, null));
                     }
