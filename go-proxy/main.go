@@ -62,6 +62,9 @@ func proxyHandler() http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveRemoteFetch(w, r) {
+			return
+		}
 		started := time.Now()
 		if r.Method == http.MethodConnect {
 			log.Printf("request method=CONNECT client=%q target=%q", r.RemoteAddr, safeLogValue(r.Host))
