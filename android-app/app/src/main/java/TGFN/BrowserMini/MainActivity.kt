@@ -43,18 +43,21 @@ class MainActivity : Activity() {
 
     private val prefs by lazy { getSharedPreferences("browser_settings", Context.MODE_PRIVATE) }
     private val mainExecutor = Executor { command -> runOnUiThread(command) }
-    private val ink = Color.rgb(32, 33, 36)
-    private val muted = Color.rgb(95, 99, 104)
+    private val darkMode: Boolean get() = prefs.getBoolean("dark_mode", false)
+    private val isEnglish: Boolean get() = prefs.getString("language", "vi") == "en"
+    private val ink: Int get() = if (darkMode) Color.rgb(232, 234, 237) else Color.rgb(32, 33, 36)
+    private val muted: Int get() = if (darkMode) Color.rgb(176, 179, 184) else Color.rgb(95, 99, 104)
     private val accent = Color.rgb(26, 115, 232)
-    private val canvas = Color.rgb(255, 255, 255)
-    private val pale = Color.rgb(241, 243, 244)
+    private val canvas: Int get() = if (darkMode) Color.rgb(32, 33, 36) else canvas
+    private val pale: Int get() = if (darkMode) Color.rgb(48, 49, 52) else Color.rgb(241, 243, 244)
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.WHITE
-        window.navigationBarColor = Color.WHITE
+    private fun tr(vietnamese: String, english: String): String = if (isEnglish) english else vietnamese
+
+    private fun initializeBrowser(savedInstanceState: Bundle?) {
+        window.statusBarColor = canvas
+        window.navigationBarColor = canvas
         @Suppress("DEPRECATION")
-        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        window.decorView.systemUiVisibility = if (darkMode) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         buildUi()
 
         val savedUrls = savedInstanceState?.getStringArrayList("tab_urls")
@@ -64,7 +67,7 @@ class MainActivity : Activity() {
         applySavedProxy { success ->
             updateProxySummary()
             if (!success && prefs.getBoolean("proxy_enabled", false)) {
-                status.text = "WebView không hỗ trợ cấu hình proxy"
+                status.text = tr("WebView không hỗ trợ cấu hình proxy", "This WebView does not support proxy configuration")
             }
             if (!savedUrls.isNullOrEmpty()) {
                 savedUrls.forEachIndexed { index, url -> createTab(url, index == restoreIndex) }
@@ -74,6 +77,23 @@ class MainActivity : Activity() {
             } else {
                 createTab(null, true)
             }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (!prefs.contains("language")) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Choose your language / Chọn ngôn ngữ")
+                .setMessage("Which language would you like to use? / Bạn muốn sử dụng ngôn ngữ nào?")
+                .setItems(arrayOf("Tiếng Việt", "English")) { _, which ->
+                    prefs.edit().putString("language", if (which == 1) "en" else "vi").apply()
+                    initializeBrowser(savedInstanceState)
+                }
+                .setCancelable(false)
+                .show()
+        } else {
+            initializeBrowser(savedInstanceState)
         }
     }
 
@@ -87,7 +107,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(8), dp(10), dp(8))
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(canvas)
         }
 
         val logo = TextView(this).apply {
@@ -111,12 +131,12 @@ class MainActivity : Activity() {
             textSize = 22f
             setTextColor(muted)
             gravity = Gravity.CENTER
-            contentDescription = "Địa chỉ trang"
+            contentDescription = tr("Địa chỉ trang", "Page address")
         }
         addressCard.addView(security, LinearLayout.LayoutParams(dp(25), dp(42)))
 
         address = EditText(this).apply {
-            hint = "Tìm kiếm hoặc nhập URL"
+            hint = tr("Tìm kiếm hoặc nhập URL", "Search or enter URL")
             setSingleLine(true)
             imeOptions = EditorInfo.IME_ACTION_GO
             textSize = 14f
@@ -134,7 +154,7 @@ class MainActivity : Activity() {
             }
         }
         addressCard.addView(address, LinearLayout.LayoutParams(0, dp(44), 1f))
-        val refresh = smallAction("↻", "Tải lại") { currentWebView()?.reload() }
+        val refresh = smallAction("↻", tr("Tải lại", "Reload")) { currentWebView()?.reload() }
         addressCard.addView(refresh, LinearLayout.LayoutParams(dp(38), dp(42)))
         topBar.addView(addressCard, LinearLayout.LayoutParams(0, dp(46), 1f))
 
@@ -143,17 +163,17 @@ class MainActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setTextColor(ink)
-            background = rounded(Color.WHITE, dp(8), Color.rgb(95, 99, 104), dp(1))
+            background = rounded(canvas, dp(8), Color.rgb(95, 99, 104), dp(1))
             isClickable = true
             isFocusable = true
-            contentDescription = "Quản lý tab"
+            contentDescription = tr("Quản lý tab", "Manage tabs")
             setOnClickListener { showTabs() }
         }
         val tabParams = LinearLayout.LayoutParams(dp(34), dp(32))
         tabParams.marginStart = dp(8)
         topBar.addView(tabButton, tabParams)
 
-        val menuButton = smallAction("⋮", "Menu") { showBrowserMenu() }
+        val menuButton = smallAction("⋮", tr("Menu", "Menu")) { showBrowserMenu() }
         topBar.addView(menuButton, LinearLayout.LayoutParams(dp(34), dp(42)))
         root.addView(topBar)
 
@@ -166,32 +186,32 @@ class MainActivity : Activity() {
         }
         root.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)))
 
-        webContainer = FrameLayout(this).apply { setBackgroundColor(Color.WHITE) }
+        webContainer = FrameLayout(this).apply { setBackgroundColor(canvas) }
         root.addView(webContainer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val bottomBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(dp(6), dp(5), dp(6), dp(5))
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(canvas)
             elevation = dp(8).toFloat()
         }
-        bottomBar.addView(bottomAction("‹", "Quay lại") { currentWebView()?.let { if (it.canGoBack()) it.goBack() } })
-        bottomBar.addView(bottomAction("›", "Tiến") { currentWebView()?.let { if (it.canGoForward()) it.goForward() } })
-        bottomBar.addView(bottomAction("⌂", "Trang chủ") { loadHome() })
-        bottomBar.addView(bottomAction("☆", "Dấu trang") { showBookmarks() })
-        bottomBar.addView(bottomAction("+", "Tab mới") { createTab(null, true) })
-        bottomBar.addView(bottomAction("↗", "Chia sẻ") { shareCurrentPage() })
+        bottomBar.addView(bottomAction("‹", tr("Quay lại", "Back")) { currentWebView()?.let { if (it.canGoBack()) it.goBack() } })
+        bottomBar.addView(bottomAction("›", tr("Tiến", "Forward")) { currentWebView()?.let { if (it.canGoForward()) it.goForward() } })
+        bottomBar.addView(bottomAction("⌂", tr("Trang chủ", "Home")) { loadHome() })
+        bottomBar.addView(bottomAction("☆", tr("Dấu trang", "Bookmarks")) { showBookmarks() })
+        bottomBar.addView(bottomAction("+", tr("Tab mới", "New tab")) { createTab(null, true) })
+        bottomBar.addView(bottomAction("↗", tr("Chia sẻ", "Share")) { shareCurrentPage() })
         root.addView(bottomBar)
 
         val statusRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(4), dp(12), dp(5))
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(canvas)
         }
         status = TextView(this).apply {
-            text = "Sẵn sàng"
+            text = tr("Sẵn sàng", "Ready")
             textSize = 11f
             setTextColor(muted)
             maxLines = 1
@@ -211,7 +231,7 @@ class MainActivity : Activity() {
 
     private fun createTab(url: String?, select: Boolean) {
         val web = WebView(this).apply {
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(canvas)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.loadsImagesAutomatically = true
@@ -377,15 +397,15 @@ class MainActivity : Activity() {
         }
 
     private fun showBrowserMenu() {
-        val desktopLabel = if (isDesktopModeEnabled()) "Phiên bản máy tính: đang bật" else "Phiên bản máy tính"
-        val dataSaverLabel = if (isDataSaverEnabled()) "Data Saver: đang bật" else "Data Saver: tắt"
+        val desktopLabel = if (isDesktopModeEnabled()) tr("Phiên bản máy tính: đang bật", "Desktop site: on") else tr("Phiên bản máy tính", "Desktop site")
+        val dataSaverLabel = if (isDataSaverEnabled()) "Data Saver: on" else "Data Saver: off"
         val items = arrayOf(
-            "Tab mới", "Tab ẩn danh mới", "Dịch trang", "Tìm trong trang", "Thu phóng",
-            desktopLabel, "Lưu/Bỏ dấu trang", "Dấu trang", "Lịch sử",
-            "Chia sẻ trang", "Cài đặt", "Đóng tab hiện tại", dataSaverLabel
+            tr("Tab mới", "New tab"), tr("Tab ẩn danh mới", "New incognito tab"), tr("Dịch trang", "Translate page"), tr("Tìm trong trang", "Find in page"), tr("Thu phóng", "Zoom"),
+            desktopLabel, tr("Lưu/Bỏ dấu trang", "Add/remove bookmark"), tr("Dấu trang", "Bookmarks"), tr("Lịch sử", "History"),
+            tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel
         )
         android.app.AlertDialog.Builder(this)
-            .setTitle("TGFN Browser · Tiện ích")
+            .setTitle(tr("TGFN Browser · Tiện ích", "TGFN Browser · Tools"))
             .setItems(items) { _, which ->
                 when (which) {
                     0 -> createTab(null, true)
@@ -415,7 +435,7 @@ class MainActivity : Activity() {
         val dialogContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(8), dp(16), dp(12))
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(canvas)
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -556,7 +576,7 @@ class MainActivity : Activity() {
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(canvas)
             background = rounded(accent, dp(24))
             setPadding(dp(18), dp(12), dp(18), dp(12))
             setOnClickListener {
@@ -687,7 +707,7 @@ class MainActivity : Activity() {
             .setTitle("Dịch ngay trên trang")
             .setItems(languages) { _, which -> translatePageInPlace(web, codes[which], languages[which]) }
             .setNeutralButton("Hiện bản gốc") { _, _ -> restoreOriginalPage(web) }
-            .setNegativeButton("Hủy", null)
+            .setNegativeButton(tr("Hủy", "Cancel"), null)
             .show()
     }
 
@@ -874,30 +894,50 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(12), dp(20), dp(12))
         }
         content.addView(TextView(this).apply {
-            text = "Cài đặt trình duyệt"
+            text = tr("Cài đặt trình duyệt", "Browser settings")
             textSize = 21f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(ink)
             setPadding(0, 0, 0, dp(12))
         })
         val enabled = android.widget.CheckBox(this).apply {
-            text = "Bật HTTP/HTTPS proxy"
+            text = tr("Bật HTTP/HTTPS proxy", "Enable HTTP/HTTPS proxy")
             isChecked = prefs.getBoolean("proxy_enabled", false)
         }
         content.addView(enabled)
+        val dark = android.widget.CheckBox(this).apply {
+            text = tr("Chế độ tối", "Dark mode")
+            isChecked = darkMode
+        }
+        content.addView(dark)
+        val language = android.widget.Button(this).apply {
+            text = tr("Ngôn ngữ: Tiếng Việt", "Language: English")
+            setOnClickListener {
+                android.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Choose your language / Chọn ngôn ngữ")
+                    .setSingleChoiceItems(arrayOf("Tiếng Việt", "English"), if (isEnglish) 1 else 0) { choiceDialog, which ->
+                        prefs.edit().putString("language", if (which == 1) "en" else "vi").apply()
+                        choiceDialog.dismiss()
+                        dialogLanguageRestart()
+                    }
+                    .setNegativeButton(tr("Hủy", "Cancel"), null)
+                    .show()
+            }
+        }
+        content.addView(language)
         val dataSaver = android.widget.CheckBox(this).apply {
-            text = "Data Saver: giữ ảnh, cache an toàn"
+            text = tr("Data Saver: giữ ảnh, cache an toàn", "Data Saver: keep images, safe cache")
             isChecked = isDataSaverEnabled()
         }
         content.addView(dataSaver)
         content.addView(TextView(this).apply {
-            text = "Ảnh và kết nối mạng vẫn bật. Trình duyệt dùng cache theo quy tắc mặc định để website có thể kiểm tra tài nguyên đã hết hạn; không ép dùng HTML/JavaScript cũ và không tự tải lại trang khi bật/tắt. Chế độ này chưa nén dữ liệu như Chrome Lite mode trước đây."
+            text = tr("Ảnh và kết nối mạng vẫn bật. Trình duyệt dùng cache theo quy tắc mặc định để website có thể kiểm tra tài nguyên đã hết hạn; không ép dùng HTML/JavaScript cũ và không tự tải lại trang khi bật/tắt. Chế độ này chưa nén dữ liệu như Chrome Lite mode trước đây.", "Images and network access stay enabled. The browser uses the default cache policy, avoids stale HTML/JavaScript, and does not reload pages when toggled. This mode does not compress data like the former Chrome Lite mode.")
             textSize = 12f
             setTextColor(muted)
             setPadding(dp(28), 0, 0, dp(8))
         })
         val desktop = android.widget.CheckBox(this).apply {
-            text = "Yêu cầu phiên bản máy tính cho trang web"
+            text = tr("Yêu cầu phiên bản máy tính cho trang web", "Request desktop version of websites")
             isChecked = isDesktopModeEnabled()
         }
         content.addView(desktop)
@@ -909,13 +949,13 @@ class MainActivity : Activity() {
         }
         content.addView(proxyUrl)
         val home = EditText(this).apply {
-            hint = "Trang chủ URL"
+            hint = tr("Trang chủ URL", "Homepage URL")
             setSingleLine(true)
             setText(prefs.getString("home_url", "https://www.google.com") ?: "")
         }
         content.addView(home)
         content.addView(TextView(this).apply {
-            text = "Khi bật, HTTP đi qua proxy và HTTPS dùng đường hầm CONNECT. Khi tắt, trình duyệt kết nối trực tiếp. Proxy cần hỗ trợ HTTP CONNECT để tải HTTPS."
+            text = tr("Khi bật, HTTP đi qua proxy và HTTPS dùng đường hầm CONNECT. Khi tắt, trình duyệt kết nối trực tiếp. Proxy cần hỗ trợ HTTP CONNECT để tải HTTPS.", "When enabled, HTTP uses the proxy and HTTPS uses CONNECT tunneling. When disabled, the browser connects directly. The proxy must support HTTP CONNECT for HTTPS.")
             textSize = 13f
             setTextColor(muted)
             setPadding(0, dp(8), 0, dp(8))
@@ -923,22 +963,23 @@ class MainActivity : Activity() {
         val dialog = android.app.AlertDialog.Builder(this)
             .setView(ScrollView(this).apply { addView(content) })
             .setNegativeButton("Hủy", null)
-            .setNeutralButton("Tắt proxy", null)
-            .setPositiveButton("Lưu", null)
+            .setNeutralButton(tr("Tắt proxy", "Disable proxy"), null)
+            .setPositiveButton(tr("Lưu", "Save"), null)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val normalizedHome = normalizeHttpUrl(home.text.toString().trim())
                 if (normalizedHome == null) {
-                    home.error = "Nhập URL HTTP/HTTPS hợp lệ"
+                    home.error = tr("Nhập URL HTTP/HTTPS hợp lệ", "Enter a valid HTTP/HTTPS URL")
                     return@setOnClickListener
                 }
                 val rawProxy = proxyUrl.text.toString().trim()
                 if (enabled.isChecked && parseProxyUrl(rawProxy) == null) {
-                    proxyUrl.error = "Dùng dạng http://host:port"
+                    proxyUrl.error = tr("Dùng dạng http://host:port", "Use format http://host:port")
                     return@setOnClickListener
                 }
                 prefs.edit().putBoolean("proxy_enabled", enabled.isChecked)
+                    .putBoolean("dark_mode", dark.isChecked)
                     .putBoolean("desktop_mode", desktop.isChecked)
                     .putBoolean("data_saver_enabled", dataSaver.isChecked)
                     .putString("proxy_url", rawProxy).putString("home_url", normalizedHome).apply()
@@ -947,9 +988,10 @@ class MainActivity : Activity() {
                     applyDataSaverSettings(tab.webView.settings)
                 }
                 dialog.dismiss()
+                if (dark.isChecked != darkMode) { recreate(); return@setOnClickListener }
                 applySavedProxy { success ->
                     updateProxySummary()
-                    status.text = if (success) "Đã lưu cài đặt" else "WebView không hỗ trợ cấu hình proxy"
+                    status.text = if (success) tr("Đã lưu cài đặt", "Settings saved") else tr("WebView không hỗ trợ cấu hình proxy", "This WebView does not support proxy configuration")
                     Toast.makeText(this, status.text, Toast.LENGTH_LONG).show()
                     currentWebView()?.reload()
                 }
@@ -966,6 +1008,8 @@ class MainActivity : Activity() {
         }
         dialog.show()
     }
+
+    private fun dialogLanguageRestart() { recreate() }
 
     private fun toggleBookmark() {
         val url = currentWebView()?.url ?: return
