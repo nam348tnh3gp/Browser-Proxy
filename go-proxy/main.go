@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"io"
@@ -135,4 +134,3 @@ func tunnel(upstream net.Conn, client net.Conn) {
 	}
 }
 
-var _ = bufio.ErrInvalidUnreadByte
