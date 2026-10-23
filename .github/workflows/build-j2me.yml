@@ -2,7 +2,7 @@ name: Build TGFN BrowserMini J2ME
 
 on:
   push:
-    branches: [main]
+    branches: [J2ME]
     paths:
       - "j2me/**"
       - ".github/workflows/build-j2me.yml"
