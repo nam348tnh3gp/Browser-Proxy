@@ -306,7 +306,9 @@ class MainActivity : Activity() {
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
-                tab.isNewTab = url == "https://tgfn.browser/"
+                if (!url.isNullOrBlank() && !url.equals("about:blank", ignoreCase = true)) {
+                    tab.isNewTab = url == "https://tgfn.browser/"
+                }
                 tab.url = if (tab.isNewTab) NEW_TAB_SESSION_URL else (url ?: tab.url)
                 tab.title = view?.title?.takeIf { it.isNotBlank() } ?: hostLabel(url)
                 if (isSelected(tab)) {
