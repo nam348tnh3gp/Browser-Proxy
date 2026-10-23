@@ -398,31 +398,219 @@ class MainActivity : Activity() {
     }
 
     private fun showTabs() {
-        val labels = tabs.mapIndexed { index, tab ->
-            val title = tab.title.takeIf { it.isNotBlank() } ?: hostLabel(tab.url)
-            (if (index == selectedTab) "✓  " else "") + title.take(42)
-        }.toTypedArray()
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Các tab · ${tabs.size}")
-            .setItems(labels) { _, which -> selectTab(which) }
-            .setPositiveButton("Tab mới") { _, _ -> createTab(null, true) }
-            .setNegativeButton("Đóng tab hiện tại") { _, _ -> closeCurrentTab() }
-            .show()
+        if (tabs.isEmpty()) {
+            createTab(null, true)
+            return
+        }
+
+        val dialogContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(12))
+            setBackgroundColor(Color.WHITE)
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), dp(4), dp(2), dp(12))
+        }
+        val heading = TextView(this).apply {
+            text = "Tab đang mở"
+            textSize = 22f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(ink)
+        }
+        header.addView(heading, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(TextView(this).apply {
+            text = tabs.size.toString()
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(accent)
+            background = rounded(Color.rgb(232, 240, 254), dp(16))
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+        })
+        dialogContent.addView(header)
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+        }
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun renderCards() {
+            grid.removeAllViews()
+            var index = 0
+            while (index < tabs.size) {
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.TOP
+                }
+                for (column in 0..1) {
+                    val tabIndex = index + column
+                    if (tabIndex < tabs.size) {
+                        val tab = tabs[tabIndex]
+                        val selected = tabIndex == selectedTab
+                        val card = LinearLayout(this).apply {
+                            orientation = LinearLayout.VERTICAL
+                            setPadding(dp(12), dp(10), dp(10), dp(10))
+                            background = rounded(
+                                if (selected) Color.rgb(232, 240, 254) else Color.rgb(248, 249, 250),
+                                dp(16),
+                                if (selected) accent else Color.rgb(218, 220, 224),
+                                if (selected) 2 else 1
+                            )
+                            isClickable = true
+                            isFocusable = true
+                            elevation = if (selected) dp(2).toFloat() else 0f
+                            setOnClickListener {
+                                selectTab(tabIndex)
+                                val parentDialog = dialogContent.tag as? android.app.AlertDialog
+                                parentDialog?.dismiss()
+                            }
+                        }
+                        val titleRow = LinearLayout(this).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                        }
+                        titleRow.addView(TextView(this).apply {
+                            text = if (selected) "●" else "○"
+                            textSize = 14f
+                            setTextColor(if (selected) accent else muted)
+                            gravity = Gravity.CENTER
+                        }, LinearLayout.LayoutParams(dp(20), dp(24)))
+                        titleRow.addView(TextView(this).apply {
+                            text = "Tab " + (tabIndex + 1)
+                            textSize = 11f
+                            typeface = Typeface.DEFAULT_BOLD
+                            setTextColor(muted)
+                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        val close = TextView(this).apply {
+                            text = "×"
+                            textSize = 22f
+                            gravity = Gravity.CENTER
+                            setTextColor(muted)
+                            contentDescription = "Đóng tab " + (tabIndex + 1)
+                            setPadding(dp(6), 0, dp(4), 0)
+                            setOnClickListener {
+                                closeTabAt(tabIndex)
+                                val parentDialog = dialogContent.tag as? android.app.AlertDialog
+                                if (tabs.isEmpty()) createTab(null, true)
+                                if (tabs.isEmpty()) parentDialog?.dismiss() else {
+                                    renderCards()
+                                    heading.text = "Tab đang mở"
+                                    updateTabButton()
+                                }
+                            }
+                        }
+                        titleRow.addView(close, LinearLayout.LayoutParams(dp(30), dp(28)))
+                        card.addView(titleRow)
+
+                        card.addView(TextView(this).apply {
+                            text = tab.title.takeIf { it.isNotBlank() } ?: "Tab mới"
+                            textSize = 14f
+                            typeface = Typeface.DEFAULT_BOLD
+                            setTextColor(ink)
+                            maxLines = 2
+                            ellipsize = android.text.TextUtils.TruncateAt.END
+                            setPadding(0, dp(8), 0, dp(4))
+                        })
+                        card.addView(TextView(this).apply {
+                            text = hostLabel(tab.webView.url ?: tab.url).take(38)
+                            textSize = 11f
+                            setTextColor(muted)
+                            maxLines = 2
+                            ellipsize = android.text.TextUtils.TruncateAt.END
+                        })
+                        val params = LinearLayout.LayoutParams(0, dp(132), 1f)
+                        if (column == 0) params.marginEnd = dp(6) else params.marginStart = dp(6)
+                        params.bottomMargin = dp(12)
+                        row.addView(card, params)
+                    } else {
+                        row.addView(View(this), LinearLayout.LayoutParams(0, dp(132), 1f))
+                    }
+                }
+                grid.addView(row)
+                index += 2
+            }
+        }
+        scroll.addView(grid)
+        dialogContent.addView(scroll, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
+
+        val footer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(8), 0, 0)
+        }
+        val newTab = TextView(this).apply {
+            text = "+  Tab mới"
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = rounded(accent, dp(24))
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+            setOnClickListener {
+                val parentDialog = dialogContent.tag as? android.app.AlertDialog
+                parentDialog?.dismiss()
+                createTab(null, true)
+            }
+        }
+        footer.addView(newTab, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val done = TextView(this).apply {
+            text = "Xong"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(accent)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        footer.addView(done)
+        dialogContent.addView(footer)
+
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setView(dialogContent)
+            .create()
+        dialogContent.tag = dialog
+        done.setOnClickListener { dialog.dismiss() }
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            dialog.window?.setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (resources.displayMetrics.heightPixels * 0.78f).toInt()
+            )
+            dialog.window?.setGravity(Gravity.BOTTOM)
+            dialog.window?.attributes = dialog.window?.attributes?.apply {
+                windowAnimations = android.R.style.Animation_InputMethod
+            }
+            dialogContent.alpha = 0f
+            dialogContent.translationY = dp(24).toFloat()
+            dialogContent.animate().alpha(1f).translationY(0f).setDuration(180).start()
+        }
+        renderCards()
+        dialog.show()
     }
 
-    private fun closeCurrentTab() {
-        if (tabs.isEmpty()) return
-        val oldIndex = selectedTab
-        val removed = tabs.removeAt(oldIndex)
+    private fun closeTabAt(index: Int) {
+        if (index !in tabs.indices) return
+        val removed = tabs.removeAt(index)
         (removed.webView.parent as? ViewGroup)?.removeView(removed.webView)
         removed.webView.stopLoading()
         removed.webView.destroy()
         if (tabs.isEmpty()) {
             selectedTab = 0
-            createTab(null, true)
         } else {
-            selectTab((oldIndex - 1).coerceAtLeast(0).coerceAtMost(tabs.lastIndex))
+            if (index < selectedTab) selectedTab--
+            else if (index == selectedTab) selectedTab = (index - 1).coerceAtLeast(0)
+            selectedTab = selectedTab.coerceIn(0, tabs.lastIndex)
+            selectTab(selectedTab)
         }
+        updateTabButton()
+    }
+
+    private fun closeCurrentTab() {
+        if (tabs.isEmpty()) return
+        closeTabAt(selectedTab)
+        if (tabs.isEmpty()) createTab(null, true)
         updateTabButton()
     }
 
