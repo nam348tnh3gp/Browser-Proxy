@@ -48,7 +48,7 @@ class MainActivity : Activity() {
     private val ink: Int get() = if (darkMode) Color.rgb(232, 234, 237) else Color.rgb(32, 33, 36)
     private val muted: Int get() = if (darkMode) Color.rgb(176, 179, 184) else Color.rgb(95, 99, 104)
     private val accent = Color.rgb(26, 115, 232)
-    private val canvas: Int get() = if (darkMode) Color.rgb(32, 33, 36) else canvas
+    private val canvas: Int get() = if (darkMode) Color.rgb(32, 33, 36) else Color.WHITE
     private val pale: Int get() = if (darkMode) Color.rgb(48, 49, 52) else Color.rgb(241, 243, 244)
 
     private fun tr(vietnamese: String, english: String): String = if (isEnglish) english else vietnamese
@@ -978,6 +978,7 @@ class MainActivity : Activity() {
                     proxyUrl.error = tr("Dùng dạng http://host:port", "Use format http://host:port")
                     return@setOnClickListener
                 }
+                val previousDarkMode = darkMode
                 prefs.edit().putBoolean("proxy_enabled", enabled.isChecked)
                     .putBoolean("dark_mode", dark.isChecked)
                     .putBoolean("desktop_mode", desktop.isChecked)
@@ -988,7 +989,7 @@ class MainActivity : Activity() {
                     applyDataSaverSettings(tab.webView.settings)
                 }
                 dialog.dismiss()
-                if (dark.isChecked != darkMode) { recreate(); return@setOnClickListener }
+                if (dark.isChecked != previousDarkMode) { recreate(); return@setOnClickListener }
                 applySavedProxy { success ->
                     updateProxySummary()
                     status.text = if (success) tr("Đã lưu cài đặt", "Settings saved") else tr("WebView không hỗ trợ cấu hình proxy", "This WebView does not support proxy configuration")
