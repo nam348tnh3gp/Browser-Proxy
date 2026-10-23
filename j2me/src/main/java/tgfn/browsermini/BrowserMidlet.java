@@ -815,8 +815,20 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             g.setColor(255, 255, 255); g.fillRect(0, contentY, w, contentH);
             g.setClip(4, contentY + 3, w - 8, Math.max(0, contentH - 6));
             int y = contentY + 4 - scrollY;
-            Vector lines = wrap(screenBody, normal, w - 14);
             totalBodyHeight = 0;
+            if (lastPageResult != null && lastPageResult.images != null) {
+                for (int imageIndex = 0; imageIndex < lastPageResult.images.size() && imageIndex < 3; imageIndex++) {
+                    ImageRef ref = (ImageRef)lastPageResult.images.elementAt(imageIndex);
+                    if (ref.image != null && ref.image.getWidth() <= w - 14 && ref.image.getHeight() <= 64) {
+                        if (y + ref.image.getHeight() > contentY && y < contentY + contentH) {
+                            g.drawImage(ref.image, 7, y, Graphics.TOP | Graphics.LEFT);
+                        }
+                        y += ref.image.getHeight() + 4;
+                        totalBodyHeight += ref.image.getHeight() + 4;
+                    }
+                }
+            }
+            Vector lines = wrap(screenBody, normal, w - 14);
             for (int i = 0; i < lines.size(); i++) {
                 String rawLine = (String)lines.elementAt(i);
                 boolean h1 = rawLine.length() > 0 && rawLine.charAt(0) == '\u0001';
