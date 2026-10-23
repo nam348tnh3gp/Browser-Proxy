@@ -15,9 +15,13 @@ A lightweight Android browser prototype with a Kotlin/WebView client and a stand
 - Chrome-inspired address/search bar, reload, back/forward and home controls.
 - New-tab page with Google search and quick links to popular sites.
 - Multiple WebView tabs with tab switching and closing.
-- Bookmarks, browsing history, and page sharing.
+- Bookmarks, browsing history, page sharing, and close-tab controls.
+- In-page text search with result counts.
+- Page zoom controls and pinch-to-zoom without permanent on-screen zoom buttons.
+- Desktop-site mode using a desktop browser user agent and wide viewport settings; websites may still adapt their layout independently.
+- Translate-page shortcut that opens Google Translate with language choices (Vietnamese, English, Japanese, Korean, French, and Spanish).
 - Optional HTTP proxy configuration; direct browsing remains available when the proxy is disabled.
-- Settings for the home page and proxy endpoint.
+- Settings for the home page, proxy endpoint, and desktop-site preference.
 
 The browser uses Android System WebView; it is not the full Chromium desktop/mobile browser and does not provide Chrome account sync or extensions.
 
