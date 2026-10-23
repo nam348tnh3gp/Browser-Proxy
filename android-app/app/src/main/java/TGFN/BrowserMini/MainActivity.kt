@@ -380,7 +380,7 @@ class MainActivity : Activity() {
         val desktopLabel = if (isDesktopModeEnabled()) "Phiên bản máy tính: đang bật" else "Phiên bản máy tính"
         val dataSaverLabel = if (isDataSaverEnabled()) "Data Saver: đang bật" else "Data Saver: tắt"
         val items = arrayOf(
-            "Tab mới", "Dịch trang", "Tìm trong trang", "Thu phóng",
+            "Tab mới", "Tab ẩn danh mới", "Dịch trang", "Tìm trong trang", "Thu phóng",
             desktopLabel, "Lưu/Bỏ dấu trang", "Dấu trang", "Lịch sử",
             "Chia sẻ trang", "Cài đặt", "Đóng tab hiện tại", dataSaverLabel
         )
@@ -389,17 +389,18 @@ class MainActivity : Activity() {
             .setItems(items) { _, which ->
                 when (which) {
                     0 -> createTab(null, true)
-                    1 -> translateCurrentPage()
-                    2 -> showFindInPage()
-                    3 -> showZoomControls()
-                    4 -> toggleDesktopMode()
-                    5 -> toggleBookmark()
-                    6 -> showBookmarks()
-                    7 -> showHistory()
-                    8 -> shareCurrentPage()
-                    9 -> showSettings()
-                    10 -> closeCurrentTab()
-                    11 -> toggleDataSaver()
+                    1 -> startActivity(Intent(this, IncognitoActivity::class.java))
+                    2 -> translateCurrentPage()
+                    3 -> showFindInPage()
+                    4 -> showZoomControls()
+                    5 -> toggleDesktopMode()
+                    6 -> toggleBookmark()
+                    7 -> showBookmarks()
+                    8 -> showHistory()
+                    9 -> shareCurrentPage()
+                    10 -> showSettings()
+                    11 -> closeCurrentTab()
+                    12 -> toggleDataSaver()
                 }
             }
             .show()
