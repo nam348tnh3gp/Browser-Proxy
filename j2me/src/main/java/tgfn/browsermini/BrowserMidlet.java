@@ -707,23 +707,20 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         private String screenTitle = "TGFN BrowserMini";
         private String screenBody = "";
         private int scrollY;
-        private final Command canvasAddress = new Command("Address", Command.SCREEN, 1);
-        private final Command canvasOpen = new Command("Open", Command.OK, 1);
-        private final Command canvasLinks = new Command("Links", Command.SCREEN, 2);
-        private final Command canvasBack = new Command("Back", Command.BACK, 3);
-        private final Command canvasForward = new Command("Forward", Command.SCREEN, 4);
-        private final Command canvasHome = new Command("Home", Command.SCREEN, 5);
-        private final Command canvasReload = new Command("Reload", Command.SCREEN, 6);
-        private final Command canvasProxy = new Command("Proxy", Command.SCREEN, 7);
-        private final Command canvasBookmarks = new Command("Bookmarks", Command.SCREEN, 8);
-        private final Command canvasBookmark = new Command("Bookmark", Command.SCREEN, 9);
-        private final Command canvasExit = new Command("Exit", Command.EXIT, 10);
+
 
         BrowserCanvas() {
-            addCommand(canvasAddress); addCommand(canvasOpen); addCommand(canvasLinks);
-            addCommand(canvasBack); addCommand(canvasForward); addCommand(canvasHome);
-            addCommand(canvasReload); addCommand(canvasBookmark); addCommand(canvasProxy);
-            addCommand(canvasBookmarks); addCommand(canvasExit);
+            addCommand(openCommand);
+            addCommand(addressCommand);
+            addCommand(linksCommand);
+            addCommand(backCommand);
+            addCommand(forwardCommand);
+            addCommand(homeCommand);
+            addCommand(reloadCommand);
+            addCommand(bookmarkCommand);
+            addCommand(proxyCommand);
+            addCommand(bookmarksCommand);
+            addCommand(exitCommand);
             setCommandListener(BrowserMidlet.this);
         }
 
