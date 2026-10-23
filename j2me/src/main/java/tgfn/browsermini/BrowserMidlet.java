@@ -1103,6 +1103,20 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         }
 
         protected void keyPressed(int keyCode) {
+            // PicoBrowser-style quick navigation
+            if (keyCode == Canvas.KEY_NUM5 || keyCode == Canvas.KEY_NUM8) { // next link
+                moveLink(1);
+                return;
+            }
+            if (keyCode == Canvas.KEY_NUM2 || keyCode == Canvas.KEY_NUM4) { // prev link
+                moveLink(-1);
+                return;
+            }
+            if (keyCode == Canvas.KEY_NUM0 || keyCode == Canvas.FIRE) { // open selected
+                openSelectedLink();
+                return;
+            }
+
             int action = getGameAction(keyCode);
             if (action == UP || keyCode == KEY_NUM2) {
                 scrollY = Math.max(0, scrollY - 30);
@@ -1179,6 +1193,29 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         String url;
         RenderBlock(String text, int type, String url) { this.text = text; this.type = type; this.url = url; }
     }
+
+
+        private void moveLink(int dir) {
+            if (renderedLinkLines == null || renderedLinkLines.size() == 0) return;
+            if (selectedLink < 0) selectedLink = 0;
+            else {
+                selectedLink += dir;
+                if (selectedLink < 0) selectedLink = renderedLinkLines.size() - 1;
+                if (selectedLink >= renderedLinkLines.size()) selectedLink = 0;
+            }
+            repaint();
+        }
+        private void openSelectedLink() {
+            if (selectedLink < 0 || lastPageResult == null || lastPageResult.blocks == null) return;
+            int seen = -1;
+            for (int i = 0; i < lastPageResult.blocks.size(); i++) {
+                RenderBlock b = (RenderBlock)lastPageResult.blocks.elementAt(i);
+                if (b.url != null && ++seen == selectedLink) {
+                    navigate(b.url, true);
+                    return;
+                }
+            }
+        }
 
     private static final class RenderLine {
         String text;
