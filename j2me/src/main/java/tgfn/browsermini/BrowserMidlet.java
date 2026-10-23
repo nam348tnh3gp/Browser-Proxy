@@ -24,6 +24,8 @@ import javax.microedition.lcdui.List;
 import javax.microedition.lcdui.ChoiceGroup;
 import javax.microedition.lcdui.Item;
 import javax.microedition.lcdui.ItemCommandListener;
+import javax.microedition.lcdui.Image;
+import javax.microedition.lcdui.ImageItem;
 import javax.microedition.lcdui.StringItem;
 import javax.microedition.lcdui.TextBox;
 import javax.microedition.lcdui.TextField;
@@ -46,6 +48,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private List linkList;
     private TextBox addressBox;
     private boolean loading;
+    private PageResult lastPageResult;
     private String proxyHost = "127.0.0.1";
     private String proxyPort = "8080";
     private boolean proxyEnabled;
@@ -55,6 +58,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private ChoiceGroup proxyEnabledChoice;
     private final Vector bookmarks = new Vector();
     private final Vector pageLinkItems = new Vector();
+    private final Vector pageImageItems = new Vector();
     private final Command proxyCommand = new Command("Proxy", Command.SCREEN, 8);
     private final Command bookmarksCommand = new Command("Bookmarks", Command.SCREEN, 8);
     private final Command bookmarkCommand = new Command("Bookmark", Command.SCREEN, 8);
@@ -160,6 +164,11 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     PageResult result = fetch(url);
                     body = result.text;
                     title = result.title;
+                    lastPageResult = result;
+                    for (int imageIndex = 0; imageIndex < result.images.size() && imageIndex < 3; imageIndex++) {
+                        ImageRef imageRef = (ImageRef)result.images.elementAt(imageIndex);
+                        try { imageRef.image = loadImage(imageRef.url); } catch (Exception ignoredImage) {}
+                    }
                     synchronized (BrowserMidlet.this) {
                         links.removeAllElements();
                         for (int i = 0; i < result.links.size(); i++) links.addElement(result.links.elementAt(i));
@@ -227,6 +236,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private PageResult parsePage(String baseUrl, String html) {
         PageResult result = new PageResult();
         result.links = new Vector();
+        result.images = new Vector();
         result.title = baseUrl;
         String lower = html.toLowerCase();
         int titleStart = lower.indexOf("<title");
@@ -244,6 +254,14 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 if (end < 0) break;
                 String tag = html.substring(pos + 1, end);
                 String tagLower = tag.toLowerCase();
+                if (tagLower.startsWith("img ") || tagLower.startsWith("img\t")) {
+                    String imageUrl = attribute(tag, "src");
+                    String alt = attribute(tag, "alt");
+                    if (imageUrl.length() > 0 && result.images.size() < 3) {
+                        String absoluteImage = resolveUrl(baseUrl, imageUrl);
+                        if (absoluteImage.length() > 0) result.images.addElement(new ImageRef(alt, absoluteImage));
+                    }
+                }
                 if (tagLower.startsWith("a ") || tagLower.startsWith("a\t")) {
                     String href = attribute(tag, "href");
                     if (href.length() > 0) {
@@ -376,6 +394,18 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             page.append(new StringItem("Proxy", "HTTP proxy: " + proxyHost + ":" + proxyPort));
         }
         page.append(new StringItem("", body));
+        pageImageItems.removeAllElements();
+        PageResult displayResult = lastPageResult;
+        if (displayResult != null) {
+            for (int imageIndex = 0; imageIndex < displayResult.images.size(); imageIndex++) {
+                ImageRef imageRef = (ImageRef)displayResult.images.elementAt(imageIndex);
+                if (imageRef.image != null) {
+                    ImageItem imageItem = new ImageItem(imageRef.alt.length() > 0 ? imageRef.alt : "Image", imageRef.image, ImageItem.LAYOUT_CENTER, imageRef.alt);
+                    pageImageItems.addElement(imageItem);
+                    page.append(imageItem);
+                }
+            }
+        }
         pageLinkItems.removeAllElements();
         for (int i = 0; i < links.size(); i++) {
             LinkItem link = (LinkItem)links.elementAt(i);
@@ -601,6 +631,11 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     private PageResult fetchViaProxy(String url) throws IOException {
+        return parsePage(url, new String(fetchProxyBytes(url, MAX_PAGE_CHARS * 3), "UTF-8"));
+    }
+
+    private byte[] fetchProxyBytes(String url, int maxBytes) throws IOException {
+        if (!url.startsWith("http://")) throw new IOException("The HTTP proxy only accepts HTTP resources");
         String rest = url.substring("http://".length());
         int slash = rest.indexOf('/');
         String hostPort = slash < 0 ? rest : rest.substring(0, slash);
@@ -632,7 +667,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             if (chunked) {
-                while (bytes.size() < MAX_PAGE_CHARS * 3) {
+                while (bytes.size() < maxBytes) {
                     String sizeLine = readAsciiLine(input);
                     if (sizeLine == null) break;
                     int semicolon = sizeLine.indexOf(';');
@@ -643,7 +678,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                         while ((line = readAsciiLine(input)) != null && line.length() > 0) {}
                         break;
                     }
-                    for (int i = 0; i < size && bytes.size() < MAX_PAGE_CHARS * 3; i++) {
+                    for (int i = 0; i < size && bytes.size() < maxBytes; i++) {
                         int b = input.read();
                         if (b < 0) break;
                         bytes.write(b);
@@ -653,18 +688,43 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             } else {
                 byte[] buffer = new byte[512];
                 int count;
-                while (bytes.size() < MAX_PAGE_CHARS * 3 && (count = input.read(buffer)) != -1) {
-                    int allowed = MAX_PAGE_CHARS * 3 - bytes.size();
+                while (bytes.size() < maxBytes && (count = input.read(buffer)) != -1) {
+                    int allowed = maxBytes - bytes.size();
                     bytes.write(buffer, 0, count > allowed ? allowed : count);
                 }
             }
-            String html = new String(bytes.toByteArray(), "UTF-8");
-            return parsePage(url, html);
+            return bytes.toByteArray();
         } finally {
             if (input != null) try { input.close(); } catch (IOException ignored) {}
             if (output != null) try { output.close(); } catch (IOException ignored) {}
             if (socket != null) try { socket.close(); } catch (IOException ignored) {}
         }
+    }
+
+    private Image loadImage(String url) throws IOException {
+        byte[] data;
+        if (proxyEnabled && url.startsWith("http://")) {
+            data = fetchProxyBytes(url, 12000);
+        } else {
+            HttpConnection connection = null;
+            InputStream input = null;
+            try {
+                connection = (HttpConnection)Connector.open(url, Connector.READ, true);
+                input = connection.openInputStream();
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                byte[] buffer = new byte[512];
+                int count;
+                while (out.size() < 12000 && (count = input.read(buffer)) != -1) {
+                    int allowed = 12000 - out.size();
+                    out.write(buffer, 0, count > allowed ? allowed : count);
+                }
+                data = out.toByteArray();
+            } finally {
+                if (input != null) try { input.close(); } catch (IOException ignored) {}
+                if (connection != null) try { connection.close(); } catch (IOException ignored) {}
+            }
+        }
+        return Image.createImage(data, 0, data.length);
     }
 
     private String readAsciiLine(InputStream input) throws IOException {
@@ -686,9 +746,20 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         LinkItem(String label, String url) { this.label = label; this.url = url; }
     }
 
+    private static final class ImageRef {
+        String alt;
+        String url;
+        Image image;
+        ImageRef(String alt, String url) {
+            this.alt = alt == null ? "" : alt;
+            this.url = url;
+        }
+    }
+
     private static final class PageResult {
         String text;
         String title;
         Vector links;
+        Vector images;
     }
 }
