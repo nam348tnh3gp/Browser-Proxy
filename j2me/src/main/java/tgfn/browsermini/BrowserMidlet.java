@@ -718,8 +718,12 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     private PageResult fetchViaProxy(String url) throws IOException {
-        byte[] response = fetchProxyBytes(url, 800000);
-        // JPEG screenshot (SSRIMG)
+        byte[] response = fetchProxyBytes(url, 900000);
+        // IMGL format: magic + jpeg + links
+        if (response.length >= 8 && response[0] == 'I' && response[1] == 'M' && response[2] == 'G' && response[3] == 'L') {
+            return parseIMGL(url, response);
+        }
+        // Plain JPEG fallback
         if (response.length >= 3 && (response[0] & 0xFF) == 0xFF && (response[1] & 0xFF) == 0xD8 && (response[2] & 0xFF) == 0xFF) {
             PageResult result = new PageResult();
             result.title = url;
