@@ -4,9 +4,9 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"io"
-	"strings"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
