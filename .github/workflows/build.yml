@@ -18,6 +18,11 @@ on:
 permissions:
   contents: write
 
+# Avoid concurrent version-bump commits racing against main.
+concurrency:
+  group: browser-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android:
     name: Build Android APK
