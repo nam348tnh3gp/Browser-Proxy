@@ -719,8 +719,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
 
     private PageResult fetchViaProxy(String url) throws IOException {
         byte[] response = fetchProxyBytes(url, MAX_PAGE_CHARS * 3);
-        if (response.length >= 4 && response[0] == 'S' || response[0] == 'T' && response[1] == 'B' &&
-            response[2] == 'O' && response[3] == '1') {
+        if (response.length >= 4 && (
+            (response[0] == 'S' && response[1] == 'S' && response[2] == 'R' && response[3] == '1') ||
+            (response[0] == 'T' && response[1] == 'B' && response[2] == 'O' && response[3] == '1'))) {
             return parseTBO1(url, response);
         }
         return parsePage(url, new String(response, "UTF-8"));
@@ -730,7 +731,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(packet));
         byte[] magic = new byte[4];
         in.readFully(magic);
-        if (magic[0] != 'T' || magic[1] != 'B' || magic[2] != 'O' || magic[3] != '1') {
+        if (!((magic[0] == 'S' && magic[1] == 'S' && magic[2] == 'R' && magic[3] == '1') ||
+              (magic[0] == 'T' && magic[1] == 'B' && magic[2] == 'O' && magic[3] == '1'))) {
             throw new IOException("Invalid compact page header");
         }
         PageResult result = new PageResult();
