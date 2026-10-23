@@ -169,7 +169,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     body = result.text;
                     title = result.title;
                     lastPageResult = result;
-                    for (int imageIndex = 0; imageIndex < result.images.size() && imageIndex < 3; imageIndex++) {
+                    for (int imageIndex = 0; imageIndex < result.images.size() && imageIndex < 8; imageIndex++) {
                         ImageRef imageRef = (ImageRef)result.images.elementAt(imageIndex);
                         try { imageRef.image = loadImage(imageRef.url); } catch (Exception ignoredImage) {}
                     }
@@ -262,7 +262,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 if (tagLower.startsWith("img ") || tagLower.startsWith("img\t")) {
                     String imageUrl = attribute(tag, "src");
                     String alt = attribute(tag, "alt");
-                    if (imageUrl.length() > 0 && result.images.size() < 3) {
+                    if (imageUrl.length() > 0 && result.images.size() < 8) {
                         String absoluteImage = resolveUrl(baseUrl, imageUrl);
                         if (absoluteImage.length() > 0) result.images.addElement(new ImageRef(alt, absoluteImage));
                     }
@@ -978,7 +978,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             int y = contentY + 4 - scrollY;
             totalBodyHeight = 0;
             if (lastPageResult != null && lastPageResult.images != null) {
-                for (int imageIndex = 0; imageIndex < lastPageResult.images.size() && imageIndex < 3; imageIndex++) {
+                for (int imageIndex = 0; imageIndex < lastPageResult.images.size() && imageIndex < 8; imageIndex++) {
                     ImageRef ref = (ImageRef)lastPageResult.images.elementAt(imageIndex);
                     if (ref.image != null && ref.image.getWidth() <= w - 14 && ref.image.getHeight() <= 64) {
                         if (y + ref.image.getHeight() > contentY && y < contentY + contentH) {
