@@ -833,6 +833,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         private String screenBody = "";
         private int scrollY;
         private int totalBodyHeight;
+        private int selectedLink = -1;
+        private final Vector renderedLinkLines = new Vector();
 
         BrowserCanvas() {
             addCommand(menuCommand);
@@ -844,6 +846,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             screenTitle = title == null || title.length() == 0 ? "Web page" : title;
             screenBody = body == null ? "" : body;
             scrollY = 0;
+            selectedLink = -1;
+            renderedLinkLines.removeAllElements();
             repaint();
         }
 
