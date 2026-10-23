@@ -83,11 +83,15 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!prefs.contains("language")) {
+            var selectedLanguage = "vi"
             android.app.AlertDialog.Builder(this)
                 .setTitle("Choose your language / Chọn ngôn ngữ")
-                .setMessage("Which language would you like to use? / Bạn muốn sử dụng ngôn ngữ nào?")
-                .setItems(arrayOf("Tiếng Việt", "English")) { _, which ->
-                    prefs.edit().putString("language", if (which == 1) "en" else "vi").apply()
+                .setMessage("Select one option / Hãy chọn một ngôn ngữ")
+                .setSingleChoiceItems(arrayOf("Tiếng Việt", "English"), 0) { _, which ->
+                    selectedLanguage = if (which == 1) "en" else "vi"
+                }
+                .setPositiveButton("Continue / Tiếp tục") { _, _ ->
+                    prefs.edit().putString("language", selectedLanguage).apply()
                     initializeBrowser(savedInstanceState)
                 }
                 .setCancelable(false)
@@ -910,21 +914,31 @@ class MainActivity : Activity() {
             isChecked = darkMode
         }
         content.addView(dark)
-        val language = android.widget.Button(this).apply {
-            text = tr("Ngôn ngữ: Tiếng Việt", "Language: English")
-            setOnClickListener {
-                android.app.AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Choose your language / Chọn ngôn ngữ")
-                    .setSingleChoiceItems(arrayOf("Tiếng Việt", "English"), if (isEnglish) 1 else 0) { choiceDialog, which ->
-                        prefs.edit().putString("language", if (which == 1) "en" else "vi").apply()
-                        choiceDialog.dismiss()
-                        dialogLanguageRestart()
-                    }
-                    .setNegativeButton(tr("Hủy", "Cancel"), null)
-                    .show()
-            }
+        content.addView(TextView(this).apply {
+            text = tr("Ngôn ngữ / Language", "Language / Ngôn ngữ")
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(ink)
+            setPadding(0, dp(10), 0, dp(4))
+        })
+        val languageGroup = android.widget.RadioGroup(this).apply {
+            orientation = android.widget.RadioGroup.VERTICAL
         }
-        content.addView(language)
+        val languageVietnamese = android.widget.RadioButton(this).apply {
+            id = View.generateViewId()
+            text = "Tiếng Việt"
+            setTextColor(ink)
+            isChecked = !isEnglish
+        }
+        val languageEnglish = android.widget.RadioButton(this).apply {
+            id = View.generateViewId()
+            text = "English"
+            setTextColor(ink)
+            isChecked = isEnglish
+        }
+        languageGroup.addView(languageVietnamese)
+        languageGroup.addView(languageEnglish)
+        content.addView(languageGroup)
         val dataSaver = android.widget.CheckBox(this).apply {
             text = tr("Data Saver: giữ ảnh, cache an toàn", "Data Saver: keep images, safe cache")
             isChecked = isDataSaverEnabled()
@@ -979,17 +993,20 @@ class MainActivity : Activity() {
                     return@setOnClickListener
                 }
                 val previousDarkMode = darkMode
+                val previousLanguage = prefs.getString("language", "vi") ?: "vi"
+                val selectedLanguage = if (languageEnglish.isChecked) "en" else "vi"
                 prefs.edit().putBoolean("proxy_enabled", enabled.isChecked)
                     .putBoolean("dark_mode", dark.isChecked)
                     .putBoolean("desktop_mode", desktop.isChecked)
                     .putBoolean("data_saver_enabled", dataSaver.isChecked)
+                    .putString("language", selectedLanguage)
                     .putString("proxy_url", rawProxy).putString("home_url", normalizedHome).apply()
                 tabs.forEach { tab ->
                     tab.webView.settings.userAgentString = if (desktop.isChecked) DESKTOP_USER_AGENT else null
                     applyDataSaverSettings(tab.webView.settings)
                 }
                 dialog.dismiss()
-                if (dark.isChecked != previousDarkMode) { recreate(); return@setOnClickListener }
+                if (dark.isChecked != previousDarkMode || selectedLanguage != previousLanguage) { recreate(); return@setOnClickListener }
                 applySavedProxy { success ->
                     updateProxySummary()
                     status.text = if (success) tr("Đã lưu cài đặt", "Settings saved") else tr("WebView không hỗ trợ cấu hình proxy", "This WebView does not support proxy configuration")
