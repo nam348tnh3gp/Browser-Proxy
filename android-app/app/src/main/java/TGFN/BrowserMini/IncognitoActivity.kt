@@ -8,6 +8,8 @@ import android.view.ViewGroup
 import android.view.Gravity
 import android.view.inputmethod.EditorInfo
 import android.webkit.*
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import android.widget.*
 import java.net.URI
 
@@ -57,6 +59,7 @@ class IncognitoActivity : Activity() {
  }
  private fun addTab(url:String?) {
   val w=WebView(this); w.settings.javaScriptEnabled=true; w.settings.domStorageEnabled=true
+  configureWebViewTheme(w.settings)
   w.settings.loadsImagesAutomatically=true; w.settings.cacheMode=WebSettings.LOAD_NO_CACHE
   w.settings.setSupportZoom(true); w.settings.builtInZoomControls=true; w.settings.displayZoomControls=false
   val t=Tab(w,url=url.orEmpty()); tabs.add(t); box.addView(w,FrameLayout.LayoutParams(-1,-1))
@@ -67,6 +70,24 @@ class IncognitoActivity : Activity() {
   w.webChromeClient=object:WebChromeClient(){override fun onReceivedTitle(v:WebView?,title:String?){if(!title.isNullOrBlank())t.title=title;updateCount()}}
   selectTab(tabs.lastIndex)
   if(url.isNullOrBlank()) w.loadDataWithBaseURL("https://tgfn.browser/","<html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>body{font:16px Arial;background:${if (darkMode) "#202124;color:#e8eaed" else "#f8f5ff;color:#202124"};padding:15vh 20px}h2{text-align:center;color:#673ab7}form{display:flex}input{flex:1;min-width:0;padding:12px;border-radius:24px;border:1px solid #ddd}button{background:#673ab7;color:white;border:0;border-radius:24px}</style></head><body><h2>◉ ${tr("Ẩn danh","Incognito")}</h2><form action=\"https://www.google.com/search\"><input name=\"q\" placeholder=\"${tr("Tìm kiếm riêng tư","Private search")}\"><button>${tr("Tìm","Search")}</button></form></body></html>","text/html","UTF-8",null) else w.loadUrl(url)
+ }
+ private fun configureWebViewTheme(settings: WebSettings) {
+  if (darkMode) {
+   if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+    WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, true)
+   } else if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+    @Suppress("DEPRECATION")
+    WebSettingsCompat.setForceDark(settings, WebSettingsCompat.FORCE_DARK_ON)
+   }
+  } else {
+   if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+    WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, false)
+   }
+   if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+    @Suppress("DEPRECATION")
+    WebSettingsCompat.setForceDark(settings, WebSettingsCompat.FORCE_DARK_OFF)
+   }
+  }
  }
  private fun showTabs(){if(tabs.isEmpty())return;android.app.AlertDialog.Builder(this).setTitle(tr("Tab ẩn danh (","Incognito tabs (")+tabs.size+")").setItems(tabs.mapIndexed{i,t->(i+1).toString()+". "+t.title+" · "+host(t.web.url?:t.url)}.toTypedArray()){_,i->selectTab(i)}.setPositiveButton(tr("Tab mới","New tab")){_,_->addTab(null)}.setNegativeButton(tr("Đóng","Close"),null).show()}
  private fun selectTab(i:Int){if(i !in tabs.indices)return;selected=i;tabs.forEachIndexed{n,t->t.web.visibility=if(n==i)View.VISIBLE else View.GONE};setAddress(tabs[i].web.url?:tabs[i].url);status.text=tabs[i].title;updateCount()}
