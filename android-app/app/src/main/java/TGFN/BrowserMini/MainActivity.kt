@@ -25,6 +25,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.webkit.ProxyConfig
 import androidx.webkit.ProxyController
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import java.net.URI
 import java.util.concurrent.Executor
