@@ -59,6 +59,10 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		if len(text) > maxOBMLString {
 			text = text[:maxOBMLString]
 		}
+		// For images, rewrite URL through the compression proxy
+		if kind == 5 && link != "" {
+			link = rewriteImageURL(link)
+		}
 		blocks = append(blocks, obmlBlock{kind: kind, text: text, url: link})
 	}
 
@@ -187,9 +191,6 @@ func writeOBMLString(out *bytes.Buffer, value string) {
 	out.WriteString(value)
 }
 
-// obmlResponse upgrades opted-in HTML responses to the compact TBO1 block protocol.
-// This is an original, OBML-inspired format, not Opera's proprietary OBML wire format.
-// Improved to preserve more full web content using proper HTML parsing.
 func obmlResponse(resp *http.Response) error {
 	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Format") != "TBO1" ||
 		resp.StatusCode < 200 || resp.StatusCode >= 300 || resp.Body == nil {
