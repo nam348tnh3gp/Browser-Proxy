@@ -53,6 +53,8 @@ func compactHTMLResponse(resp *http.Response) error {
 			return obmlResponse(resp)
 		case "FULL":
 			return fullCompressResponse(resp)
+		case "SSR":
+			return ssrResponse(resp)
 		}
 	}
 	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Compact") != "1" {
