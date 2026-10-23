@@ -14,7 +14,7 @@ A lightweight Android browser prototype with a Kotlin/WebView client and a stand
 
 - Chrome-inspired address/search bar, reload, back/forward and home controls.
 - New-tab page with Google search and quick links to popular sites.
-- Multiple WebView tabs with tab switching and closing.
+- Multiple WebView tabs with an animated, bottom-sheet-style tab overview, two-column tab cards, active-tab highlight, one-tap close controls, and a quick new-tab action.
 - Bookmarks, browsing history, page sharing, and close-tab controls.
 - In-page text search with result counts.
 - Page zoom controls and pinch-to-zoom without permanent on-screen zoom buttons.
