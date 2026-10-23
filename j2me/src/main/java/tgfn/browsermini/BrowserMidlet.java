@@ -1195,28 +1195,6 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
 
-        private void moveLink(int dir) {
-            if (renderedLinkLines == null || renderedLinkLines.size() == 0) return;
-            if (selectedLink < 0) selectedLink = 0;
-            else {
-                selectedLink += dir;
-                if (selectedLink < 0) selectedLink = renderedLinkLines.size() - 1;
-                if (selectedLink >= renderedLinkLines.size()) selectedLink = 0;
-            }
-            repaint();
-        }
-        private void openSelectedLink() {
-            if (selectedLink < 0 || lastPageResult == null || lastPageResult.blocks == null) return;
-            int seen = -1;
-            for (int i = 0; i < lastPageResult.blocks.size(); i++) {
-                RenderBlock b = (RenderBlock)lastPageResult.blocks.elementAt(i);
-                if (b.url != null && ++seen == selectedLink) {
-                    navigate(b.url, true);
-                    return;
-                }
-            }
-        }
-
     private static final class RenderLine {
         String text;
         int type;
