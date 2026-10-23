@@ -30,7 +30,7 @@ import java.net.URI
 import java.util.concurrent.Executor
 
 class MainActivity : Activity() {
-    private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "")
+    private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false)
 
     private val tabs = mutableListOf<BrowserTab>()
     private var selectedTab = 0
@@ -278,15 +278,22 @@ class MainActivity : Activity() {
         val requestedUrl = url?.trim().orEmpty()
         val shouldShowNewTab = requestedUrl.isBlank() ||
             requestedUrl.equals("about:blank", ignoreCase = true) ||
+            requestedUrl == NEW_TAB_SESSION_URL ||
             requestedUrl == "https://tgfn.browser/"
-        val tab = BrowserTab(web, tr("Tab mới", "New tab"), if (shouldShowNewTab) "https://tgfn.browser/" else requestedUrl)
+        val tab = BrowserTab(
+            webView = web,
+            title = tr("Tab mới", "New tab"),
+            url = if (shouldShowNewTab) NEW_TAB_SESSION_URL else requestedUrl,
+            isNewTab = shouldShowNewTab
+        )
         tabs.add(tab)
         webContainer.addView(web, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ))
         web.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                tab.url = url ?: tab.url
+                tab.isNewTab = url == "https://tgfn.browser/"
+                tab.url = if (tab.isNewTab) NEW_TAB_SESSION_URL else (url ?: tab.url)
                 tab.title = "Đang tải…"
                 if (isSelected(tab)) {
                     status.text = "Đang tải trang…"
@@ -297,11 +304,12 @@ class MainActivity : Activity() {
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
-                tab.url = url ?: tab.url
+                tab.isNewTab = url == "https://tgfn.browser/"
+                tab.url = if (tab.isNewTab) NEW_TAB_SESSION_URL else (url ?: tab.url)
                 tab.title = view?.title?.takeIf { it.isNotBlank() } ?: hostLabel(url)
                 if (isSelected(tab)) {
                     status.text = "Sẵn sàng"
-                    if (!url.isNullOrBlank()) setAddress(if (url == "https://tgfn.browser/") "" else url)
+                    if (!url.isNullOrBlank()) setAddress(if (tab.isNewTab) "" else url)
                 }
                 rememberHistory(tab)
                 persistSession()
@@ -332,6 +340,11 @@ class MainActivity : Activity() {
     }
 
     private fun loadNewTabPage(web: WebView) {
+        tabs.firstOrNull { it.webView === web }?.let { tab ->
+            tab.isNewTab = true
+            tab.url = NEW_TAB_SESSION_URL
+            tab.title = tr("Tab mới", "New tab")
+        }
         web.loadDataWithBaseURL("https://tgfn.browser/", newTabHtml(), "text/html", "UTF-8", null)
     }
 
@@ -1108,10 +1121,10 @@ class MainActivity : Activity() {
         tabs.forEach { tab ->
             val webUrl = tab.webView.url.orEmpty()
             val savedUrl = when {
+                tab.isNewTab -> NEW_TAB_SESSION_URL
                 webUrl.isBlank() || webUrl.equals("about:blank", ignoreCase = true) ->
                     tab.url.takeIf { it.isNotBlank() && !it.equals("about:blank", ignoreCase = true) }
-                        ?: "https://tgfn.browser/"
-                webUrl == "https://tgfn.browser/" -> "https://tgfn.browser/"
+                        ?: NEW_TAB_SESSION_URL
                 else -> webUrl
             }
             urls.put(savedUrl)
@@ -1232,11 +1245,16 @@ class MainActivity : Activity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     companion object {
+        private const val NEW_TAB_SESSION_URL = "tgfn-internal://newtab"
         private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putStringArrayList("tab_urls", ArrayList(tabs.map { it.webView.url ?: it.url }))
+        outState.putStringArrayList("tab_urls", ArrayList(tabs.map { tab ->
+            if (tab.isNewTab) NEW_TAB_SESSION_URL else tab.webView.url
+                ?.takeIf { it.isNotBlank() && !it.equals("about:blank", ignoreCase = true) }
+                ?: tab.url
+        }))
         outState.putInt("selected_tab", selectedTab)
         persistSession()
         super.onSaveInstanceState(outState)
