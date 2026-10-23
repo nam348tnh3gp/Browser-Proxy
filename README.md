@@ -8,7 +8,7 @@ A lightweight Android browser prototype with a Kotlin/WebView client and a stand
 
 - `android-app/` — Android application (Kotlin, WebView, AndroidX WebKit).
 - `go-proxy/` — standalone HTTP forward proxy with timeouts and compression negotiation.
-- `j2me/` — Java ME/MIDP 2.0 text-first browser for compatible feature phones; separate from Android.
+- `j2me/` — standalone Java ME/MIDP 2.0 browser for compatible feature phones, with basic images/links, bookmarks, and optional HTTP proxy settings; separate from Android.
 - `.github/workflows/build.yml` — builds the Android debug APK and Go proxy on pushes and pull requests.
 - `.github/workflows/build-j2me.yml` — independently builds the J2ME development JAR.
 
@@ -39,11 +39,11 @@ gradle -p android-app assembleDebug
 
 ## J2ME feature-phone version
 
-A separate Java ME client is available in [`j2me/`](j2me/). It targets the MIDP 2.0 / CLDC 1.1 API and provides address/search entry, basic text-first HTML display, simple links, and back/forward/home/reload controls. It does not modify or depend on the Android app or Go proxy.
+A separate Java ME client is available in [`j2me/`](j2me/). It targets the MIDP 2.0 / CLDC 1.1 API and provides address/search entry, basic HTML text, clickable links, up to three small images, bookmarks, back/forward/home/reload controls, and persistent optional HTTP proxy settings. It remains separate from the Android app; when configured, HTTP requests can use the Go forward proxy.
 
 GitHub Actions builds a development JAR in the **Build TGFN BrowserMini J2ME** workflow. Open [Actions](https://github.com/nam348tnh3gp/Browser-Proxy/actions), select that workflow's successful run, and download the `TGFN-BrowserMini-J2ME` artifact.
 
-**Compatibility note:** J2ME runs only on phones with a compatible Java ME runtime. Many newer KaiOS and other feature phones do not include J2ME. This is a lightweight text browser, not a modern JavaScript/CSS engine; HTTPS depends on each handset's TLS and certificate support. Read [`j2me/README.md`](j2me/README.md) for build and handset limitations.
+**Compatibility note:** J2ME runs only on phones with a compatible Java ME runtime. Many newer KaiOS and other feature phones do not include J2ME. This is a lightweight browser, not a modern JavaScript/CSS engine. The configured proxy currently handles HTTP only; HTTPS uses the phone's direct TLS connection because portable TLS-over-CONNECT is not available in standard MIDP. Read [`j2me/README.md`](j2me/README.md) for build and handset limitations.
 
 ## Run the Go proxy
 
