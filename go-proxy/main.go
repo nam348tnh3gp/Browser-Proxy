@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bufio"
+	"context"
+	"errors"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -26,14 +31,13 @@ func main() {
 }
 
 func proxyHandler() http.Handler {
-	director := func(req *http.Request) {
-		req.Header.Del("Proxy-Connection")
-		req.Header.Set("Via", "1.1 TGFN.BrowserMini")
-	}
 	proxy := &httputil.ReverseProxy{
-		Director:       director,
-		FlushInterval:  100 * time.Millisecond,
-		ErrorLog:       log.New(os.Stderr, "proxy: ", log.LstdFlags),
+		Director: func(req *http.Request) {
+			req.Header.Del("Proxy-Connection")
+			req.Header.Set("Via", "1.1 TGFN.BrowserMini")
+		},
+		FlushInterval: 100 * time.Millisecond,
+		ErrorLog:      log.New(os.Stderr, "proxy: ", log.LstdFlags),
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			ForceAttemptHTTP2:     true,
@@ -44,9 +48,10 @@ func proxyHandler() http.Handler {
 			DisableCompression:    false,
 		},
 	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodConnect {
-			http.Error(w, "CONNECT is not supported by this simple forward-proxy endpoint; use a dedicated forward proxy implementation", http.StatusNotImplemented)
+			handleConnect(w, r)
 			return
 		}
 		if r.URL == nil || (r.URL.Scheme != "http" && r.URL.Scheme != "https") || r.URL.Host == "" {
@@ -57,14 +62,77 @@ func proxyHandler() http.Handler {
 			http.Error(w, "userinfo in URL is not allowed", http.StatusBadRequest)
 			return
 		}
-		target, err := url.Parse(r.URL.String())
-		if err != nil {
-			http.Error(w, "Invalid target URL", http.StatusBadRequest)
-			return
-		}
 		r2 := r.Clone(r.Context())
-		r2.URL = target
-		r2.Host = target.Host
+		r2.URL = r.URL
+		r2.Host = r.URL.Host
 		proxy.ServeHTTP(w, r2)
 	})
 }
+
+func handleConnect(w http.ResponseWriter, r *http.Request) {
+	host := r.Host
+	if host == "" {
+		host = r.URL.Host
+	}
+	if host == "" || strings.Contains(host, "@") {
+		http.Error(w, "Invalid CONNECT target", http.StatusBadRequest)
+		return
+	}
+	if _, _, err := net.SplitHostPort(host); err != nil {
+		if strings.Contains(err.Error(), "missing port in address") && !strings.Contains(host, "]") {
+			host = net.JoinHostPort(host, "443")
+		} else {
+			http.Error(w, "CONNECT target must be host:port", http.StatusBadRequest)
+			return
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	upstream, err := dialer.DialContext(ctx, "tcp", host)
+	if err != nil {
+		http.Error(w, "Unable to connect to upstream", http.StatusBadGateway)
+		return
+	}
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		upstream.Close()
+		http.Error(w, "HTTP hijacking is not supported", http.StatusInternalServerError)
+		return
+	}
+	client, rw, err := hijacker.Hijack()
+	if err != nil {
+		upstream.Close()
+		return
+	}
+	if _, err = rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
+		client.Close()
+		upstream.Close()
+		return
+	}
+	if err = rw.Flush(); err != nil {
+		client.Close()
+		upstream.Close()
+		return
+	}
+	go tunnel(upstream, client)
+	go func() {
+		if rw.Reader.Buffered() > 0 {
+			if _, copyErr := io.Copy(upstream, rw.Reader); copyErr != nil && !errors.Is(copyErr, net.ErrClosed) {
+				log.Printf("CONNECT client-to-upstream: %v", copyErr)
+			}
+		}
+		_, _ = io.Copy(upstream, client)
+		_ = upstream.Close()
+	}()
+}
+
+func tunnel(upstream net.Conn, client net.Conn) {
+	defer upstream.Close()
+	defer client.Close()
+	if _, err := io.Copy(client, upstream); err != nil && !errors.Is(err, net.ErrClosed) {
+		log.Printf("CONNECT upstream-to-client: %v", err)
+	}
+}
+
+var _ = bufio.ErrInvalidUnreadByte
