@@ -150,3 +150,34 @@ func TestProxyAcceptsCorrectCredentialsBeforeTargetValidation(t *testing.T) {
 		t.Fatalf("status = %d, want %d; correct credentials should pass authentication", rec.Code, http.StatusBadRequest)
 	}
 }
+
+
+func TestStatsEndpointReturnsMeasuredCounters(t *testing.T) {
+	handler := proxyHandlerWithAuth("", "")
+	req := httptest.NewRequest(http.MethodGet, "/__tgfn/stats", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stats endpoint status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+	for _, key := range []string{
+		"process_started_at",
+		"http_requests",
+		"http_response_bytes",
+		"gzip_responses",
+		"gzip_original_bytes",
+		"gzip_compressed_bytes",
+		"gzip_saved_bytes",
+		"connect_tunnels",
+		"connect_client_to_upstream_bytes",
+		"connect_upstream_to_client_bytes",
+	} {
+		if !strings.Contains(rec.Body.String(), `"`+key+`"`) {
+			t.Errorf("stats response missing key %q: %s", key, rec.Body.String())
+		}
+	}
+}
