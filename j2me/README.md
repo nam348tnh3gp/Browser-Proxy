@@ -8,7 +8,7 @@ A small Java ME browser companion for feature phones that support **MIDP 2.0 / C
 - Compact page view with page title/address, clickable HTML links and up to three small inline images.
 - Address entry and search, back/forward/home/reload, bookmarks and exit commands.
 - Persistent proxy settings (host, port and enable toggle) stored in Java ME RMS.
-- HTTP forward-proxy requests compatible with the Go proxy in the root project.
+- HTTP forward-proxy requests compatible with the Go proxy, with an opt-in server-side compact-page mode for HTML.
 - Response/image size caps to reduce memory pressure on older devices.
 - Proxy remains optional; direct browsing works when it is disabled.
 
@@ -19,6 +19,8 @@ This is a lightweight browser, **not a full HTML/CSS/JavaScript engine**. It ren
 ## Proxy
 
 Open **Proxy** from the browser menu and enter the proxy hostname/IP, port (for the bundled Go proxy the default is `127.0.0.1:8080`), and enable the toggle. Settings are saved in Java ME RMS. On a phone, `127.0.0.1` means the phone itself; use the LAN address or reachable host of the machine running the proxy if it is not running on the phone.
+
+**Server-side compact mode:** HTTP page requests through the bundled Go proxy send `X-TGFN-Compact: 1`. The proxy strips scripts/styles, embedded media, navigation/footer regions and unsupported attributes, then returns simplified HTML for the small-screen renderer. Basic links and image URLs are preserved. This is payload reduction and HTML simplification, not Opera Mini's proprietary cloud renderer/OBML protocol; it does not resize or recompress image bytes. It is opt-in and other proxy clients are unaffected.
 
 **Protocol limitation:** configured proxying currently applies to HTTP page and image requests. HTTPS pages and HTTPS images use the handset's direct secure connection. Standard MIDP does not provide a portable way to layer TLS over an arbitrary HTTP CONNECT socket, so this build does not claim that HTTPS is tunneled through the proxy. The Go proxy supports CONNECT, but this J2ME client does not yet have a portable TLS-over-CONNECT implementation. Do not enter proxy credentials or sensitive data into an untrusted proxy.
 
