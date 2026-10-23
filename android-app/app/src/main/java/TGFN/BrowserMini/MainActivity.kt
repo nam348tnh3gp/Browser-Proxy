@@ -484,7 +484,8 @@ class MainActivity : Activity() {
         val items = arrayOf(
             tr("Tab mới", "New tab"), tr("Tab ẩn danh mới", "New incognito tab"), tr("Dịch trang", "Translate page"), tr("Tìm trong trang", "Find in page"), tr("Thu phóng", "Zoom"),
             desktopLabel, tr("Lưu/Bỏ dấu trang", "Add/remove bookmark"), tr("Dấu trang", "Bookmarks"), tr("Lịch sử", "History"),
-            tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel
+            tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel,
+            tr("Phân tích Data Saver", "Data Saver analytics")
         )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("TGFN Browser · Tiện ích", "TGFN Browser · Tools"))
@@ -503,6 +504,7 @@ class MainActivity : Activity() {
                     10 -> showSettings()
                     11 -> closeCurrentTab()
                     12 -> toggleDataSaver()
+                    13 -> showDataSaverAnalytics()
                 }
             }
             .show()
@@ -746,6 +748,133 @@ class MainActivity : Activity() {
         settings.blockNetworkImage = false
         settings.blockNetworkLoads = false
         settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+    }
+
+
+    private fun showDataSaverAnalytics() {
+        if (!prefs.getBoolean("proxy_enabled", false)) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle(tr("Phân tích Data Saver", "Data Saver analytics"))
+                .setMessage(tr(
+                    "Hãy bật và cấu hình Go proxy để xem số liệu lưu lượng thực đo. Khi duyệt trực tiếp, ứng dụng không thể đọc bộ đếm của proxy.",
+                    "Enable and configure the Go proxy to view measured traffic. Direct browsing cannot read proxy counters."
+                ))
+                .setPositiveButton(tr("Đóng", "Close"), null)
+                .show()
+            return
+        }
+        val endpoint = parseProxyUrl(prefs.getString("proxy_url", "") ?: "")
+        if (endpoint == null) {
+            Toast.makeText(this, tr("Hãy cấu hình URL proxy hợp lệ trước", "Configure a valid proxy URL first"), Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+            setBackgroundColor(canvas)
+        }
+        val explanation = TextView(this).apply {
+            text = tr(
+                "Số liệu đo tại Go proxy từ lúc tiến trình proxy khởi động hoặc từ lần đặt lại mốc trên thiết bị này. HTTPS CONNECT chỉ đo byte tunnel mã hóa; tiết kiệm gzip chỉ tính cho phản hồi HTTP được nén thực tế.",
+                "Measured by the Go proxy since its process started or this device's local baseline reset. HTTPS CONNECT counts encrypted tunnel bytes; gzip savings include only HTTP responses actually compressed."
+            )
+            textSize = 12f
+            setTextColor(muted)
+            setPadding(0, 0, 0, dp(12))
+        }
+        val statsText = TextView(this).apply {
+            text = tr("Đang tải số liệu…", "Loading analytics…")
+            textSize = 14f
+            setTextColor(ink)
+            setLineSpacing(dp(5).toFloat(), 1f)
+        }
+        content.addView(explanation)
+        content.addView(statsText)
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Phân tích Data Saver", "Data Saver analytics"))
+            .setView(ScrollView(this).apply { addView(content) })
+            .setNegativeButton(tr("Đóng", "Close"), null)
+            .setNeutralButton(tr("Đặt lại mốc", "Reset baseline"), null)
+            .setPositiveButton(tr("Làm mới", "Refresh"), null)
+            .create()
+
+        fun formatBytes(value: Long): String {
+            if (value < 1024L) return "$value B"
+            val units = arrayOf("KB", "MB", "GB", "TB")
+            var amount = value.toDouble()
+            var unit = -1
+            do {
+                amount /= 1024.0
+                unit++
+            } while (amount >= 1024.0 && unit < units.lastIndex)
+            return String.format(java.util.Locale.ROOT, "%.2f %s", amount, units[unit])
+        }
+
+        fun loadStats(resetBaseline: Boolean) {
+            statsText.text = tr("Đang đọc bộ đếm proxy…", "Reading proxy counters…")
+            Thread {
+                var connection: java.net.HttpURLConnection? = null
+                try {
+                    val url = java.net.URI("http", null, endpoint.first, endpoint.second, "/__tgfn/stats", null, null).toURL()
+                    connection = (url.openConnection() as java.net.HttpURLConnection).apply {
+                        connectTimeout = 3500
+                        readTimeout = 3500
+                        requestMethod = "GET"
+                        useCaches = false
+                    }
+                    val code = connection.responseCode
+                    if (code != 200) throw IllegalStateException("HTTP $code")
+                    val raw = connection.inputStream.bufferedReader().use { it.readText() }
+                    val current = org.json.JSONObject(raw)
+                    runOnUiThread {
+                        if (resetBaseline) {
+                            prefs.edit().putString("data_saver_analytics_baseline", raw).apply()
+                        }
+                        val stored = prefs.getString("data_saver_analytics_baseline", null)
+                        val baseline = try {
+                            if (stored.isNullOrBlank()) org.json.JSONObject() else org.json.JSONObject(stored)
+                        } catch (_: Exception) {
+                            org.json.JSONObject()
+                        }
+                        val sameProcess = baseline.optString("process_started_at", "") == current.optString("process_started_at", "")
+                        fun delta(key: String): Long {
+                            val base = if (sameProcess && !stored.isNullOrBlank()) baseline.optLong(key, 0L) else 0L
+                            return (current.optLong(key, 0L) - base).coerceAtLeast(0L)
+                        }
+                        val received = delta("http_response_bytes") + delta("connect_upstream_to_client_bytes")
+                        val sent = delta("connect_client_to_upstream_bytes")
+                        val saved = delta("gzip_saved_bytes")
+                        statsText.text = buildString {
+                            append(tr("Dữ liệu nhận: ", "Data received: ")).append(formatBytes(received)).append('\n')
+                            append(tr("Dữ liệu gửi qua HTTPS tunnel: ", "Data sent through HTTPS tunnels: ")).append(formatBytes(sent)).append('\n')
+                            append(tr("Gzip tiết kiệm thực đo: ", "Measured gzip saved: ")).append(formatBytes(saved)).append('\n')
+                            append(tr("Phản hồi HTTP gzip: ", "Gzip HTTP responses: ")).append(delta("gzip_responses")).append('\n')
+                            append(tr("Yêu cầu HTTP: ", "HTTP requests: ")).append(delta("http_requests")).append('\n')
+                            append(tr("Tunnel HTTPS đã đóng: ", "Closed HTTPS tunnels: ")).append(delta("connect_tunnels")).append('\n')
+                            append(tr("Tiến trình proxy từ: ", "Proxy process started: ")).append(current.optString("process_started_at", "—"))
+                            if (resetBaseline) append("\n\n").append(tr("Đã đặt lại mốc thống kê trên thiết bị này.", "Local analytics baseline reset."))
+                        }
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        statsText.text = tr(
+                            "Không đọc được số liệu. Hãy kiểm tra proxy đang chạy phiên bản hỗ trợ analytics mới, URL/port có thể truy cập trực tiếp và xác thực proxy không được bật. Chi tiết: ",
+                            "Could not read analytics. Check that the proxy runs a version with analytics support, its URL/port is directly reachable, and proxy authentication is disabled. Details: "
+                        ) + (e.message ?: e.javaClass.simpleName)
+                    }
+                } finally {
+                    connection?.disconnect()
+                }
+            }.start()
+        }
+
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener { loadStats(false) }
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener { loadStats(true) }
+        }
+        dialog.show()
+        loadStats(false)
     }
 
     private fun toggleDataSaver() {
