@@ -292,7 +292,9 @@ class MainActivity : Activity() {
         ))
         web.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                tab.isNewTab = url == "https://tgfn.browser/"
+                if (!url.isNullOrBlank() && !url.equals("about:blank", ignoreCase = true)) {
+                    tab.isNewTab = url == "https://tgfn.browser/"
+                }
                 tab.url = if (tab.isNewTab) NEW_TAB_SESSION_URL else (url ?: tab.url)
                 tab.title = "Đang tải…"
                 if (isSelected(tab)) {
