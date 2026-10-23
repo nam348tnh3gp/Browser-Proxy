@@ -133,4 +133,3 @@ func tunnel(upstream net.Conn, client net.Conn) {
 		log.Printf("CONNECT upstream-to-client: %v", err)
 	}
 }
-
