@@ -22,6 +22,7 @@ var (
 	obmlTitle = regexp.MustCompile("(?is)<title\\b[^>]*>(.*?)</title\\s*>")
 	obmlSkip = []*regexp.Regexp{
 		regexp.MustCompile("(?is)<!--.*?-->"),
+		regexp.MustCompile("(?is)<head\\b[^>]*>.*?</head\\s*>"),
 		regexp.MustCompile("(?is)<script\\b[^>]*>.*?</script\\s*>"),
 		regexp.MustCompile("(?is)<style\\b[^>]*>.*?</style\\s*>"),
 		regexp.MustCompile("(?is)<noscript\\b[^>]*>.*?</noscript\\s*>"),
@@ -65,11 +66,11 @@ func obmlAbsolute(base, ref string) string {
 }
 
 func buildOBMLPage(pageURL, source string) ([]byte, error) {
-	for _, p := range obmlSkip { source = p.ReplaceAllString(source, " ") }
 	title := pageURL
 	if m := obmlTitle.FindStringSubmatch(source); len(m) > 1 {
-		title = strings.TrimSpace(obmlSpace.ReplaceAllString(html.UnescapeString(obmlTags.ReplaceAllString(m[1], "")), " "))
+		title = strings.TrimSpace(obmlSpace.ReplaceAllString(html.UnescapeString(compactTags.ReplaceAllString(m[1], "")), " "))
 	}
+	for _, p := range obmlSkip { source = p.ReplaceAllString(source, " ") }
 	blocks := make([]obmlBlock, 0, 128)
 	add := func(kind byte, text, link string) {
 		text = strings.TrimSpace(obmlSpace.ReplaceAllString(text, " "))
