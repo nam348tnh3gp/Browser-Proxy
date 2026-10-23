@@ -22,7 +22,7 @@ class IncognitoActivity : Activity() {
  private val prefs by lazy { getSharedPreferences("browser_settings", MODE_PRIVATE) }
  private val darkMode get() = prefs.getBoolean("dark_mode", false)
  private val isEnglish get() = prefs.getString("language", "vi") == "en"
- private val surface get() = if (darkMode) Color.rgb(32,33,36) else Color.WHITE
+ private val surface get() = if (darkMode) Color.rgb(32,33,36) else surface
  private val pageBackground get() = if (darkMode) Color.rgb(32,33,36) else Color.rgb(248,245,255)
  private val textColor get() = if (darkMode) Color.rgb(232,234,237) else Color.rgb(32,33,36)
  private val purple = Color.rgb(103,58,183)
@@ -42,15 +42,15 @@ class IncognitoActivity : Activity() {
   count=button("1"){showTabs()}; bar.addView(count,LinearLayout.LayoutParams(dp(40),dp(42)))
   bar.addView(button("+"){addTab(null)},LinearLayout.LayoutParams(dp(40),dp(42)))
   root.addView(bar)
-  box=FrameLayout(this).apply { setBackgroundColor(Color.WHITE) }; root.addView(box,LinearLayout.LayoutParams(-1,0,1f))
-  val foot=LinearLayout(this).apply { gravity=Gravity.CENTER; setBackgroundColor(Color.WHITE) }
+  box=FrameLayout(this).apply { setBackgroundColor(surface) }; root.addView(box,LinearLayout.LayoutParams(-1,0,1f))
+  val foot=LinearLayout(this).apply { gravity=Gravity.CENTER; setBackgroundColor(surface) }
   foot.addView(footButton("‹",tr("Quay lại","Back")){current()?.let{if(it.canGoBack())it.goBack()}})
   foot.addView(footButton("›",tr("Tiến","Forward")){current()?.let{if(it.canGoForward())it.goForward()}})
   foot.addView(footButton("↻",tr("Tải lại","Reload")){current()?.reload()})
   foot.addView(footButton("×",tr("Đóng tab","Close tab")){closeTab(selected)})
   foot.addView(footButton(tr("Xong","Done"),tr("Thoát","Exit")){finish()})
   root.addView(foot,LinearLayout.LayoutParams(-1,dp(48)))
-  status=TextView(this).apply { text=tr("Tab riêng tư không lưu vào lịch sử","Private tabs are not saved to history"); textSize=11f; setPadding(dp(12),dp(6),dp(12),dp(8)); setBackgroundColor(Color.WHITE) }; root.addView(status)
+  status=TextView(this).apply { text=tr("Tab riêng tư không lưu vào lịch sử","Private tabs are not saved to history"); textSize=11f; setPadding(dp(12),dp(6),dp(12),dp(8)); setBackgroundColor(surface) }; root.addView(status)
   setContentView(root); addTab(null)
  }
  private fun addTab(url:String?) {
@@ -64,7 +64,7 @@ class IncognitoActivity : Activity() {
   }
   w.webChromeClient=object:WebChromeClient(){override fun onReceivedTitle(v:WebView?,title:String?){if(!title.isNullOrBlank())t.title=title;updateCount()}}
   selectTab(tabs.lastIndex)
-  if(url.isNullOrBlank()) w.loadDataWithBaseURL("https://tgfn.browser/","<html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>body{font:16px Arial;background:${if (darkMode) "#202124;color:#e8eaed" else "#f8f5ff;color:#202124"};padding:15vh 20px}h2{text-align:center;color:#673ab7}form{display:flex}input{flex:1;min-width:0;padding:12px;border-radius:24px;border:1px solid #ddd}button{background:#673ab7;color:white;border:0;border-radius:24px}</style></head><body><h2>◉ Ẩn danh</h2><form action=\"https://www.google.com/search\"><input name=\"q\" placeholder=\"Tìm kiếm riêng tư\"><button>Tìm</button></form></body></html>","text/html","UTF-8",null) else w.loadUrl(url)
+  if(url.isNullOrBlank()) w.loadDataWithBaseURL("https://tgfn.browser/","<html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>body{font:16px Arial;background:${if (darkMode) "#202124;color:#e8eaed" else "#f8f5ff;color:#202124"};padding:15vh 20px}h2{text-align:center;color:#673ab7}form{display:flex}input{flex:1;min-width:0;padding:12px;border-radius:24px;border:1px solid #ddd}button{background:#673ab7;color:white;border:0;border-radius:24px}</style></head><body><h2>◉ ${tr(\"Ẩn danh\",\"Incognito\")}</h2><form action=\"https://www.google.com/search\"><input name=\"q\" placeholder=\"${tr(\"Tìm kiếm riêng tư\",\"Private search\")}\"><button>${tr(\"Tìm\",\"Search\")}</button></form></body></html>","text/html","UTF-8",null) else w.loadUrl(url)
  }
  private fun showTabs(){if(tabs.isEmpty())return;android.app.AlertDialog.Builder(this).setTitle(tr("Tab ẩn danh (","Incognito tabs (")+tabs.size+")").setItems(tabs.mapIndexed{i,t->(i+1).toString()+". "+t.title+" · "+host(t.web.url?:t.url)}.toTypedArray()){_,i->selectTab(i)}.setPositiveButton(tr("Tab mới","New tab")){_,_->addTab(null)}.setNegativeButton(tr("Đóng","Close"),null).show()}
  private fun selectTab(i:Int){if(i !in tabs.indices)return;selected=i;tabs.forEachIndexed{n,t->t.web.visibility=if(n==i)View.VISIBLE else View.GONE};setAddress(tabs[i].web.url?:tabs[i].url);status.text=tabs[i].title;updateCount()}
