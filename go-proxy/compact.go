@@ -13,7 +13,7 @@ import (
 const maxCompactHTMLBytes = 4 << 20
 
 var (
-	compactDropBlocks = regexp.MustCompile("(?is)<!--.*?-->|<(script|style|noscript|iframe|svg|canvas|video|audio|form|nav|footer|header)\\b[^>]*>.*?</\\1\\s*>")
+	compactDropBlocks = []*regexp.Regexp{regexp.MustCompile("(?is)<!--.*?-->"), regexp.MustCompile("(?is)<script\\b[^>]*>.*?</script\\s*>"), regexp.MustCompile("(?is)<style\\b[^>]*>.*?</style\\s*>"), regexp.MustCompile("(?is)<noscript\\b[^>]*>.*?</noscript\\s*>"), regexp.MustCompile("(?is)<iframe\\b[^>]*>.*?</iframe\\s*>"), regexp.MustCompile("(?is)<svg\\b[^>]*>.*?</svg\\s*>"), regexp.MustCompile("(?is)<canvas\\b[^>]*>.*?</canvas\\s*>"), regexp.MustCompile("(?is)<video\\b[^>]*>.*?</video\\s*>"), regexp.MustCompile("(?is)<audio\\b[^>]*>.*?</audio\\s*>"), regexp.MustCompile("(?is)<form\\b[^>]*>.*?</form\\s*>"), regexp.MustCompile("(?is)<nav\\b[^>]*>.*?</nav\\s*>"), regexp.MustCompile("(?is)<footer\\b[^>]*>.*?</footer\\s*>"), regexp.MustCompile("(?is)<header\\b[^>]*>.*?</header\\s*>") }
 	compactDropVoid = regexp.MustCompile("(?is)<(link|input|source|meta|button)\\b[^>]*?/?>")
 	compactTags = regexp.MustCompile("(?is)<[^>]*?>")
 	compactAttrs = regexp.MustCompile("(?is)\\s+(href|src|alt|title|width|height)\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)")
@@ -55,7 +55,7 @@ func compactHTMLResponse(resp *http.Response) error {
 }
 
 func compactHTML(input string) string {
-	input = compactDropBlocks.ReplaceAllString(input, " ")
+	for _, pattern := range compactDropBlocks { input = pattern.ReplaceAllString(input, " ") }
 	input = compactDropVoid.ReplaceAllString(input, "")
 	input = compactTags.ReplaceAllStringFunc(input, func(tag string) string {
 		if len(tag) < 3 || tag[1] == '!' || tag[1] == '?' { return "" }
