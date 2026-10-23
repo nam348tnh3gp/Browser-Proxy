@@ -518,7 +518,7 @@ class MainActivity : Activity() {
         val history = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toMutableSet()
         history.remove(tab.url)
         history.add(tab.url)
-        prefs.edit().putStringSet("history", history.takeLast(100).toSet()).apply()
+        prefs.edit().putStringSet("history", history.toList().takeLast(100).toSet()).apply()
     }
 
     private fun showHistory() {
