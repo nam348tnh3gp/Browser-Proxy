@@ -82,6 +82,13 @@ class MainActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // WebView derives prefers-color-scheme from the host application theme.
+        // Select the matching theme before Activity/WebView initialization.
+        setTheme(
+            if (getSharedPreferences("browser_settings", Context.MODE_PRIVATE).getBoolean("dark_mode", false))
+                android.R.style.Theme_Material_NoActionBar
+            else android.R.style.Theme_Material_Light_NoActionBar
+        )
         super.onCreate(savedInstanceState)
         if (!prefs.contains("language")) {
             var selectedLanguage = "vi"
