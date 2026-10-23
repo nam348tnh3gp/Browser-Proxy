@@ -31,6 +31,9 @@ class IncognitoActivity : Activity() {
  private fun tr(vi:String,en:String)=if(isEnglish) en else vi
 
  override fun onCreate(savedInstanceState: Bundle?) {
+  // Match WebView prefers-color-scheme to the saved browser theme before initialization.
+  setTheme(if (getSharedPreferences("browser_settings", MODE_PRIVATE).getBoolean("dark_mode", false))
+   android.R.style.Theme_Material_NoActionBar else android.R.style.Theme_Material_Light_NoActionBar)
   if (Build.VERSION.SDK_INT >= 28) WebView.setDataDirectorySuffix("tgfn_incognito")
   super.onCreate(savedInstanceState)
   window.statusBarColor = pageBackground
