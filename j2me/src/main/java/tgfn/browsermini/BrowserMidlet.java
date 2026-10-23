@@ -750,6 +750,11 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 text.append('\n');
                 continue;
             }
+            if (kind == 5 && target.length() > 0) {
+                result.images.addElement(new ImageRef(label, target));
+                if (label.length() > 0) result.blocks.addElement(new RenderBlock(label, 0, null));
+                continue;
+            }
             if (label.length() == 0) continue;
             if (kind == 4 && target.length() > 0) {
                 result.links.addElement(new LinkItem(label, target));
