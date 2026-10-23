@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -24,7 +25,7 @@ func TestValidateRemoteTargetRejectsUnsafeTargets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := validateRemoteTarget(t.Context(), u); err == nil {
+			if err := validateRemoteTarget(context.Background(), u); err == nil {
 				t.Fatalf("expected target to be rejected: %s", raw)
 			}
 		})
