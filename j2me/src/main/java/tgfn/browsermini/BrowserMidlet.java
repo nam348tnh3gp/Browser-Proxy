@@ -1212,4 +1212,44 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         return dst;
     }
 
+
+    private PageResult parseIMGL(String url, byte[] data) throws IOException {
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
+        byte[] magic = new byte[4];
+        in.readFully(magic);
+        int jpegLen = in.readInt();
+        if (jpegLen < 10 || jpegLen > data.length - 6) throw new IOException("Bad IMGL");
+        byte[] jpeg = new byte[jpegLen];
+        in.readFully(jpeg);
+        int linkCount = in.readUnsignedShort();
+        if (linkCount > 100) linkCount = 100;
+        PageResult result = new PageResult();
+        result.title = url;
+        result.text = "[Rendered page]";
+        result.links = new Vector();
+        result.images = new Vector();
+        result.blocks = new Vector();
+        try {
+            Image img = Image.createImage(jpeg, 0, jpeg.length);
+            ImageRef ref = new ImageRef("page", url);
+            ref.image = img;
+            result.images.addElement(ref);
+        } catch (Exception ignored) {}
+        for (int i = 0; i < linkCount; i++) {
+            int tLen = in.readUnsignedShort();
+            byte[] tb = new byte[tLen];
+            in.readFully(tb);
+            String text = new String(tb, "UTF-8");
+            int uLen = in.readUnsignedShort();
+            byte[] ub = new byte[uLen];
+            in.readFully(ub);
+            String link = new String(ub, "UTF-8");
+            if (text.length() > 0 && link.length() > 0) {
+                result.links.addElement(new LinkItem(text, link));
+                result.blocks.addElement(new RenderBlock(text, 4, link));
+            }
+        }
+        return result;
+    }
+
 }
