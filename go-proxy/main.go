@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"io"
@@ -48,23 +49,71 @@ func proxyHandler() http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now()
 		if r.Method == http.MethodConnect {
+			log.Printf("request method=CONNECT client=%q target=%q", r.RemoteAddr, safeLogValue(r.Host))
 			handleConnect(w, r)
 			return
 		}
+
+		target := ""
+		if r.URL != nil {
+			target = r.URL.Host
+		}
+		logWriter := &statusLoggingWriter{ResponseWriter: w, status: http.StatusOK}
+		defer func() {
+			log.Printf("request method=%s client=%q target=%q status=%d duration=%s",
+				r.Method, r.RemoteAddr, safeLogValue(target), logWriter.status, time.Since(started).Round(time.Millisecond))
+		}()
+
 		if r.URL == nil || (r.URL.Scheme != "http" && r.URL.Scheme != "https") || r.URL.Host == "" {
-			http.Error(w, "Send an absolute HTTP(S) URL to the proxy", http.StatusBadRequest)
+			http.Error(logWriter, "Send an absolute HTTP(S) URL to the proxy", http.StatusBadRequest)
 			return
 		}
 		if strings.Contains(r.URL.Host, "@") {
-			http.Error(w, "userinfo in URL is not allowed", http.StatusBadRequest)
+			http.Error(logWriter, "userinfo in URL is not allowed", http.StatusBadRequest)
 			return
 		}
 		r2 := r.Clone(r.Context())
 		r2.URL = r.URL
 		r2.Host = r.URL.Host
-		proxy.ServeHTTP(w, r2)
+		proxy.ServeHTTP(logWriter, r2)
 	})
+}
+
+type statusLoggingWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusLoggingWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *statusLoggingWriter) Write(p []byte) (int, error) {
+	return w.ResponseWriter.Write(p)
+}
+
+func (w *statusLoggingWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (w *statusLoggingWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("HTTP hijacking is not supported")
+	}
+	return hijacker.Hijack()
+}
+
+func safeLogValue(value string) string {
+	// Log host/target metadata only, never full URLs, query strings, or credentials.
+	value = strings.ReplaceAll(value, "\r", "")
+	value = strings.ReplaceAll(value, "\n", "")
+	return value
 }
 
 func handleConnect(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +138,7 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	upstream, err := dialer.DialContext(ctx, "tcp", host)
 	if err != nil {
+		log.Printf("CONNECT failed target=%q error=%q", safeLogValue(host), err)
 		http.Error(w, "Unable to connect to upstream", http.StatusBadGateway)
 		return
 	}
@@ -113,6 +163,7 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		upstream.Close()
 		return
 	}
+	log.Printf("CONNECT established target=%q", safeLogValue(host))
 	go tunnel(upstream, client)
 	go func() {
 		if rw.Reader.Buffered() > 0 {
