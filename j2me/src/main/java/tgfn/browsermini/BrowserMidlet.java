@@ -633,10 +633,10 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         proxyForm = new Form("Proxy settings");
         proxyHostField = new TextField("Proxy host", proxyHost, 100, TextField.ANY);
         proxyPortField = new TextField("Proxy port", proxyPort, 5, TextField.NUMERIC);
-        proxyEnabledChoice = new ChoiceGroup("Use HTTP proxy", ChoiceGroup.MULTIPLE);
+        proxyEnabledChoice = new ChoiceGroup("Use proxy", ChoiceGroup.MULTIPLE);
         proxyEnabledChoice.append("Enable proxy", null);
         proxyEnabledChoice.setSelectedIndex(0, proxyEnabled);
-        proxyForm.append(new StringItem("Note", "HTTP pages use the configured forward proxy. HTTPS stays direct because standard MIDP cannot safely layer TLS over an HTTP CONNECT socket."));
+        proxyForm.append(new StringItem("Note", "HTTP and HTTPS pages use the configured proxy. HTTPS is fetched by the server and converted to compact page data; use a proxy you trust."));
         proxyForm.append(proxyHostField);
         proxyForm.append(proxyPortField);
         proxyForm.append(proxyEnabledChoice);
