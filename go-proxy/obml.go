@@ -3,14 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"html"
+	htmlpkg "html"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"unicode/utf8"
 
-	"golang.org/x/net/html"
+	xhtml "golang.org/x/net/html"
 )
 
 const obmlMagic = "TBO1"
@@ -44,7 +44,7 @@ func obmlAbsolute(base, ref string) string {
 }
 
 func buildOBMLPage(pageURL, source string) ([]byte, error) {
-	doc, err := html.Parse(strings.NewReader(source))
+	doc, err := xhtml.Parse(strings.NewReader(source))
 	if err != nil {
 		return nil, err
 	}
@@ -62,16 +62,16 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		blocks = append(blocks, obmlBlock{kind: kind, text: text, url: link})
 	}
 
-	var walk func(*html.Node, byte, bool, string)
-	walk = func(n *html.Node, kind byte, inLink bool, linkURL string) {
-		if n.Type == html.TextNode {
-			txt := html.UnescapeString(n.Data)
+	var walk func(*xhtml.Node, byte, bool, string)
+	walk = func(n *xhtml.Node, kind byte, inLink bool, linkURL string) {
+		if n.Type == xhtml.TextNode {
+			txt := htmlpkg.UnescapeString(n.Data)
 			if !inLink {
 				add(kind, txt, "")
 			}
 			return
 		}
-		if n.Type != html.ElementNode {
+		if n.Type != xhtml.ElementNode {
 			for c := n.FirstChild; c != nil; c = c.NextSibling {
 				walk(c, kind, inLink, linkURL)
 			}
@@ -124,10 +124,10 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			linkURL = obmlAbsolute(pageURL, href)
 			inLink = linkURL != ""
 			var linkText strings.Builder
-			var collect func(*html.Node)
-			collect = func(nn *html.Node) {
-				if nn.Type == html.TextNode {
-					linkText.WriteString(html.UnescapeString(nn.Data))
+			var collect func(*xhtml.Node)
+			collect = func(nn *xhtml.Node) {
+				if nn.Type == xhtml.TextNode {
+					linkText.WriteString(htmlpkg.UnescapeString(nn.Data))
 				}
 				for c := nn.FirstChild; c != nil; c = c.NextSibling {
 					collect(c)
@@ -143,11 +143,11 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		if tag == "title" && title == pageURL {
 			var tb strings.Builder
 			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				if c.Type == html.TextNode {
+				if c.Type == xhtml.TextNode {
 					tb.WriteString(c.Data)
 				}
 			}
-			title = strings.TrimSpace(html.UnescapeString(tb.String()))
+			title = strings.TrimSpace(htmlpkg.UnescapeString(tb.String()))
 			return
 		}
 
@@ -175,7 +175,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 
 func writeOBMLString(out *bytes.Buffer, value string) {
 	if !utf8.ValidString(value) {
-		value = strings.ToValidUTF8(value, "�")
+		value = strings.ToValidUTF8(value, "\ufffd")
 	}
 	if len(value) > maxOBMLString {
 		value = value[:maxOBMLString]
