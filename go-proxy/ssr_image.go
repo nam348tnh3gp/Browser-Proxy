@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image"
 	"image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"os"
@@ -35,7 +37,6 @@ func findChromeBinary() string {
 			fmt.Println("[SSRIMG] Using CHROME_PATH:", env)
 			return env
 		}
-		fmt.Println("[SSRIMG] CHROME_PATH set but not found:", env)
 	}
 	for _, name := range chromeCandidates {
 		if path, err := exec.LookPath(name); err == nil {
@@ -62,12 +63,10 @@ func ssrImageResponse(resp *http.Response) error {
 	fmt.Println("[SSRIMG] SSRIMG requested for", resp.Request.URL.String())
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || resp.Body == nil {
-		fmt.Println("[SSRIMG] Bad status or empty body")
 		return nil
 	}
 	ct := strings.ToLower(resp.Header.Get("Content-Type"))
 	if !strings.Contains(ct, "text/html") && !strings.Contains(ct, "xhtml") {
-		fmt.Println("[SSRIMG] Not HTML, skipping:", ct)
 		return nil
 	}
 
@@ -76,7 +75,6 @@ func ssrImageResponse(resp *http.Response) error {
 
 	chromePath := findChromeBinary()
 	if chromePath == "" {
-		fmt.Println("[SSRIMG] Abort: no browser")
 		return fmt.Errorf("no Chrome/Chromium")
 	}
 
@@ -90,7 +88,6 @@ func ssrImageResponse(resp *http.Response) error {
 		chromedp.NoSandbox,
 		chromedp.Headless,
 		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("disable-software-rasterizer", true),
 	)
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
 	defer allocCancel()
@@ -108,20 +105,21 @@ func ssrImageResponse(resp *http.Response) error {
 		return err
 	}
 	if len(buf) < 100 {
-		fmt.Println("[SSRIMG] Screenshot too small")
 		return fmt.Errorf("empty screenshot")
 	}
 
-	img, err := jpeg.Decode(bytes.NewReader(buf))
+	// chromedp.CaptureScreenshot returns PNG by default
+	img, _, err := image.Decode(bytes.NewReader(buf))
 	if err != nil {
-		fmt.Println("[SSRIMG] JPEG decode failed, sending raw")
-		resp.Body = io.NopCloser(bytes.NewReader(buf))
-		resp.ContentLength = int64(len(buf))
-		resp.Header.Set("Content-Type", "image/jpeg")
-		return nil
+		fmt.Println("[SSRIMG] Image decode failed:", err)
+		return err
 	}
+
 	var out bytes.Buffer
-	_ = jpeg.Encode(&out, img, &jpeg.Options{Quality: 40})
+	if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: 40}); err != nil {
+		fmt.Println("[SSRIMG] JPEG encode failed:", err)
+		return err
+	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(out.Bytes()))
 	resp.ContentLength = int64(out.Len())
