@@ -73,7 +73,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 	blocks := make([]obmlBlock, 0, 128)
 	add := func(kind byte, text, link string) {
 		text = strings.TrimSpace(obmlSpace.ReplaceAllString(text, " "))
-		if len(blocks) >= maxOBMLBlocks || text == "" { return }
+		if len(blocks) >= maxOBMLBlocks || (text == "" && kind != 6) { return }
 		if len(text) > maxOBMLString { text = text[:maxOBMLString] }
 		blocks = append(blocks, obmlBlock{kind:kind, text:text, url:link})
 	}
@@ -101,11 +101,17 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 				}
 			case "h1": if !closing { kind = 1 } else { kind = 0 }
 			case "h2", "h3", "strong", "b": if !closing { kind = 2 } else { kind = 0 }
+			case "img":
+				if !closing {
+					alt := obmlAttribute(token, "alt")
+					imageURL := obmlAbsolute(pageURL, obmlAttribute(token, "src"))
+					if imageURL != "" { add(5, alt, imageURL) }
+				}
 			case "li":
 				if !closing { add(3, "•", "") }
 			case "p", "div", "br", "hr", "tr":
 				if closing || name == "br" || name == "hr" || name == "p" || name == "div" {
-					if !inLink { add(0, "", "") }
+					if !inLink { add(6, "", "") }
 				}
 			}
 			continue
@@ -145,7 +151,7 @@ func obmlResponse(resp *http.Response) error {
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCompactHTMLBytes+1))
 	if err != nil { return err }
 	if len(data) > maxCompactHTMLBytes {
-		resp.Body = io.NopCloser(bytes.NewReader(data))
+		resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(data), resp.Body))
 		return nil
 	}
 	_ = resp.Body.Close()
