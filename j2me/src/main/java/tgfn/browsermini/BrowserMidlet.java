@@ -278,10 +278,20 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                         }
                     }
                 }
-                if (tagLower.startsWith("br") || tagLower.startsWith("/p") ||
+                if (tagLower.startsWith("script") || tagLower.startsWith("style")) {
+                    String closeTag = tagLower.startsWith("script") ? "</script>" : "</style>";
+                    int closeAt = lower.indexOf(closeTag, end + 1);
+                    pos = closeAt < 0 ? html.length() : closeAt + closeTag.length();
+                    continue;
+                }
+                if (tagLower.startsWith("h1")) text.append("\n\u0001");
+                else if (tagLower.startsWith("h2") || tagLower.startsWith("h3")) text.append("\n\u0002");
+                else if (tagLower.startsWith("li")) text.append("\n• ");
+                else if (tagLower.startsWith("br") || tagLower.startsWith("/p") ||
                     tagLower.startsWith("/div") || tagLower.startsWith("/li") ||
-                    tagLower.startsWith("p") || tagLower.startsWith("h1") ||
-                    tagLower.startsWith("h2") || tagLower.startsWith("tr")) text.append('\n');
+                    tagLower.startsWith("p") || tagLower.startsWith("/h1") ||
+                    tagLower.startsWith("/h2") || tagLower.startsWith("/h3") ||
+                    tagLower.startsWith("tr") || tagLower.startsWith("/tr")) text.append('\n');
                 pos = end + 1;
             } else {
                 text.append(c);
@@ -330,30 +340,38 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private String cleanText(String input) {
         StringBuffer out = new StringBuffer();
         boolean space = false;
+        boolean newline = false;
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
             if (c == '&') {
                 int semi = input.indexOf(';', i);
                 if (semi > i && semi - i < 10) {
-                    String entity = input.substring(i + 1, semi);
-                    String decoded = decodeEntity(entity);
+                    String decoded = decodeEntity(input.substring(i + 1, semi));
                     if (decoded != null) {
                         out.append(decoded);
                         i = semi;
                         space = false;
+                        newline = false;
                         continue;
                     }
                 }
             }
-            if (c == '\r' || c == '\n' || c == '\t' || c == ' ') {
-                if (!space && out.length() > 0) out.append(' ');
+            if (c == '\r' || c == '\n') {
+                while (out.length() > 0 && out.charAt(out.length() - 1) == ' ') out.setLength(out.length() - 1);
+                if (out.length() > 0 && !newline) out.append('\n');
+                newline = true;
+                space = false;
+            } else if (c == '\t' || c == ' ') {
+                if (!space && !newline && out.length() > 0 && out.charAt(out.length() - 1) != ' ') out.append(' ');
                 space = true;
             } else {
                 out.append(c);
                 space = false;
+                newline = false;
             }
         }
-        return trim(out.toString());
+        while (out.length() > 0 && (out.charAt(out.length() - 1) == ' ' || out.charAt(out.length() - 1) == '\n')) out.setLength(out.length() - 1);
+        return out.toString();
     }
 
     private String decodeEntities(String s) {
@@ -797,16 +815,24 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             g.setColor(255, 255, 255); g.fillRect(0, contentY, w, contentH);
             g.setClip(4, contentY + 3, w - 8, Math.max(0, contentH - 6));
             int y = contentY + 4 - scrollY;
-            g.setFont(normal);
             Vector lines = wrap(screenBody, normal, w - 14);
-            totalBodyHeight = lines.size() * (normal.getHeight() + 1);
+            totalBodyHeight = 0;
             for (int i = 0; i < lines.size(); i++) {
-                String line = (String)lines.elementAt(i);
-                g.setColor(line.startsWith("http://") || line.startsWith("https://") ? 0 : 35,
-                           line.startsWith("http://") || line.startsWith("https://") ? 76 : 43,
-                           line.startsWith("http://") || line.startsWith("https://") ? 160 : 52);
+                String rawLine = (String)lines.elementAt(i);
+                boolean h1 = rawLine.length() > 0 && rawLine.charAt(0) == '\u0001';
+                boolean h2 = rawLine.length() > 0 && rawLine.charAt(0) == '\u0002';
+                String line = h1 || h2 ? rawLine.substring(1) : rawLine;
+                Font lineFont = h1 ? Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM) :
+                                (h2 ? bold : normal);
+                g.setFont(lineFont);
+                boolean link = line.startsWith("http://") || line.startsWith("https://");
+                g.setColor(link ? 0 : (h1 || h2 ? 20 : 35),
+                           link ? 76 : (h1 || h2 ? 65 : 43),
+                           link ? 160 : (h1 || h2 ? 115 : 52));
                 g.drawString(line, 7, y, Graphics.TOP | Graphics.LEFT);
-                y += normal.getHeight() + 1;
+                int lineHeight = lineFont.getHeight() + (h1 ? 3 : 1);
+                y += lineHeight;
+                totalBodyHeight += lineHeight;
             }
             g.setClip(0, 0, w, h);
             g.setColor(0, 55, 108); g.fillRect(0, h - footerH, w, footerH);
@@ -826,6 +852,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 int end = value.indexOf('\n', pos);
                 if (end < 0) end = value.length();
                 if (end == pos) { out.addElement(""); pos++; continue; }
+                char marker = value.charAt(pos) == '\u0001' || value.charAt(pos) == '\u0002' ? value.charAt(pos++) : 0;
+                boolean first = true;
                 while (pos < end) {
                     int fit = pos, lastSpace = -1;
                     while (fit < end && font.stringWidth(value.substring(pos, fit + 1)) <= maxWidth) {
@@ -834,7 +862,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     }
                     if (fit == pos) fit++;
                     if (fit < end && lastSpace >= pos) fit = lastSpace;
-                    out.addElement(value.substring(pos, fit));
+                    String part = value.substring(pos, fit);
+                    out.addElement(first && marker != 0 ? String.valueOf(marker) + part : part);
+                    first = false;
                     pos = fit;
                     while (pos < end && value.charAt(pos) == ' ') pos++;
                 }
