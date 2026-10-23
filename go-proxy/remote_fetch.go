@@ -26,8 +26,18 @@ func serveRemoteFetch(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	started := time.Now()
-	target, err := url.Parse(r.URL.Query().Get("url"))
+	if r.Method != http.MethodGet {
+		http.Error(w, "Only GET is supported", http.StatusMethodNotAllowed)
+		return true
+	}
+	rawTarget := r.URL.Query().Get("url")
+	if rawTarget == "" || len(rawTarget) > 8192 {
+		http.Error(w, "Missing or oversized remote URL", http.StatusBadRequest)
+		return true
+	}
+	target, err := url.Parse(rawTarget)
 	if err == nil {
+		target.Fragment = ""
 		err = validateRemoteTarget(r.Context(), target)
 	}
 	if err != nil {
