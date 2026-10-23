@@ -3,8 +3,14 @@ name: Build TGFN.BrowserMini
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "j2me/**"
+      - ".github/workflows/build-j2me.yml"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "j2me/**"
+      - ".github/workflows/build-j2me.yml"
   workflow_dispatch:
 
 permissions:
