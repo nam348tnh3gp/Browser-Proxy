@@ -37,6 +37,34 @@ To build locally with Gradle 8.9 and JDK 17:
 gradle -p android-app assembleDebug
 ```
 
+### Signed APK and automatic versioning
+
+The workflow increments Android `versionCode` and the patch part of `versionName` for each workflow build. On builds of `main`, it commits the bump back to `main` using a `[skip ci]` commit so the version-only commit does not start another build. Pushes and pull requests that change only documentation, J2ME files, or unrelated repository files are ignored by this workflow.
+
+To create the signing key in Termux (OpenJDK 21 is fine for generating the key; CI builds with JDK 17):
+
+```sh
+pkg install openjdk-21 coreutils
+mkdir -p ~/tgfn-signing
+cd ~/tgfn-signing
+keytool -genkeypair -v \
+  -keystore tgfn-browser-release.jks \
+  -alias tgfn-browser \
+  -keyalg RSA -keysize 4096 -validity 10000
+base64 tgfn-browser-release.jks | tr -d '\\n' > tgfn-browser-release.base64
+```
+
+Keep the `.jks` file and passwords private and back them up securely. **Never commit the keystore or its passwords to Git.** If you lose the keystore, you generally cannot publish an update over an app installed with that signing key.
+
+In GitHub, open **Settings → Secrets and variables → Actions → New repository secret** and add these four secrets:
+
+- `ANDROID_KEYSTORE_BASE64`: contents of `~/tgfn-signing/tgfn-browser-release.base64`
+- `ANDROID_KEYSTORE_PASSWORD`: the keystore password chosen in `keytool`
+- `ANDROID_KEY_ALIAS`: `tgfn-browser`
+- `ANDROID_KEY_PASSWORD`: the key password chosen in `keytool` (it can match the keystore password)
+
+After all four secrets are set, the workflow builds and uploads a signed release APK. Without signing secrets it builds a debug APK instead. If only some signing secrets are set, the workflow fails rather than silently producing an unsigned release. Use the same keystore and alias for every update of this app.
+
 ## J2ME feature-phone version
 
 The Java ME client has been separated into the dedicated [`J2ME` branch](https://github.com/nam348tnh3gp/Browser-Proxy/tree/J2ME), including its own build workflow and server-side compact HTML integration. Switch to that branch to build the JAR/JAD and read its handset limitations.
