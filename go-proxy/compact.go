@@ -68,7 +68,11 @@ func compactHTML(input string) string {
 		name := strings.ToLower(tag[start:end])
 		if !compactAllowedTags[name] { return "" }
 		if closing { return "</" + name + ">" }
-		attrs := compactAttrs.ReplaceAllString(tag[end:], " $1=$2")
+		matches := compactAttrs.FindAllStringSubmatch(tag[end:], -1)
+		attrs := ""
+		for _, match := range matches {
+			attrs += " " + strings.ToLower(match[1]) + "=" + match[2]
+		}
 		return "<" + name + attrs + ">"
 	})
 	input = compactWhitespace.ReplaceAllString(input, " ")
