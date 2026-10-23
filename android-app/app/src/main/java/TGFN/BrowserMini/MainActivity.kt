@@ -583,7 +583,7 @@ class MainActivity : Activity() {
                             gravity = Gravity.CENTER
                         }, LinearLayout.LayoutParams(dp(20), dp(24)))
                         titleRow.addView(TextView(this).apply {
-                            text = "Tab " + (tabIndex + 1)
+                            text = tr("Tab ", "Tab ") + (tabIndex + 1)
                             textSize = 11f
                             typeface = Typeface.DEFAULT_BOLD
                             setTextColor(muted)
@@ -1029,7 +1029,7 @@ class MainActivity : Activity() {
         }
         content.addView(desktop)
         val proxyUrl = EditText(this).apply {
-            hint = "Proxy URL: http://host:port"
+            hint = tr("Proxy URL: http://host:port", "Proxy URL: http://host:port")
             setSingleLine(true)
             setText(prefs.getString("proxy_url", "") ?: "")
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
@@ -1123,7 +1123,7 @@ class MainActivity : Activity() {
         }
         android.app.AlertDialog.Builder(this).setTitle(tr("Dấu trang", "Bookmarks"))
             .setItems(bookmarks.toTypedArray()) { _, which -> currentWebView()?.loadUrl(bookmarks[which]) }
-            .setPositiveButton("Đóng", null).show()
+            .setPositiveButton(tr("Đóng", "Close"), null).show()
     }
 
     /**
@@ -1185,7 +1185,7 @@ class MainActivity : Activity() {
                 prefs.edit().remove("history").apply()
                 Toast.makeText(this, tr("Đã xóa lịch sử", "History cleared"), Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("Đóng", null).show()
+            .setNegativeButton(tr("Đóng", "Close"), null).show()
     }
 
     private fun shareCurrentPage() {
