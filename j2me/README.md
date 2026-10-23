@@ -1,38 +1,36 @@
-# TGFN BrowserMini J2ME
+# TGFN BrowserMini J2ME — Real Render Mode
 
-## Why you only see text
+Client now uses **SSRIMG** by default.
 
-The J2ME client has **no HTML/CSS engine**. It can only draw text, links and images.  
-That is a hard limit of MIDP 2.0. No amount of proxy changes can make the current client render real CSS layout.
+## What SSRIMG does
 
-## Closest solution: Screenshot SSR (SSRIMG)
+1. Proxy opens the page in headless Chrome.
+2. Chrome renders the real page (full HTML + CSS + layout).
+3. Proxy takes a screenshot, compresses it to JPEG, and sends it to the phone.
+4. J2ME client displays the JPEG.
 
-A new optional mode renders the page on the server with headless Chrome and sends a JPEG of the real page (with CSS applied).
+This is the closest practical way to show a real web page look on a feature phone.
 
-**Requirements**
-- Chrome or Chromium must be installed on the machine running the proxy.
-- The client must request `X-TGFN-Format: SSRIMG`.
+## Requirements
 
-**How to try**
-1. Install Chrome/Chromium on the proxy machine.
-2. In `BrowserMidlet.java` change the header to:
-   ```java
-   writer.write("X-TGFN-Format: SSRIMG\r\n");
-   ```
-3. Rebuild the JAR and open a page. You should receive a JPEG screenshot of the rendered page.
+- **Chrome or Chromium** must be installed on the machine running the Go proxy.
+- If Chrome is missing, the request will fail.
 
-## Current default modes
+## How to run
 
-| Mode | Result |
-|------|--------|
-| SSR (default) | Structured text + links + images |
-| FULL | HTML (client still extracts text) |
-| SSRIMG | Real rendered JPEG (needs Chrome) |
+```bash
+cd go-proxy
+go mod tidy
+PROXY_LISTEN=0.0.0.0:8080 go run .
+```
 
-## Honest limits
+In the J2ME app enable the proxy (LAN IP + 8080), then open a page.
 
-- True interactive CSS layout on the phone is not possible with the current client.
-- Screenshot mode gives the visual look of the real page but links become a separate list (or you tap the image and use the Links menu).
-- Best long-term path for "full web" on old phones is the Opera Mini model: heavy server renderer + very thin client painter.
+## Notes
 
-This project is an open experiment, not affiliated with Opera.
+- The result is a picture of the page, not an interactive DOM.
+- Links are still available via the Links menu in the client.
+- Images and layout come from the real rendered page.
+- This mode is heavier on the proxy server than the text modes.
+
+Inspired by Opera Mini's server-side rendering idea.
