@@ -740,6 +740,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             writer.write("Host: " + hostPort + "\r\n");
             writer.write("User-Agent: TGFN-BrowserMini-J2ME/1.0\r\n");
             writer.write("Accept: text/html,text/plain,*/*\r\n");
+            writer.write("X-TGFN-Compact: 1\r\n");
             writer.write("Connection: close\r\n\r\n");
             writer.flush();
             String status = readAsciiLine(input);
