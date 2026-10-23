@@ -7,52 +7,20 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"golang.org/x/net/html"
 )
 
 const obmlMagic = "TBO1"
-const maxOBMLBlocks = 1200
+const maxOBMLBlocks = 2500
 const maxOBMLString = 65535
-
-var (
-	obmlTags  = regexp.MustCompile("(?is)<[^>]*>|[^<]+")
-	obmlAttr  = regexp.MustCompile("(?is)\\b(href|src|alt|title)\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)")
-	obmlTitle = regexp.MustCompile("(?is)<title\\b[^>]*>(.*?)</title\\s*>")
-	obmlSkip  = []*regexp.Regexp{
-		regexp.MustCompile("(?is)<!--.*?-->"),
-		regexp.MustCompile("(?is)<head\\b[^>]*>.*?</head\\s*>"),
-		regexp.MustCompile("(?is)<script\\b[^>]*>.*?</script\\s*>"),
-		regexp.MustCompile("(?is)<style\\b[^>]*>.*?</style\\s*>"),
-		regexp.MustCompile("(?is)<noscript\\b[^>]*>.*?</noscript\\s*>"),
-		regexp.MustCompile("(?is)<iframe\\b[^>]*>.*?</iframe\\s*>"),
-		regexp.MustCompile("(?is)<svg\\b[^>]*>.*?</svg\\s*>"),
-		regexp.MustCompile("(?is)<canvas\\b[^>]*>.*?</canvas\\s*>"),
-		regexp.MustCompile("(?is)<video\\b[^>]*>.*?</video\\s*>"),
-		regexp.MustCompile("(?is)<audio\\b[^>]*>.*?</audio\\s*>"),
-		regexp.MustCompile("(?is)<form\\b[^>]*>.*?</form\\s*>"),
-		regexp.MustCompile("(?is)<nav\\b[^>]*>.*?</nav\\s*>"),
-		regexp.MustCompile("(?is)<footer\\b[^>]*>.*?</footer\\s*>"),
-		regexp.MustCompile("(?is)<header\\b[^>]*>.*?</header\\s*>"),
-	}
-	obmlSpace = regexp.MustCompile("[\\t\\r\\n ]+")
-)
 
 type obmlBlock struct {
 	kind byte
 	text string
 	url  string
-}
-
-func obmlAttribute(tag, name string) string {
-	for _, m := range obmlAttr.FindAllStringSubmatch(tag, -1) {
-		if strings.EqualFold(m[1], name) {
-			v := strings.Trim(m[2], "\"'")
-			return html.UnescapeString(v)
-		}
-	}
-	return ""
 }
 
 func obmlAbsolute(base, ref string) string {
@@ -76,17 +44,15 @@ func obmlAbsolute(base, ref string) string {
 }
 
 func buildOBMLPage(pageURL, source string) ([]byte, error) {
-	title := pageURL
-	if m := obmlTitle.FindStringSubmatch(source); len(m) > 1 {
-		title = strings.TrimSpace(obmlSpace.ReplaceAllString(html.UnescapeString(compactTags.ReplaceAllString(m[1], "")), " "))
-	}
-	for _, p := range obmlSkip {
-		source = p.ReplaceAllString(source, " ")
+	doc, err := html.Parse(strings.NewReader(source))
+	if err != nil {
+		return nil, err
 	}
 
-	blocks := make([]obmlBlock, 0, 128)
+	title := pageURL
+	var blocks []obmlBlock
 	add := func(kind byte, text, link string) {
-		text = strings.TrimSpace(obmlSpace.ReplaceAllString(text, " "))
+		text = strings.TrimSpace(strings.Join(strings.Fields(text), " "))
 		if len(blocks) >= maxOBMLBlocks || (text == "" && kind != 6 && kind != 5) {
 			return
 		}
@@ -96,78 +62,101 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		blocks = append(blocks, obmlBlock{kind: kind, text: text, url: link})
 	}
 
-	kind := byte(0)
-	inLink := false
-	linkURL := ""
-	var linkText strings.Builder
-	for _, token := range obmlTags.FindAllString(source, -1) {
-		if strings.HasPrefix(token, "<") {
-			t := strings.ToLower(strings.TrimSpace(token[1:]))
-			closing := strings.HasPrefix(t, "/")
-			if closing {
-				t = strings.TrimSpace(t[1:])
+	var walk func(*html.Node, byte, bool, string)
+	walk = func(n *html.Node, kind byte, inLink bool, linkURL string) {
+		if n.Type == html.TextNode {
+			txt := html.UnescapeString(n.Data)
+			if !inLink {
+				add(kind, txt, "")
 			}
-			nameEnd := strings.IndexAny(t, " />\t\r\n")
-			name := t
-			if nameEnd >= 0 {
-				name = t[:nameEnd]
-			}
-			switch name {
-			case "a":
-				if closing && inLink {
-					add(4, linkText.String(), linkURL)
-					inLink = false
-					linkURL = ""
-					linkText.Reset()
-				} else if !closing {
-					linkURL = obmlAbsolute(pageURL, obmlAttribute(token, "href"))
-					inLink = linkURL != ""
-					linkText.Reset()
-				}
-			case "h1":
-				if !closing {
-					kind = 1
-				} else {
-					kind = 0
-				}
-			case "h2", "h3", "strong", "b":
-				if !closing {
-					kind = 2
-				} else {
-					kind = 0
-				}
-			case "img":
-				if !closing {
-					alt := obmlAttribute(token, "alt")
-					imageURL := obmlAbsolute(pageURL, obmlAttribute(token, "src"))
-					if imageURL != "" {
-						add(5, alt, imageURL)
-					}
-				}
-			case "li":
-				if !closing {
-					add(3, "•", "")
-				}
-			case "p", "div", "br", "hr", "tr":
-				if closing || name == "br" || name == "hr" || name == "p" || name == "div" {
-					if !inLink {
-						add(6, "", "")
-					}
-				}
-			}
-			continue
+			return
 		}
-		txt := html.UnescapeString(token)
-		txt = obmlSpace.ReplaceAllString(txt, " ")
-		if inLink {
-			linkText.WriteString(txt)
-		} else {
-			add(kind, txt, "")
+		if n.Type != html.ElementNode {
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walk(c, kind, inLink, linkURL)
+			}
+			return
+		}
+
+		tag := strings.ToLower(n.Data)
+		if tag == "script" || tag == "style" || tag == "noscript" || tag == "iframe" || tag == "svg" || tag == "canvas" || tag == "video" || tag == "audio" {
+			return
+		}
+
+		newKind := kind
+		switch tag {
+		case "h1":
+			newKind = 1
+		case "h2", "h3", "h4", "h5", "h6", "strong", "b":
+			newKind = 2
+		case "li":
+			add(3, "•", "")
+		case "p", "div", "br", "hr", "tr", "section", "article":
+			if !inLink {
+				add(6, "", "")
+			}
+		}
+
+		if tag == "img" {
+			var src, alt string
+			for _, a := range n.Attr {
+				if strings.EqualFold(a.Key, "src") {
+					src = a.Val
+				}
+				if strings.EqualFold(a.Key, "alt") {
+					alt = a.Val
+				}
+			}
+			imageURL := obmlAbsolute(pageURL, src)
+			if imageURL != "" {
+				add(5, alt, imageURL)
+			}
+			return
+		}
+
+		if tag == "a" {
+			var href string
+			for _, a := range n.Attr {
+				if strings.EqualFold(a.Key, "href") {
+					href = a.Val
+				}
+			}
+			linkURL = obmlAbsolute(pageURL, href)
+			inLink = linkURL != ""
+			var linkText strings.Builder
+			var collect func(*html.Node)
+			collect = func(nn *html.Node) {
+				if nn.Type == html.TextNode {
+					linkText.WriteString(html.UnescapeString(nn.Data))
+				}
+				for c := nn.FirstChild; c != nil; c = c.NextSibling {
+					collect(c)
+				}
+			}
+			collect(n)
+			if inLink {
+				add(4, linkText.String(), linkURL)
+			}
+			return
+		}
+
+		if tag == "title" && title == pageURL {
+			var tb strings.Builder
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				if c.Type == html.TextNode {
+					tb.WriteString(c.Data)
+				}
+			}
+			title = strings.TrimSpace(html.UnescapeString(tb.String()))
+			return
+		}
+
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c, newKind, inLink, linkURL)
 		}
 	}
-	if inLink {
-		add(4, linkText.String(), linkURL)
-	}
+
+	walk(doc, 0, false, "")
 
 	var out bytes.Buffer
 	out.WriteString(obmlMagic)
@@ -200,6 +189,7 @@ func writeOBMLString(out *bytes.Buffer, value string) {
 
 // obmlResponse upgrades opted-in HTML responses to the compact TBO1 block protocol.
 // This is an original, OBML-inspired format, not Opera's proprietary OBML wire format.
+// Improved to preserve more full web content using proper HTML parsing.
 func obmlResponse(resp *http.Response) error {
 	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Format") != "TBO1" ||
 		resp.StatusCode < 200 || resp.StatusCode >= 300 || resp.Body == nil {
