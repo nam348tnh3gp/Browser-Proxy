@@ -2,10 +2,10 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
-	"context"
 	"errors"
 	"io"
 	"log"
