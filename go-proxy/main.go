@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -10,8 +11,8 @@ import (
 	"errors"
 	"io"
 	"log"
-	"net"
 	"mime"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"os"
@@ -63,14 +64,14 @@ func proxyHandlerWithAuth(username, password string) http.Handler {
 			req.Header.Del("Proxy-Connection")
 			req.Header.Set("Via", "1.1 TGFN.BrowserMini")
 		},
-		FlushInterval:  100 * time.Millisecond,
+		FlushInterval: 100 * time.Millisecond,
 		ModifyResponse: func(resp *http.Response) error {
 			if err := compactHTMLResponse(resp); err != nil {
 				return err
 			}
 			return gzipTextResponse(resp)
 		},
-		ErrorLog:       log.New(os.Stderr, "proxy: ", log.LstdFlags),
+		ErrorLog: log.New(os.Stderr, "proxy: ", log.LstdFlags),
 		Transport: &requestTrackingTransport{base: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			ForceAttemptHTTP2:     true,
