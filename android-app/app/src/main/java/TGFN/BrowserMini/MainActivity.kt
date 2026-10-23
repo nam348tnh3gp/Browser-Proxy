@@ -1025,7 +1025,7 @@ class MainActivity : Activity() {
         }
         content.addView(dataSaver)
         content.addView(TextView(this).apply {
-            text = tr("Ảnh và kết nối mạng vẫn bật. Trình duyệt dùng cache theo quy tắc mặc định để website có thể kiểm tra tài nguyên đã hết hạn; không ép dùng HTML/JavaScript cũ và không tự tải lại trang khi bật/tắt. Chế độ này chưa nén dữ liệu như Chrome Lite mode trước đây.", "Images and network access stay enabled. The browser uses the default cache policy, avoids stale HTML/JavaScript, and does not reload pages when toggled. This mode does not compress data like the former Chrome Lite mode.")
+            text = tr("Không chặn ảnh hoặc kết nối mạng; dùng cache mặc định để tránh HTML/JavaScript cũ và không tự tải lại trang khi bật/tắt. Nếu dùng Go HTTP proxy, proxy có thể nén gzip các phản hồi văn bản HTTP chưa nén; HTTPS qua CONNECT vẫn được giữ nguyên để bảo toàn bảo mật và tương thích.", "Images and network access stay enabled; the browser uses the default cache policy to avoid stale HTML/JavaScript and does not reload pages when toggled. When using the Go HTTP proxy, eligible uncompressed HTTP text responses can be gzip-compressed; HTTPS CONNECT traffic remains untouched for security and compatibility.")
             textSize = 12f
             setTextColor(muted)
             setPadding(dp(28), 0, 0, dp(8))
