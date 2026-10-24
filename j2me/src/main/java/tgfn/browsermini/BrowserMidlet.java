@@ -847,8 +847,17 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
             if (kind == 5 && target.length() > 0) {
                 joinNextTableCell = false;
-                result.images.addElement(new ImageRef(label, target));
-                result.blocks.addElement(new RenderBlock("", 5, target));
+                String imageTarget = target;
+                String imageLinkTarget = null;
+                int imageLinkSeparator = target.indexOf((char)31);
+                if (imageLinkSeparator >= 0) {
+                    imageTarget = target.substring(0, imageLinkSeparator);
+                    imageLinkTarget = target.substring(imageLinkSeparator + 1);
+                    if (imageLinkTarget.length() == 0) imageLinkTarget = null;
+                }
+                result.images.addElement(new ImageRef(label, imageTarget));
+                result.blocks.addElement(new RenderBlock(imageTarget, 5, imageLinkTarget));
+                if (imageLinkTarget != null) result.links.addElement(new LinkItem(label, imageLinkTarget));
                 continue;
             }
             if (label.length() == 0) continue;
@@ -1321,7 +1330,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 for (int b = 0; b < sourceBlocks.size(); b++) {
                     RenderBlock block = (RenderBlock)sourceBlocks.elementAt(b);
                     if (block.type == 5) {
-                        lines.addElement(new RenderLine("", 5, block.url));
+                        lines.addElement(new RenderLine(block.text, 5, block.url));
                         continue;
                     }
                     if (block.text.length() == 0) { lines.addElement(new RenderLine("", 0, null)); continue; }
@@ -1335,7 +1344,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             for (int i = 0; i < lines.size(); i++) {
                 RenderLine line = (RenderLine)lines.elementAt(i);
                 if (line.type == 5) {
-                    ImageRef imageRef = findImage(line.url);
+                    ImageRef imageRef = findImage(line.text);
                     if (imageRef != null && imageRef.image != null) {
                         Image toDraw = imageRef.image;
                         int maxImageWidth = Math.max(1, w - 14);
@@ -1348,8 +1357,21 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                             toDraw = imageRef.scaledImage;
                         }
                         int imageHeight = Math.max(1, toDraw.getHeight());
+                        boolean imageFocused = false;
+                        if (line.url != null) {
+                            renderedLinkLines.addElement(new Integer(i));
+                            imageFocused = renderedLinkLines.size() - 1 == selectedLink;
+                        }
                         if (y + imageHeight > contentY && y < contentY + contentH) {
+                            if (imageFocused) {
+                                g.setColor(222, 237, 255);
+                                g.fillRect(5, y, w - 10, imageHeight);
+                            }
                             g.drawImage(toDraw, 7, y, Graphics.TOP | Graphics.LEFT);
+                            if (imageFocused) {
+                                g.setColor(0, 90, 220);
+                                g.drawRect(6, y, Math.min(w - 12, toDraw.getWidth() + 2), imageHeight);
+                            }
                         }
                         y += imageHeight + 4;
                         totalBodyHeight += imageHeight + 4;
