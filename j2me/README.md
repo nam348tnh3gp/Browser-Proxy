@@ -111,3 +111,6 @@ Proxy receives the full mobile page (HTML + CSS), extracts text, links, images, 
 
 ## Client now requests FULL
 Browser sends X-TGFN-Format: FULL so the proxy returns lightly compressed full HTML (structure preserved) instead of semantic TBO1 blocks.
+
+## Prefer TBO1
+Client requests TBO1 by default. Test showed TBO1 renders more completely than FULL on the J2ME side.
