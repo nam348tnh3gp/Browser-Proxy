@@ -1303,7 +1303,12 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 moveMobileLink(1);
                 return;
             }
-            // PicoBrowser-style quick navigation
+            // On image-rendered pages, the center/5 key opens the focused on-page link.
+            if (keyCode == Canvas.KEY_NUM5 && lastPageResult != null && lastPageResult.mobileTiles) {
+                openSelectedLink();
+                return;
+            }
+            // PicoBrowser-style quick navigation for semantic pages.
             if (keyCode == Canvas.KEY_NUM5 || keyCode == Canvas.KEY_NUM8) { // next link
                 moveLink(1);
                 return;
