@@ -72,6 +72,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private Form webForm;
     private Vector activeFormFields;
     private Vector activeFormNames;
+    private Vector activeHiddenNames;
+    private Vector activeHiddenValues;
     private FormRef activeForm;
     private final Command submitWebFormCommand = new Command("Submit", Command.OK, 1);
     private final Command proxyCommand = new Command("Proxy", Command.SCREEN, 8);
@@ -856,10 +858,17 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         activeForm = formRef;
         activeFormFields = new Vector();
         activeFormNames = new Vector();
+        activeHiddenNames = new Vector();
+        activeHiddenValues = new Vector();
         webForm = new Form(formRef.label.length() == 0 ? "Web form" : formRef.label);
         for (int i = 0; i < formRef.fields.size(); i++) {
             FormField field = (FormField)formRef.fields.elementAt(i);
-            if ("hidden".equals(field.type) || field.name.length() == 0) continue;
+            if (field.name.length() == 0) continue;
+            if ("hidden".equals(field.type)) {
+                activeHiddenNames.addElement(field.name);
+                activeHiddenValues.addElement(field.value);
+                continue;
+            }
             int constraints = TextField.ANY;
             if ("password".equals(field.type)) constraints = TextField.PASSWORD;
             else if ("number".equals(field.type) || "tel".equals(field.type)) constraints = TextField.NUMERIC;
@@ -882,6 +891,17 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         if (activeForm == null) return;
         StringBuffer target = new StringBuffer(activeForm.action);
         boolean first = target.toString().indexOf('?') < 0;
+        for (int i = 0; activeHiddenNames != null && i < activeHiddenNames.size(); i++) {
+            try {
+                target.append(first ? '?' : '&'); first = false;
+                target.append(encodeURLComponent((String)activeHiddenNames.elementAt(i)));
+                target.append('=');
+                target.append(encodeURLComponent((String)activeHiddenValues.elementAt(i)));
+            } catch (IOException badEncoding) {
+                showError("Form error", "Could not encode hidden form values.");
+                return;
+            }
+        }
         for (int i = 0; i < activeFormFields.size(); i++) {
             TextField field = (TextField)activeFormFields.elementAt(i);
             String name = (String)activeFormNames.elementAt(i);
