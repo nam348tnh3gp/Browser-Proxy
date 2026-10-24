@@ -198,6 +198,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     if (resultError == null) {
                         currentUrl = url;
                         currentTitle = resultTitle;
+                        if (browserCanvas != null) browserCanvas.resetLinkFocus();
                         if (addHistory) {
                             while (history.size() > historyIndex + 1) {
                                 history.removeElementAt(history.size() - 1);
@@ -1196,7 +1197,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     LinkItem link = (LinkItem)lastPageResult.links.elementAt(li);
                     if (link.x < 0 || link.y < 0 || link.width <= 0 || link.height <= 0) continue;
                     int lx = (int)(link.x * mobileScale);
-                    int ly = mobileImageTop + (int)(link.y * mobileScale) - scrollY;
+                    int ly = mobileImageTop + (int)(link.y * mobileScale);
                     int lw = Math.max(2, (int)(link.width * mobileScale));
                     int lh = Math.max(2, (int)(link.height * mobileScale));
                     if (ly + lh < contentY || ly > contentY + contentH) continue;
@@ -1374,6 +1375,12 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
         }
 
+        private void resetLinkFocus() {
+            selectedLink = -1;
+            scrollY = 0;
+            repaint();
+        }
+
         private void moveMobileLink(int dir) {
             if (lastPageResult == null || lastPageResult.links == null || lastPageResult.links.size() == 0) {
                 scrollY = Math.max(0, Math.min(Math.max(0, totalBodyHeight - (getHeight() - 90)), scrollY + dir * 30));
@@ -1388,8 +1395,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
             LinkItem link = (LinkItem)lastPageResult.links.elementAt(selectedLink);
             if (link.y >= 0) {
-                int top = (int)(link.y * ((float)(getWidth() - 14) / 240.0f));
-                int bottom = top + Math.max(1, (int)(link.height * ((float)(getWidth() - 14) / 240.0f)));
+                float pageScale = (float)getWidth() / 240.0f;
+                int top = (int)(link.y * pageScale);
+                int bottom = top + Math.max(1, (int)(link.height * pageScale));
                 int visible = Math.max(1, getHeight() - 90);
                 if (top < scrollY) scrollY = top;
                 else if (bottom > scrollY + visible) scrollY = Math.max(0, bottom - visible);
