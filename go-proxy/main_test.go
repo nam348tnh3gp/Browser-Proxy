@@ -325,3 +325,23 @@ func TestSharedSourceIPIsMarkedAmbiguousInsteadOfMisattributed(t *testing.T) {
 		t.Fatalf("spoofed header changed registered client count to %d", got)
 	}
 }
+
+
+func TestReRegisteringClientRemovesStaleIPMapping(t *testing.T) {
+	resetClientTrackingForTest()
+	if !registerClient("192.0.2.21:1000", "moving-device-1111") {
+		t.Fatal("initial registration failed")
+	}
+	if !registerClient("192.0.2.22:1000", "other-device-2222") {
+		t.Fatal("second registration failed")
+	}
+	if !registerClient("192.0.2.23:1000", "moving-device-1111") {
+		t.Fatal("updated registration failed")
+	}
+	if got := clientIDFromRemoteAddr("192.0.2.21:5000"); got != "" {
+		t.Fatalf("old IP still maps to moved client %q; want no attribution", got)
+	}
+	if got := clientIDFromRemoteAddr("192.0.2.23:5000"); got != "moving-device-1111" {
+		t.Fatalf("new IP maps to %q; want moving-device-1111", got)
+	}
+}
