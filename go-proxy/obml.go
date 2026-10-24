@@ -62,23 +62,6 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 	title := pageURL
 	var blocks []obmlBlock
 	tableRowCells := 0
-	setLastPos := func(n *xhtml.Node) {
-		if len(blocks) == 0 || n == nil {
-			return
-		}
-		x := attr(n, "data-obml-x")
-		y := attr(n, "data-obml-y")
-		w := attr(n, "data-obml-w")
-		h := attr(n, "data-obml-h")
-		if x == "" {
-			return
-		}
-		last := &blocks[len(blocks)-1]
-		fmt.Sscanf(x, "%d", &last.x)
-		fmt.Sscanf(y, "%d", &last.y)
-		fmt.Sscanf(w, "%d", &last.w)
-		fmt.Sscanf(h, "%d", &last.h)
-	}
 	add := func(kind byte, text, link string) {
 		if kind != 7 {
 			text = strings.TrimSpace(strings.Join(strings.Fields(text), " "))
@@ -141,6 +124,24 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		style := strings.ToLower(strings.ReplaceAll(attr(n, "style"), " ", ""))
 		return strings.Contains(style, "display:none") || strings.Contains(style, "visibility:hidden")
 	}
+	setLastPos := func(n *xhtml.Node) {
+		if len(blocks) == 0 || n == nil {
+			return
+		}
+		x := attr(n, "data-obml-x")
+		y := attr(n, "data-obml-y")
+		w := attr(n, "data-obml-w")
+		h := attr(n, "data-obml-h")
+		if x == "" {
+			return
+		}
+		last := &blocks[len(blocks)-1]
+		fmt.Sscanf(x, "%d", &last.x)
+		fmt.Sscanf(y, "%d", &last.y)
+		fmt.Sscanf(w, "%d", &last.w)
+		fmt.Sscanf(h, "%d", &last.h)
+	}
+
 	// Extract simple inline stylesheet background images so banners and logos
 	// implemented with CSS are retained in the compact document flow.
 	cssBackgrounds := make(map[string]string)
