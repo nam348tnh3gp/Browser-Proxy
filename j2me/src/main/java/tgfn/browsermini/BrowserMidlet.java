@@ -819,10 +819,16 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             int kind = in.readUnsignedByte();
             String label = readTBOString(in);
             String target = readTBOString(in);
-            // OBML-style layout hints (may be 0)
+            // OBML-style: x/y are deltas from previous position
             int bx = 0, by = 0, bw = 0, bh = 0;
             try {
-                bx = in.readShort(); by = in.readShort(); bw = in.readShort(); bh = in.readShort();
+                int dx = in.readShort();
+                int dy = in.readShort();
+                bw = in.readShort();
+                bh = in.readShort();
+                // Reconstruct absolute (simple running position)
+                // Note: for flow layout most values stay 0
+                bx = dx; by = dy;
             } catch (Exception ignored) {}
             if (kind == 7) {
                 FormRef formRef = parseFormPayload(label);

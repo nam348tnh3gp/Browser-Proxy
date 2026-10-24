@@ -626,15 +626,19 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 	out.WriteString(obmlMagic)
 	writeOBMLString(&out, title)
 	_ = binary.Write(&out, binary.BigEndian, uint16(len(blocks)))
+	// OBML-style: positions are deltas from the previous position
+	prevX, prevY := 0, 0
 	for _, b := range blocks {
 		out.WriteByte(b.kind)
 		writeOBMLString(&out, b.text)
 		writeOBMLString(&out, b.url)
-		// OBML-style layout hint (0,0,0,0 = use flow)
-		_ = binary.Write(&out, binary.BigEndian, int16(b.x))
-		_ = binary.Write(&out, binary.BigEndian, int16(b.y))
+		dx := b.x - prevX
+		dy := b.y - prevY
+		_ = binary.Write(&out, binary.BigEndian, int16(dx))
+		_ = binary.Write(&out, binary.BigEndian, int16(dy))
 		_ = binary.Write(&out, binary.BigEndian, int16(b.w))
 		_ = binary.Write(&out, binary.BigEndian, int16(b.h))
+		prevX, prevY = b.x, b.y
 	}
 	return out.Bytes(), nil
 }

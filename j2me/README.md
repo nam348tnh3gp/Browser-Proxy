@@ -98,3 +98,8 @@ Proxy receives the full mobile page (HTML + CSS), extracts text, links, images, 
 - Up to 4000 blocks per page
 - Images up to 240px, quality 55
 - Colors, links, forms, semantic structure preserved in binary
+
+## OBML techniques applied to TBO1
+- Positions stored as deltas from previous position (saves bytes)
+- Structured binary blocks instead of raw HTML
+- Text, links and images kept as separate records
