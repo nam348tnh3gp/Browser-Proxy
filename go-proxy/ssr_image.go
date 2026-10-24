@@ -110,8 +110,8 @@ func ssrImageResponse(resp *http.Response) error {
 		emulation.SetTouchEmulationEnabled(true),
 		emulation.SetUserAgentOverride("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"),
 		chromedp.Navigate(pageURL),
-		chromedp.Sleep(2800*time.Millisecond),
-		chromedp.FullScreenshot(&buf, 36),
+		chromedp.Sleep(650*time.Millisecond),
+		chromedp.FullScreenshot(&buf, 55),
 		chromedp.Evaluate(`
 			(function() {
 				var out = [];
@@ -168,7 +168,7 @@ func ssrImageResponse(resp *http.Response) error {
 		tile := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), endY-y))
 		draw.Draw(tile, tile.Bounds(), img, image.Point{X: bounds.Min.X, Y: bounds.Min.Y + y}, draw.Src)
 		var encoded bytes.Buffer
-		if err := jpeg.Encode(&encoded, tile, &jpeg.Options{Quality: 36}); err != nil {
+		if err := jpeg.Encode(&encoded, tile, &jpeg.Options{Quality: 55}); err != nil {
 			return err
 		}
 		tiles = append(tiles, encoded.Bytes())
