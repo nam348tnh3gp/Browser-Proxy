@@ -41,8 +41,10 @@ var (
 	proxyProcessStartedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	clientTracking        struct {
 		sync.RWMutex
-		idByIP map[string]string
-		stats  map[string]*clientCounterSet
+		idByIP       map[string]string
+		ambiguousIPs map[string]bool
+		registeredIDs map[string]struct{}
+		stats        map[string]*clientCounterSet
 	}
 	proxyStats clientCounterSet
 )
@@ -69,7 +71,7 @@ func currentProxyStats() proxyStatsSnapshot {
 func snapshotCounters(c *clientCounterSet) proxyStatsSnapshot {
 	original := c.gzipOriginalBytes.Load()
 	clientTracking.RLock()
-	registeredClients := len(clientTracking.stats)
+	registeredClients := len(clientTracking.registeredIDs)
 	clientTracking.RUnlock()
 	compressed := c.gzipCompressedBytes.Load()
 	return proxyStatsSnapshot{
@@ -103,6 +105,11 @@ func clientCounters(id string) *clientCounterSet {
 	}
 	clientTracking.Lock()
 	defer clientTracking.Unlock()
+	// Only IDs that successfully registered may own per-client counters.
+	// This prevents arbitrary X-TGFN-Client-ID headers from creating phantom devices.
+	if _, registered := clientTracking.registeredIDs[id]; !registered {
+		return nil
+	}
 	if clientTracking.stats == nil {
 		clientTracking.stats = make(map[string]*clientCounterSet)
 	}
@@ -112,15 +119,44 @@ func clientCounters(id string) *clientCounterSet {
 	return clientTracking.stats[id]
 }
 
+func normalizeClientIP(host string) string {
+	// Canonicalize IPv4-mapped IPv6 and strip an IPv6 zone so registration and
+	// subsequent requests use the same map key regardless of address spelling.
+	if i := strings.LastIndex(host, "%"); i >= 0 {
+		host = host[:i]
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			return ipv4.String()
+		}
+		return ip.String()
+	}
+	return strings.ToLower(host)
+}
+
 func clientIDFromRemoteAddr(remoteAddr string) string {
 	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
 		return ""
 	}
+	host = normalizeClientIP(host)
 	clientTracking.RLock()
-	id := clientTracking.idByIP[host]
-	clientTracking.RUnlock()
-	return id
+	defer clientTracking.RUnlock()
+	if clientTracking.ambiguousIPs[host] {
+		return ""
+	}
+	if id := clientTracking.idByIP[host]; id != "" {
+		return id
+	}
+	// If this proxy has only one registered installation, use it as a safe
+	// fallback when registration and browser traffic arrive over different
+	// local/interface addresses. Never guess when multiple IDs are registered.
+	if len(clientTracking.registeredIDs) == 1 {
+		for id := range clientTracking.registeredIDs {
+			return id
+		}
+	}
+	return ""
 }
 
 func registerClient(remoteAddr, id string) bool {
@@ -136,29 +172,55 @@ func registerClient(remoteAddr, id string) bool {
 	if err != nil || host == "" {
 		return false
 	}
+	host = normalizeClientIP(host)
 	clientTracking.Lock()
 	defer clientTracking.Unlock()
 	if clientTracking.idByIP == nil {
 		clientTracking.idByIP = make(map[string]string)
 	}
+	if clientTracking.ambiguousIPs == nil {
+		clientTracking.ambiguousIPs = make(map[string]bool)
+	}
+	if clientTracking.registeredIDs == nil {
+		clientTracking.registeredIDs = make(map[string]struct{})
+	}
 	if clientTracking.stats == nil {
 		clientTracking.stats = make(map[string]*clientCounterSet)
 	}
-	clientTracking.idByIP[host] = id
+	if existing := clientTracking.idByIP[host]; existing != "" && existing != id {
+		// A source IP shared by different installations cannot identify a client.
+		// Mark it ambiguous instead of silently charging all traffic to the last ID.
+		delete(clientTracking.idByIP, host)
+		clientTracking.ambiguousIPs[host] = true
+	} else if !clientTracking.ambiguousIPs[host] {
+		clientTracking.idByIP[host] = id
+	}
+	clientTracking.registeredIDs[id] = struct{}{}
 	if clientTracking.stats[id] == nil {
 		clientTracking.stats[id] = &clientCounterSet{}
 	}
 	return true
 }
 
+func isRegisteredClient(id string) bool {
+	if id == "" {
+		return false
+	}
+	clientTracking.RLock()
+	_, ok := clientTracking.registeredIDs[id]
+	clientTracking.RUnlock()
+	return ok
+}
+
 func clientIDFromRequest(r *http.Request) string {
 	if r == nil {
 		return ""
 	}
-	if id := r.Header.Get("X-TGFN-Client-ID"); id != "" {
+	// Never trust an arbitrary request header as a device identity.
+	if id := r.Header.Get("X-TGFN-Client-ID"); isRegisteredClient(id) {
 		return id
 	}
-	if id, ok := r.Context().Value(clientContextKey{}).(string); ok {
+	if id, ok := r.Context().Value(clientContextKey{}).(string); ok && isRegisteredClient(id) {
 		return id
 	}
 	return clientIDFromRemoteAddr(r.RemoteAddr)
