@@ -193,7 +193,7 @@ func ssrImageResponse(resp *http.Response) error {
 	resp.Header.Set("Content-Type", "application/x-tgfn-imgl")
 	resp.Header.Set("Content-Length", itoa(packet.Len()))
 	resp.Header.Del("Content-Encoding")
-	fmt.Println("[SSRIMG] OK jpeg=", jpegBuf.Len(), "links=", len(links))
+	fmt.Println("[SSRIMG] OK tiles=", len(tiles), "bytes=", packet.Len(), "links=", len(links))
 	return nil
 }
 
