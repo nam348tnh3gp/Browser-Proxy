@@ -2,12 +2,12 @@
 
 A lightweight Android browser prototype with a Kotlin/WebView client and a standalone Go HTTP forward proxy.
 
-> **J2ME Upgrade (branch J2ME)**: Comprehensive enhancement of the Go proxy and J2ME client for better page compression. The proxy now uses proper HTML parsing to extract and send fuller web content in a compact TBO1 binary format (inspired by Opera Mini 4.x OBML), preserving more text, links, headings and images while remaining efficient for feature phones. Still full readable web content, not a full modern browser engine.
+> **J2ME Upgrade (branch J2ME)**: Comprehensive enhancement of the Go proxy and J2ME client for better page compression. The proxy now supports MOB1 mobile rendering (Chromium screenshot tiles with inline link hitboxes and keypad focus) with TBO1 semantic-block fallback for feature phones. This is an Opera Mini-inspired approach, not Opera OBML compatibility.
 
 ## Project layout
 
 - `android-app/` — Android application (Kotlin, WebView, AndroidX WebKit).
-- `go-proxy/` — standalone HTTP forward proxy with timeouts, HTTPS CONNECT tunneling, and improved server-side compact/TBO1 mode for J2ME (now with net/html for fuller extraction).
+- `go-proxy/` — standalone HTTP forward proxy with timeouts, HTTPS CONNECT tunneling, MOB1 mobile rendering, and TBO1 semantic fallback for J2ME.
 - `j2me/` — standalone Java ME/MIDP 2.0 browser for compatible feature phones, with basic images/links, bookmarks, and optional HTTP proxy settings; separate from Android.
 - `.github/workflows/build.yml` — builds the Android debug APK and Go proxy on pushes and pull requests.
 - `.github/workflows/build-j2me.yml` — independently builds the J2ME development JAR.
@@ -29,7 +29,7 @@ The browser uses Android System WebView; it is not the full Chromium desktop/mob
 
 ## J2ME feature-phone version (upgraded)
 
-See [`j2me/README.md`](j2me/README.md) for details. The proxy compresses pages into TBO1 binary blocks for full content delivery on low-resource devices, similar in concept to Opera Mini 4.x.
+See [`j2me/README.md`](j2me/README.md) for details. The J2ME client requests MOB1: the proxy renders at a mobile viewport with Chromium when available, compresses the page into full-width JPEG tiles, and sends link hitboxes for directional-key selection. If rendering is unavailable, TBO1 sends semantic blocks and supported GET forms.
 
 ## Run the Go proxy
 
@@ -42,6 +42,6 @@ By default it listens on `127.0.0.1:8080`. To allow a phone to connect over a tr
 
 ## Important limitations
 
-- The Go proxy offers an improved opt-in TBO1 compact mode for the J2ME client that preserves more of the original page content.
+- The J2ME client uses MOB1 mobile screenshots when Chromium is available and falls back to TBO1 semantic blocks.
 - This is not Opera Mini's proprietary cloud rendering/OBML system.
 - Use only trusted proxies.
