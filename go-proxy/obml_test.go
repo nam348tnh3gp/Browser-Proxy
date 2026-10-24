@@ -67,6 +67,51 @@ func TestBuildOBMLPageKeepsCSSBannersAndLazyImages(t *testing.T) {
 	}
 }
 
+func TestBuildOBMLPagePreservesTypographyStyles(t *testing.T) {
+	source := `<!doctype html><html><body>
+		<h3>Heading</h3><em>Italic</em><code>Code</code><blockquote>Quoted</blockquote>
+		<hr><del>Removed</del><mark>Highlighted</mark><u>Underlined</u>
+		<small>Small</small><big>Large</big>
+		<span style="text-decoration: underline">CSS underline</span>
+	</body></html>`
+	packet, err := buildOBMLPage("https://example.test/", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := bytes.NewReader(packet[4:])
+	readString := func() string {
+		var length uint16
+		if err := binary.Read(reader, binary.BigEndian, &length); err != nil {
+			t.Fatalf("read compact string length: %v", err)
+		}
+		value := make([]byte, int(length))
+		if _, err := io.ReadFull(reader, value); err != nil {
+			t.Fatalf("read compact string: %v", err)
+		}
+		return string(value)
+	}
+	_ = readString() // title
+	var count uint16
+	if err := binary.Read(reader, binary.BigEndian, &count); err != nil {
+		t.Fatal(err)
+	}
+	found := make(map[byte]bool)
+	for i := 0; i < int(count); i++ {
+		kind, err := reader.ReadByte()
+		if err != nil {
+			t.Fatalf("read block %d kind: %v", i, err)
+		}
+		_ = readString()
+		_ = readString()
+		found[kind] = true
+	}
+	for _, kind := range []byte{10, 11, 12, 13, 14, 15, 16, 17, 18, 19} {
+		if !found[kind] {
+			t.Errorf("missing typography block kind %d", kind)
+		}
+	}
+}
+
 func TestBuildOBMLPageCoalescesInlineTextForMobileReflow(t *testing.T) {
 	source := `<!doctype html><html><body><p>one <span>two</span> three</p></body></html>`
 	packet, err := buildOBMLPage("https://example.test/", source)
