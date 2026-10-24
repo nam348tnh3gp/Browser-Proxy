@@ -144,6 +144,10 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			return 19
 		case strings.Contains(value, "background-color:yellow"), strings.Contains(value, "background-color:#ff0"), strings.Contains(value, "background-color:#ffff00"):
 			return 16
+		case strings.Contains(value, "text-align:center"):
+			return 20
+		case strings.Contains(value, "text-align:right"):
+			return 21
 		}
 		return 0
 	}
@@ -364,6 +368,8 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 
 		newKind := kind
 		switch tag {
+		case "center":
+			newKind = 20
 		case "h1":
 			newKind = 1
 		case "h2", "strong", "b":
@@ -434,6 +440,11 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		if strings.Contains(inlineStyle, "font-size:larger") || strings.Contains(inlineStyle, "font-size: larger") ||
 			strings.Contains(inlineStyle, "font-size:x-large") || strings.Contains(inlineStyle, "font-size: x-large") {
 			newKind = 19
+		}
+		if strings.Contains(inlineStyle, "text-align:center") || strings.Contains(inlineStyle, "text-align: center") || strings.EqualFold(attr(n, "align"), "center") {
+			newKind = 20
+		} else if strings.Contains(inlineStyle, "text-align:right") || strings.Contains(inlineStyle, "text-align: right") || strings.EqualFold(attr(n, "align"), "right") {
+			newKind = 21
 		}
 		if bg := backgroundFor(n); bg != "" && tag != "html" && tag != "head" && tag != "style" {
 			if imageURL := obmlAbsolute(pageURL, bg); imageURL != "" {
