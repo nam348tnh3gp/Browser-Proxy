@@ -58,6 +58,8 @@ type proxyStatsSnapshot struct {
 	ConnectTunnels          int64  `json:"connect_tunnels"`
 	ConnectClientToUpstream int64  `json:"connect_client_to_upstream_bytes"`
 	ConnectUpstreamToClient int64  `json:"connect_upstream_to_client_bytes"`
+	RegisteredClients       int    `json:"registered_clients"`
+	ClientID                string `json:"client_id,omitempty"`
 }
 
 func currentProxyStats() proxyStatsSnapshot {
@@ -66,6 +68,9 @@ func currentProxyStats() proxyStatsSnapshot {
 
 func snapshotCounters(c *clientCounterSet) proxyStatsSnapshot {
 	original := c.gzipOriginalBytes.Load()
+	clientTracking.RLock()
+	registeredClients := len(clientTracking.stats)
+	clientTracking.RUnlock()
 	compressed := proxyStats.gzipCompressedBytes.Load()
 	return proxyStatsSnapshot{
 		ProcessStartedAt:        proxyProcessStartedAt,
@@ -78,6 +83,7 @@ func snapshotCounters(c *clientCounterSet) proxyStatsSnapshot {
 		ConnectTunnels:          c.connectTunnels.Load(),
 		ConnectClientToUpstream: c.connectClientToUpstream.Load(),
 		ConnectUpstreamToClient: c.connectUpstreamToClient.Load(),
+		RegisteredClients:       registeredClients,
 	}
 }
 
@@ -258,6 +264,7 @@ func proxyHandlerWithAuth(username, password string) http.Handler {
 				} else {
 					stats = snapshotCounters(&clientCounterSet{})
 				}
+				stats.ClientID = id
 			}
 			if err := json.NewEncoder(w).Encode(stats); err != nil {
 				log.Printf("stats response failed: %v", err)
