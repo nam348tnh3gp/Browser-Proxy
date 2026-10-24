@@ -24,7 +24,7 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 
 1. Client requests page with `X-TGFN-Format: MOB1`, including HTTPS pages through `/__tgfn/fetch`.
 2. When Chromium is available, the Go proxy opens the page at a 240×500 mobile viewport with mobile device emulation, so responsive CSS/media queries and mobile layout are applied before capture.
-3. The viewport is JPEG-compressed and sent in the compact `IMGL` envelope with extracted links; the MIDP client displays the rendered page image and exposes links through keypad navigation and the Links menu.
+3. The complete mobile page is captured as a scrollable sequence of 240-pixel-wide, 500-pixel-high JPEG tiles in the compact `IML2` envelope, with extracted links. The MIDP client stacks the tiles vertically and exposes links through keypad navigation and the Links menu.
 4. If Chromium is unavailable or rendering fails, the proxy falls back to TBO1 semantic blocks and native MIDP GET forms. TBO1 image references use `/__tgfn/img` for resizing and JPEG compression.
 5. This approach prioritizes faithful mobile appearance on devices that cannot run a modern HTML/CSS engine; the rendered image itself is static, while navigation is handled separately through the link list.
 
@@ -54,7 +54,7 @@ Use **Menu → Links** to navigate.
 
 ## Limits
 
-- MOB1 screenshot is static after capture; interaction is through the extracted link list, not pixel-position click mapping.
+- MOB1 screenshot is static after capture; interaction is through the extracted link list, not pixel-position click mapping. Very long pages are bounded to 32 tiles to protect older handset memory.
 - MOB1 uses Chromium when available; without it, TBO1 fallback retains readable content and native GET forms.
 - Layout preservation is semantic and mobile-first: headings, paragraphs, lists, navigation, footer content, links, and table rows/cells are retained and reflowed for narrow screens. Inline `display:none` / `visibility:hidden` is filtered. External CSS, complex grid/flex positioning, exact colors, and pixel-perfect desktop CSS are not reproduced.
 - Common GET forms are supported; POST forms, JavaScript-driven forms, file uploads, and full checkbox/radio/select semantics are not yet browser-equivalent.
