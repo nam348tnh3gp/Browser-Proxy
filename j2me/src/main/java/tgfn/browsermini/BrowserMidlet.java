@@ -885,7 +885,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 result.links.addElement(new LinkItem(label, target));
                 result.blocks.addElement(new RenderBlock(label, 4, target));
             } else {
-                int style = (kind >= 0 && kind <= 3) || (kind >= 10 && kind <= 19) ? kind : 0;
+                int style = (kind >= 0 && kind <= 3) || (kind >= 10 && kind <= 21) ? kind : 0;
                 result.blocks.addElement(new RenderBlock(label, style, null));
             }
             if (text.length() > 0) text.append('\n');
@@ -1426,13 +1426,26 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 g.setColor(line.url != null ? 0 : (line.type == 1 ? 20 : (line.type == 2 || line.type == 14 ? 30 : (line.type == 12 ? 65 : 35))),
                            line.url != null ? 72 : (line.type == 1 ? 65 : (line.type == 2 || line.type == 14 ? 55 : 43)),
                            line.url != null ? 160 : (line.type == 1 ? 115 : (line.type == 2 || line.type == 14 ? 90 : 52)));
-                g.drawString(line.text, tx, y, Graphics.TOP | Graphics.LEFT);
+                int textX = tx;
+                int textAnchor = Graphics.LEFT;
+                if (line.type == 20) {
+                    textX = w / 2;
+                    textAnchor = Graphics.HCENTER;
+                } else if (line.type == 21) {
+                    textX = w - 7;
+                    textAnchor = Graphics.RIGHT;
+                }
+                g.drawString(line.text, textX, y, Graphics.TOP | textAnchor);
                 int textWidth = lineFont.stringWidth(line.text);
                 if (line.url != null || line.type == 17) {
                     g.setColor(line.url != null ? 0 : 65, line.url != null ? 72 : 95, line.url != null ? 160 : 125);
-                    g.drawLine(tx, y + lineFont.getHeight() - 1, tx + textWidth, y + lineFont.getHeight() - 1);
+                    int underlineX = line.type == 20 ? textX - textWidth / 2 : (line.type == 21 ? textX - textWidth : tx);
+                    g.drawLine(underlineX, y + lineFont.getHeight() - 1, underlineX + textWidth, y + lineFont.getHeight() - 1);
                 }
-                if (line.type == 15) g.drawLine(tx, y + lineFont.getHeight() / 2, tx + textWidth, y + lineFont.getHeight() / 2);
+                if (line.type == 15) {
+                    int strikeX = line.type == 20 ? textX - textWidth / 2 : (line.type == 21 ? textX - textWidth : tx);
+                    g.drawLine(strikeX, y + lineFont.getHeight() / 2, strikeX + textWidth, y + lineFont.getHeight() / 2);
+                }
                 y += lineHeight;
                 totalBodyHeight += lineHeight;
             }
