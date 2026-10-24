@@ -800,7 +800,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         result.blocks = new Vector();
         result.title = readTBOString(in);
         int count = in.readUnsignedShort();
-        if (count > 1100) throw new IOException("Too many compact page blocks");
+        if (count > 2500) throw new IOException("Too many compact page blocks");
         StringBuffer text = new StringBuffer();
         boolean joinNextTableCell = false;
         for (int i = 0; i < count; i++) {
@@ -1113,7 +1113,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             writer.write("Host: " + requestHost + "\r\n");
             writer.write("User-Agent: TGFN-BrowserMini-J2ME/2.1\r\n");
             writer.write("Accept: application/x-tgfn-obml,image/jpeg,image/*,text/html,text/plain,*/*\r\n");
-            if (!internalResource) writer.write("X-TGFN-Format: FULL\r\n");
+            if (!internalResource) writer.write("X-TGFN-Format: TBO1\r\n");
             writer.write("Connection: close\r\n\r\n");
             writer.flush();
             String status = readAsciiLine(input);

@@ -75,3 +75,11 @@ Client now requests `X-TGFN-Format: FULL` by default.
 - Keeps original HTML structure, links, forms, semantic tags and images.
 - Makes URLs absolute and routes images through compression.
 - Returns minified plain HTML that the J2ME parser can process directly.
+
+## TBO1 full-web compressed mode
+
+Client defaults to **TBO1**. The proxy converts the full mobile HTML into a compact binary while preserving:
+- Headings, bold/italic, lists, paragraphs, tables
+- Links and images (compressed)
+- Forms (GET)
+- More content per page (up to 2500 blocks)

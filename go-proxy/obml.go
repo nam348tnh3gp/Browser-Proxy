@@ -15,7 +15,7 @@ import (
 )
 
 const obmlMagic = "TBO1"
-const maxOBMLBlocks = 1100
+const maxOBMLBlocks = 2500
 const maxOBMLString = 65535
 
 type obmlBlock struct {
