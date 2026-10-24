@@ -51,7 +51,9 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 	title := pageURL
 	var blocks []obmlBlock
 	add := func(kind byte, text, link string) {
-		text = strings.TrimSpace(strings.Join(strings.Fields(text), " "))
+		if kind != 7 {
+			text = strings.TrimSpace(strings.Join(strings.Fields(text), " "))
+		}
 		if len(blocks) >= maxOBMLBlocks || (text == "" && kind != 6 && kind != 5 && kind != 7) {
 			return
 		}
