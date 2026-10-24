@@ -24,7 +24,7 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 
 1. The J2ME client requests TBO1; the proxy does not start Chromium.
 2. The proxy asks the website for its mobile HTML variant, parses returned HTML into bounded semantic records, resolves links and image URLs, and encodes them in the compact TBO1 binary envelope.
-3. The MIDP client lays out text and links to its own screen width and turns supported GET forms into native Java ME input fields. It can navigate without downloading screenshot tiles or decoding large page images.
+3. The MIDP client lays out text and links to its own screen width. Form field labels/types are shown inline in the document flow; selecting a field opens the native Java ME form editor for editing and GET submission. It can navigate without downloading screenshot tiles or decoding large page images.
 4. Images are fetched and resized separately by the proxy. CSS and JavaScript are not executed; the renderer reconstructs a readable mobile layout from HTML structure rather than reproducing arbitrary browser CSS.
 
 ## OBML references and compatibility
