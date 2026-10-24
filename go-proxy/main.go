@@ -25,7 +25,7 @@ import (
 
 var (
 	proxyProcessStartedAt = time.Now().UTC().Format(time.RFC3339)
-	proxyStats struct {
+	proxyStats            struct {
 		httpRequests             atomic.Int64
 		httpResponseBytes        atomic.Int64
 		gzipResponses            atomic.Int64
