@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +25,9 @@ const ssrImageMode = "SSRIMG"
 const imglMagic = "IML2"
 const maxMobileTiles = 32
 const mobileTileHeight = 500
+const defaultMobileViewportWidth = 240
+const minMobileViewportWidth = 160
+const maxMobileViewportWidth = 360
 const maxMobilePacketBytes = 3 << 20
 
 var chromeCandidates = []string{
@@ -89,9 +93,10 @@ func ssrImageResponse(resp *http.Response) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
 	defer cancel()
 
+	viewportWidth := mobileViewportWidth(resp.Request.Header.Get("X-TGFN-Viewport-Width"))
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.ExecPath(chromePath),
-		chromedp.WindowSize(240, 500),
+		chromedp.WindowSize(viewportWidth, 500),
 		chromedp.DisableGPU,
 		chromedp.NoSandbox,
 		chromedp.Headless,
@@ -106,7 +111,7 @@ func ssrImageResponse(resp *http.Response) error {
 	var buf []byte
 	var links []pageLink
 	err := chromedp.Run(chromeCtx,
-		emulation.SetDeviceMetricsOverride(240, 500, 1, true),
+		emulation.SetDeviceMetricsOverride(viewportWidth, 500, 1, true),
 		emulation.SetTouchEmulationEnabled(true),
 		emulation.SetUserAgentOverride("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"),
 		chromedp.Navigate(pageURL),
@@ -148,15 +153,14 @@ func ssrImageResponse(resp *http.Response) error {
 	if err != nil {
 		return err
 	}
-	img = resizeMobileImage(img, 240)
+	img = resizeMobileImage(img, viewportWidth)
 	bounds := img.Bounds()
 	tileCount := (bounds.Dy() + mobileTileHeight - 1) / mobileTileHeight
 	if tileCount > maxMobileTiles {
-		// Bound MIDP memory use while retaining a tall, scrollable mobile page.
-		newHeight := maxMobileTiles * mobileTileHeight
-		img = resizeMobileImageHeight(img, newHeight)
-		bounds = img.Bounds()
-		tileCount = (bounds.Dy() + mobileTileHeight - 1) / mobileTileHeight
+		// Preserve the captured page scale and hitbox coordinates. Older MIDP
+		// devices cannot safely hold an unlimited number of decoded image tiles.
+		bounds = image.Rect(bounds.Min.X, bounds.Min.Y, bounds.Max.X, bounds.Min.Y+maxMobileTiles*mobileTileHeight)
+		tileCount = maxMobileTiles
 	}
 
 	var tiles [][]byte
@@ -185,6 +189,21 @@ func ssrImageResponse(resp *http.Response) error {
 	resp.Header.Del("Content-Encoding")
 	fmt.Println("[SSRIMG] OK tiles=", len(tiles), "bytes=", len(packet), "links=", len(links))
 	return nil
+}
+
+// mobileViewportWidth accepts the MIDP canvas width while bounding Chromium memory use.
+func mobileViewportWidth(value string) int {
+	width := defaultMobileViewportWidth
+	if n, err := strconv.Atoi(strings.TrimSpace(value)); err == nil {
+		width = n
+	}
+	if width < minMobileViewportWidth {
+		return minMobileViewportWidth
+	}
+	if width > maxMobileViewportWidth {
+		return maxMobileViewportWidth
+	}
+	return width
 }
 
 // encodeMobilePacket serializes the IML2 image tiles and their on-page link hitboxes.
