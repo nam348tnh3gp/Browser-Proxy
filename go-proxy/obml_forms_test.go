@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"bytes"
 	"io"
 	"net/http"
