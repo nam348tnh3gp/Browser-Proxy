@@ -1176,7 +1176,18 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                         Image toDraw = ref.image;
                         // Mobile page tiles fill the complete display width; ordinary images stay inset.
                         int targetImageWidth = lastPageResult.mobileTiles ? w : w - 14;
-                        if (toDraw.getWidth() != targetImageWidth && (lastPageResult.mobileTiles || toDraw.getWidth() > targetImageWidth)) {
+                        if (lastPageResult.mobileTiles) {
+                            // Cache scaled mobile tiles: paint() runs on every key/repaint and
+                            // per-pixel MIDP scaling on every frame causes severe keypad lag.
+                            if (ref.scaledImage == null || ref.scaledWidth != targetImageWidth) {
+                                int newH = ref.image.getHeight() * targetImageWidth / ref.image.getWidth();
+                                if (newH < 1) newH = 1;
+                                ref.scaledImage = targetImageWidth == ref.image.getWidth()
+                                    ? ref.image : scaleImage(ref.image, targetImageWidth, newH);
+                                ref.scaledWidth = targetImageWidth;
+                            }
+                            toDraw = ref.scaledImage;
+                        } else if (toDraw.getWidth() > targetImageWidth) {
                             int newH = toDraw.getHeight() * targetImageWidth / toDraw.getWidth();
                             if (newH < 1) newH = 1;
                             toDraw = scaleImage(toDraw, targetImageWidth, newH);
@@ -1451,6 +1462,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         String alt;
         String url;
         Image image;
+        Image scaledImage;
+        int scaledWidth = -1;
         ImageRef(String alt, String url) {
             this.alt = alt == null ? "" : alt;
             this.url = url;
