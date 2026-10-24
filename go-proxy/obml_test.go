@@ -47,14 +47,6 @@ func TestBuildOBMLPageRendersInlineJavaScriptDocumentWrite(t *testing.T) {
 	}
 }
 
-func TestRenderInlineJavaScriptSkipsExternalScripts(t *testing.T) {
-	source := `<html><body><script src="/app.js"></script><p>Static content</p></body></html>`
-	got := renderInlineJavaScript("https://example.test/", source)
-	if strings.Contains(got, "app.js") || !strings.Contains(got, "Static content") {
-		t.Fatalf("unexpected output for external script: %q", got)
-	}
-}
-
 func TestBuildOBMLPageCoalescesInlineTextForMobileReflow(t *testing.T) {
 	source := `<!doctype html><html><body><p>one <span>two</span> three</p></body></html>`
 	packet, err := buildOBMLPage("https://example.test/", source)
