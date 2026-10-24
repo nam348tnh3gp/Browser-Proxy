@@ -1003,7 +1003,13 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             writer.write("Host: " + requestHost + "\r\n");
             writer.write("User-Agent: TGFN-BrowserMini-J2ME/2.1\r\n");
             writer.write("Accept: application/x-tgfn-obml,image/jpeg,image/*,text/html,text/plain,*/*\r\n");
-            if (!internalResource) writer.write("X-TGFN-Format: MOB1\r\n");
+            if (!internalResource) {
+                writer.write("X-TGFN-Format: MOB1\r\n");
+                int viewportWidth = browserCanvas == null ? 240 : browserCanvas.getWidth();
+                if (viewportWidth < 160) viewportWidth = 240;
+                if (viewportWidth > 360) viewportWidth = 360;
+                writer.write("X-TGFN-Viewport-Width: " + viewportWidth + "\r\n");
+            }
             writer.write("Connection: close\r\n\r\n");
             writer.flush();
             String status = readAsciiLine(input);
@@ -1167,7 +1173,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             g.setClip(edgeToEdgeMobile ? 0 : 4, contentY + 3, edgeToEdgeMobile ? w : w - 8, Math.max(0, contentH - 6));
             int y = contentY + 4 - scrollY;
             int mobileImageTop = y;
-            float mobileScale = (float)w / 240.0f;
+            float mobileScale = (float)w / Math.max(1, lastPageResult == null ? 240 : lastPageResult.mobileViewportWidth);
             totalBodyHeight = 0;
             if (lastPageResult != null && lastPageResult.images != null) {
                 for (int imageIndex = 0; imageIndex < lastPageResult.images.size() && (lastPageResult.mobileTiles || imageIndex < 8); imageIndex++) {
@@ -1406,7 +1412,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
             LinkItem link = (LinkItem)lastPageResult.links.elementAt(selectedLink);
             if (link.y >= 0) {
-                float pageScale = (float)getWidth() / 240.0f;
+                float pageScale = (float)getWidth() / Math.max(1, lastPageResult.mobileViewportWidth);
                 int top = (int)(link.y * pageScale);
                 int bottom = top + Math.max(1, (int)(link.height * pageScale));
                 int visible = Math.max(1, getHeight() - 90);
@@ -1505,6 +1511,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         Vector blocks;
         Vector forms;
         boolean mobileTiles;
+        int mobileViewportWidth = 240;
     }
 
     private Image scaleImage(Image src, int newW, int newH) {
@@ -1547,6 +1554,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 byte[] jpeg = new byte[jpegLen];
                 in.readFully(jpeg);
                 Image img = Image.createImage(jpeg, 0, jpeg.length);
+                if (i == 0) result.mobileViewportWidth = img.getWidth();
                 ImageRef ref = new ImageRef("page", "");
                 ref.image = img;
                 result.images.addElement(ref);
