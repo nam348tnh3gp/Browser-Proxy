@@ -52,7 +52,7 @@ func TestBuildOBMLPageEncodesSelectAndCheckedControls(t *testing.T) {
 	if !strings.Contains(encoded, "checkbox_checked") {
 		t.Fatal("checked checkbox state was not encoded")
 	}
-	if !strings.Contains(encoded, "vi\\x1eEnglish\\x1den\\x1eVietnamese\\x1dvi") {
+	if !strings.Contains(encoded, "vi\x1eEnglish\x1den\x1eVietnamese\x1dvi") {
 		t.Fatalf("select options were not encoded with selected value: %q", packet)
 	}
 }
