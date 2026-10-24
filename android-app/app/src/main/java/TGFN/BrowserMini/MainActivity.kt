@@ -863,6 +863,27 @@ class MainActivity : Activity() {
         fun loadStats(resetBaseline: Boolean) {
             statsText.text = tr("Đang đọc bộ đếm proxy…", "Reading proxy counters…")
             Thread {
+                // Re-register on every analytics refresh. Proxy counters and client
+                // registrations live in memory, so a proxy restart otherwise leaves
+                // this still-running browser with network totals but no device attribution.
+                fun registerCurrentClient() {
+                    var connection: java.net.HttpURLConnection? = null
+                    try {
+                        val query = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8")
+                        val url = java.net.URI("http", null, endpoint.first, endpoint.second, "/__tgfn/register", query, null).toURL()
+                        connection = (url.openConnection() as java.net.HttpURLConnection).apply {
+                            connectTimeout = 3500
+                            readTimeout = 3500
+                            requestMethod = "GET"
+                            useCaches = false
+                        }
+                        connection.responseCode // registration is best-effort for older proxy versions
+                    } catch (_: Exception) {
+                        // Keep analytics usable even when the proxy has no registration endpoint.
+                    } finally {
+                        connection?.disconnect()
+                    }
+                }
                 fun fetchStats(forClient: Boolean): org.json.JSONObject {
                     val query = if (forClient) "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") else null
                     val url = java.net.URI("http", null, endpoint.first, endpoint.second, "/__tgfn/stats", query, null).toURL()
@@ -881,6 +902,7 @@ class MainActivity : Activity() {
                     }
                 }
                 try {
+                    registerCurrentClient()
                     val current = fetchStats(true)
                     val network = fetchStats(false)
                     runOnUiThread {
