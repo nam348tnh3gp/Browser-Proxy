@@ -23,9 +23,9 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 ## Compact mobile document protocol
 
 1. The J2ME client requests TBO1; the proxy does not start Chromium.
-2. The proxy asks the website for its mobile HTML variant, parses returned HTML into bounded semantic records, resolves links and image URLs, and encodes them in the compact TBO1 binary envelope.
-3. The MIDP client lays out text and links to its own screen width. Form field labels/types are shown inline in the document flow; selecting a field opens the native Java ME form editor for editing and GET submission. It can navigate without downloading screenshot tiles or decoding large page images.
-4. Images are fetched and resized separately by the proxy. CSS and JavaScript are not executed; the renderer reconstructs a readable mobile layout from HTML structure rather than reproducing arbitrary browser CSS.
+2. The proxy asks the website for its mobile HTML variant, runs a bounded sandboxed subset of inline JavaScript (`document.write()` / `document.writeln()`), parses the resulting HTML into bounded semantic records, resolves links and image URLs, and encodes them in the compact TBO1 binary envelope.
+3. The MIDP client lays out text and links to its own screen width. Form field labels/types are shown inline in the document flow; selecting a field opens the native Java ME form editor for editing and GET submission. It can navigate without downloading screenshot tiles or decoding large page images. The JS sandbox has no network, filesystem, browser DOM, timers or event loop; external scripts are skipped and inline execution is bounded by script count, script size and runtime.
+4. Images are fetched and resized separately by the proxy. Only a small inline-JavaScript subset is executed for static HTML generation; full browser JavaScript and arbitrary CSS layout are not supported. The renderer reconstructs a readable mobile layout from HTML structure rather than reproducing arbitrary browser CSS.
 
 ## OBML references and compatibility
 
@@ -53,7 +53,7 @@ On MOB1 pages, use the directional keys to focus links in place and FIRE/5 to op
 
 ## Limits
 
-- The default TBO1 mode does not use Chromium and does not execute JavaScript. It parses HTML and rebuilds a mobile-friendly semantic layout, so complex CSS grid/flex, arbitrary CSS positioning, and pixel-perfect browser rendering are not reproduced.
+- The default TBO1 mode does not use Chromium. It executes only sandboxed inline `document.write()` / `document.writeln()` scripts before parsing HTML; external scripts, DOM mutation APIs, fetch/XHR, timers, event handlers and SPA hydration are not implemented. Complex CSS grid/flex, arbitrary CSS positioning and pixel-perfect browser rendering are not reproduced.
 - Standard GET forms with named fields and hidden values are supported. Text, password, numeric, URL, email, checkbox, radio and select controls map to native MIDP inputs; select options and checked state are carried in TBO1.
 - Radio groups are simplified; POST, file uploads, JavaScript-driven validation and advanced client-side behavior are not browser-equivalent.
 - Mobile variants depend on the website honoring a mobile User-Agent. If it does not, the proxy still reflows the returned HTML structure for the narrow handset screen.
