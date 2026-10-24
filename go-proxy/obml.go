@@ -194,17 +194,32 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 								value = textContent(c)
 							}
 							if ct == "select" {
+								selectedValue := ""
+								var encodedOptions []string
 								for o := c.FirstChild; o != nil; o = o.NextSibling {
-									if o.Type == xhtml.ElementNode && strings.EqualFold(o.Data, "option") {
-										value = attr(o, "value")
-										if value == "" {
-											value = textContent(o)
-										}
-										if hasAttr(o, "selected") {
-											break
-										}
+									if o.Type != xhtml.ElementNode || !strings.EqualFold(o.Data, "option") {
+										continue
 									}
+									optionValue := attr(o, "value")
+									optionLabel := textContent(o)
+									if optionValue == "" {
+										optionValue = optionLabel
+									}
+									cleanOption := strings.NewReplacer("\\x1d", " ", "\\x1e", " ")
+									optionLabel = cleanOption.Replace(optionLabel)
+									optionValue = cleanOption.Replace(optionValue)
+									encodedOptions = append(encodedOptions, optionLabel+"\\x1d"+optionValue)
+									if selectedValue == "" || hasAttr(o, "selected") {
+										selectedValue = optionValue
 								}
+								}
+								value = selectedValue
+								if len(encodedOptions) > 0 {
+									value += "\\x1e" + strings.Join(encodedOptions, "\\x1e")
+								}
+							}
+							if (typ == "checkbox" || typ == "radio") && hasAttr(c, "checked") {
+								typ += "_checked"
 							}
 							label := attr(c, "aria-label")
 							if label == "" {
