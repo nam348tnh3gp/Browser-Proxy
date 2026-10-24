@@ -31,6 +31,15 @@ func TestBuildOBMLPageCreatesCompactBinaryBlocks(t *testing.T) {
 	}
 }
 
+func TestBuildOBMLPageCoalescesInlineTextForMobileReflow(t *testing.T) {
+	source := `<!doctype html><html><body><p>one <span>two</span> three</p></body></html>`
+	packet, err := buildOBMLPage("https://example.test/", source)
+	if err != nil { t.Fatal(err) }
+	if !bytes.Contains(packet, []byte("one two three")) {
+		t.Fatalf("inline text was split into separate blocks; packet=%q", packet)
+	}
+}
+
 func TestOBMLResponseOnlyTransformsOptedInHTML(t *testing.T) {
 	body := "<html><head><title>Example</title></head><body><p>Hello</p></body></html>"
 	req, _ := http.NewRequest("GET", "http://example.test/page", nil)
