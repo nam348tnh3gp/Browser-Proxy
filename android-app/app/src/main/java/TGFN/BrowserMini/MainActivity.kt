@@ -43,6 +43,12 @@ class MainActivity : Activity() {
     private lateinit var proxySummary: TextView
 
     private val prefs by lazy { getSharedPreferences("browser_settings", Context.MODE_PRIVATE) }
+    private val clientId: String by lazy {
+        prefs.getString("client_id", null)?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{8,80}")) }
+            ?: java.util.UUID.randomUUID().toString().also {
+                prefs.edit().putString("client_id", it).apply()
+            }
+    }
     private val mainExecutor = Executor { command -> runOnUiThread(command) }
     private val darkMode: Boolean get() = prefs.getBoolean("dark_mode", false)
     private val isEnglish: Boolean get() = prefs.getString("language", "vi") == "en"
@@ -776,8 +782,8 @@ class MainActivity : Activity() {
         }
         val explanation = TextView(this).apply {
             text = tr(
-                "Số liệu đo tại Go proxy từ lúc tiến trình khởi động hoặc từ lần đặt lại mốc trên thiết bị này. Đây là số liệu toàn proxy nếu nhiều client dùng chung; byte HTTP chỉ tính phần thân phản hồi, chưa gồm header/TCP/IP. HTTPS CONNECT chỉ đo byte tunnel mã hóa và được cộng khi tunnel đóng; gzip chỉ tính phần tiết kiệm thực tế.",
-                "Measured by the Go proxy since process start or this device's local baseline reset. Counters are proxy-wide if clients share it; HTTP counts response-body bytes and excludes headers/TCP/IP overhead. HTTPS CONNECT counts encrypted tunnel bytes when a tunnel closes; gzip savings include only responses actually compressed."
+                "Số liệu gồm thống kê thiết bị này và tổng toàn proxy. ID được tạo một lần và lưu trên thiết bị; không tạo ID cho từng request. Do WebView không gửi được header tùy chỉnh cho mọi request proxy, bản này ghép ID theo IP nguồn đã đăng ký; nhiều thiết bị đi qua cùng một IP công khai có thể bị gộp nhầm. HTTP đếm byte thân phản hồi; HTTPS CONNECT đếm byte tunnel mã hóa; chỉ gzip thực sự nhỏ hơn mới tính tiết kiệm.",
+                "Shows this device and whole-proxy totals. The ID is generated once and persisted; it is not created per request. Because WebView cannot attach a custom header to every proxy request, this version attributes traffic using the registered source IP; devices sharing one public IP may be conflated. HTTP counts response-body bytes; HTTPS CONNECT counts encrypted tunnel bytes; savings are counted only for actually smaller gzip responses."
             )
             textSize = 12f
             setTextColor(muted)
@@ -814,61 +820,78 @@ class MainActivity : Activity() {
         fun loadStats(resetBaseline: Boolean) {
             statsText.text = tr("Đang đọc bộ đếm proxy…", "Reading proxy counters…")
             Thread {
-                var connection: java.net.HttpURLConnection? = null
-                try {
-                    val url = java.net.URI("http", null, endpoint.first, endpoint.second, "/__tgfn/stats", null, null).toURL()
-                    connection = (url.openConnection() as java.net.HttpURLConnection).apply {
+                fun fetchStats(forClient: Boolean): org.json.JSONObject {
+                    val query = if (forClient) "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") else null
+                    val url = java.net.URI("http", null, endpoint.first, endpoint.second, "/__tgfn/stats", query, null).toURL()
+                    val connection = (url.openConnection() as java.net.HttpURLConnection).apply {
                         connectTimeout = 3500
                         readTimeout = 3500
                         requestMethod = "GET"
                         useCaches = false
                     }
-                    val code = connection.responseCode
-                    if (code != 200) throw IllegalStateException("HTTP $code")
-                    val raw = connection.inputStream.bufferedReader().use { it.readText() }
-                    val current = org.json.JSONObject(raw)
+                    try {
+                        val code = connection.responseCode
+                        if (code != 200) throw IllegalStateException("HTTP $code")
+                        return org.json.JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                    } finally {
+                        connection.disconnect()
+                    }
+                }
+                try {
+                    val current = fetchStats(true)
+                    val network = fetchStats(false)
                     runOnUiThread {
                         if (resetBaseline) {
-                            prefs.edit().putString("data_saver_analytics_baseline", raw).apply()
+                            prefs.edit()
+                                .putString("data_saver_client_baseline", current.toString())
+                                .putString("data_saver_network_baseline", network.toString())
+                                .apply()
                         }
-                        val stored = prefs.getString("data_saver_analytics_baseline", null)
-                        val baseline = try {
-                            if (stored.isNullOrBlank()) org.json.JSONObject() else org.json.JSONObject(stored)
-                        } catch (_: Exception) {
-                            org.json.JSONObject()
-                        }
-                        val sameProcess = baseline.optString("process_started_at", "") == current.optString("process_started_at", "")
-                        fun delta(key: String): Long {
+                        val storedClient = prefs.getString("data_saver_client_baseline", null)
+                        val storedNetwork = prefs.getString("data_saver_network_baseline", null)
+                        fun delta(snapshot: org.json.JSONObject, stored: String?, key: String): Long {
+                            val baseline = try {
+                                if (stored.isNullOrBlank()) org.json.JSONObject() else org.json.JSONObject(stored)
+                            } catch (_: Exception) {
+                                org.json.JSONObject()
+                            }
+                            val sameProcess = baseline.optString("process_started_at", "") == snapshot.optString("process_started_at", "")
                             val base = if (sameProcess && !stored.isNullOrBlank()) baseline.optLong(key, 0L) else 0L
-                            return (current.optLong(key, 0L) - base).coerceAtLeast(0L)
+                            return (snapshot.optLong(key, 0L) - base).coerceAtLeast(0L)
                         }
-                        val received = delta("http_response_bytes") + delta("connect_upstream_to_client_bytes")
-                        val sent = delta("connect_client_to_upstream_bytes")
-                        val saved = delta("gzip_saved_bytes")
+                        fun summary(snapshot: org.json.JSONObject, stored: String?): String {
+                            val received = delta(snapshot, stored, "http_response_bytes") + delta(snapshot, stored, "connect_upstream_to_client_bytes")
+                            val sent = delta(snapshot, stored, "connect_client_to_upstream_bytes")
+                            return buildString {
+                                append(tr("Dữ liệu nhận: ", "Data received: ")).append(formatBytes(received)).append('\n')
+                                append(tr("Dữ liệu gửi qua HTTPS tunnel: ", "Data sent through HTTPS tunnels: ")).append(formatBytes(sent)).append('\n')
+                                append(tr("Gzip tiết kiệm thực đo: ", "Measured gzip saved: ")).append(formatBytes(delta(snapshot, stored, "gzip_saved_bytes"))).append('\n')
+                                append(tr("Yêu cầu HTTP: ", "HTTP requests: ")).append(delta(snapshot, stored, "http_requests")).append('\n')
+                                append(tr("Tunnel HTTPS đã đóng: ", "Closed HTTPS tunnels: ")).append(delta(snapshot, stored, "connect_tunnels"))
+                            }
+                        }
                         statsText.text = buildString {
-                            append(tr("Dữ liệu nhận: ", "Data received: ")).append(formatBytes(received)).append('\n')
-                            append(tr("Dữ liệu gửi qua HTTPS tunnel: ", "Data sent through HTTPS tunnels: ")).append(formatBytes(sent)).append('\n')
-                            append(tr("Gzip tiết kiệm thực đo: ", "Measured gzip saved: ")).append(formatBytes(saved)).append('\n')
-                            append(tr("Phản hồi HTTP gzip: ", "Gzip HTTP responses: ")).append(delta("gzip_responses")).append('\n')
-                            append(tr("Yêu cầu HTTP: ", "HTTP requests: ")).append(delta("http_requests")).append('\n')
-                            append(tr("Tunnel HTTPS đã đóng: ", "Closed HTTPS tunnels: ")).append(delta("connect_tunnels")).append('\n')
-                            append(tr("Tiến trình proxy từ: ", "Proxy process started: ")).append(current.optString("process_started_at", "—"))
-                            if (resetBaseline) append("\n\n").append(tr("Đã đặt lại mốc thống kê trên thiết bị này.", "Local analytics baseline reset."))
+                            append("━━ ").append(tr("THIẾT BỊ NÀY", "THIS DEVICE")).append(" ━━\n")
+                            append(summary(current, storedClient)).append("\n\n")
+                            append("━━ ").append(tr("TOÀN MẠNG PROXY", "WHOLE PROXY NETWORK")).append(" ━━\n")
+                            append(tr("Thiết bị đã đăng ký: ", "Registered devices: "))
+                                .append(network.optInt("registered_clients", 0)).append('\n')
+                            append(summary(network, storedNetwork)).append('\n')
+                            append(tr("Proxy khởi động: ", "Proxy started: "))
+                                .append(network.optString("process_started_at", "—"))
+                            if (resetBaseline) append("\n\n").append(tr("Đã đặt lại mốc thống kê trên thiết bị này.", "Local analytics baselines reset."))
                         }
                     }
                 } catch (e: Exception) {
                     runOnUiThread {
                         statsText.text = tr(
-                            "Không đọc được số liệu. Hãy kiểm tra proxy đang chạy phiên bản hỗ trợ analytics mới, URL/port có thể truy cập trực tiếp và xác thực proxy không được bật. Chi tiết: ",
-                            "Could not read analytics. Check that the proxy runs a version with analytics support, its URL/port is directly reachable, and proxy authentication is disabled. Details: "
+                            "Không đọc được số liệu. Hãy kiểm tra proxy hỗ trợ client analytics, URL/port truy cập được và xác thực proxy không bật. Chi tiết: ",
+                            "Could not read analytics. Check that the proxy supports client analytics, its URL/port is reachable, and proxy authentication is disabled. Details: "
                         ) + (e.message ?: e.javaClass.simpleName)
                     }
-                } finally {
-                    connection?.disconnect()
                 }
             }.start()
         }
-
         dialog.setOnShowListener {
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener { loadStats(false) }
             dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener { loadStats(true) }
@@ -1364,7 +1387,35 @@ class MainActivity : Activity() {
             return
         }
         val config = ProxyConfig.Builder().addProxyRule("${endpoint.first}:${endpoint.second}").build()
-        ProxyController.getInstance().setProxyOverride(config, mainExecutor, Runnable { callback(true) })
+        ProxyController.getInstance().setProxyOverride(config, mainExecutor, Runnable {
+            registerClient(endpoint) {
+                // Registration is best-effort: browsing still works with older proxy versions.
+                callback(true)
+            }
+        })
+    }
+
+    private fun registerClient(endpoint: Pair<String, Int>, callback: (Boolean) -> Unit) {
+        Thread {
+            var registered = false
+            var connection: java.net.HttpURLConnection? = null
+            try {
+                val query = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8")
+                val url = java.net.URI("http", null, endpoint.first, endpoint.second, "/__tgfn/register", query, null).toURL()
+                connection = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 3500
+                    readTimeout = 3500
+                    requestMethod = "GET"
+                    useCaches = false
+                }
+                registered = connection.responseCode == 200
+            } catch (_: Exception) {
+                registered = false
+            } finally {
+                connection?.disconnect()
+            }
+            runOnUiThread { callback(registered) }
+        }.start()
     }
 
     private fun updateProxySummary() {
