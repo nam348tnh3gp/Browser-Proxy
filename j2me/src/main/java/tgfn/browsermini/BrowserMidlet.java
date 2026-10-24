@@ -1259,7 +1259,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             int mobileImageTop = y;
             float mobileScale = (float)w / Math.max(1, lastPageResult == null ? 240 : lastPageResult.mobileViewportWidth);
             totalBodyHeight = 0;
-            if (lastPageResult != null && lastPageResult.images != null) {
+            if (lastPageResult != null && lastPageResult.images != null && lastPageResult.mobileTiles) {
                 for (int imageIndex = 0; imageIndex < lastPageResult.images.size() && (lastPageResult.mobileTiles || imageIndex < 8); imageIndex++) {
                     ImageRef ref = (ImageRef)lastPageResult.images.elementAt(imageIndex);
                     if (ref.image != null) {
@@ -1320,6 +1320,10 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             } else {
                 for (int b = 0; b < sourceBlocks.size(); b++) {
                     RenderBlock block = (RenderBlock)sourceBlocks.elementAt(b);
+                    if (block.type == 5) {
+                        lines.addElement(new RenderLine("", 5, block.url));
+                        continue;
+                    }
                     if (block.text.length() == 0) { lines.addElement(new RenderLine("", 0, null)); continue; }
                     Font bf = block.type == 1 ? Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM) :
                               (block.type == 2 ? bold : normal);
@@ -1330,6 +1334,35 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             renderedLinkLines.removeAllElements();
             for (int i = 0; i < lines.size(); i++) {
                 RenderLine line = (RenderLine)lines.elementAt(i);
+                if (line.type == 5) {
+                    ImageRef imageRef = findImage(line.url);
+                    if (imageRef != null && imageRef.image != null) {
+                        Image toDraw = imageRef.image;
+                        int maxImageWidth = Math.max(1, w - 14);
+                        if (toDraw.getWidth() > maxImageWidth) {
+                            int newHeight = Math.max(1, toDraw.getHeight() * maxImageWidth / toDraw.getWidth());
+                            if (imageRef.scaledImage == null || imageRef.scaledWidth != maxImageWidth) {
+                                imageRef.scaledImage = scaleImage(toDraw, maxImageWidth, newHeight);
+                                imageRef.scaledWidth = maxImageWidth;
+                            }
+                            toDraw = imageRef.scaledImage;
+                        }
+                        int imageHeight = Math.max(1, toDraw.getHeight());
+                        if (y + imageHeight > contentY && y < contentY + contentH) {
+                            g.drawImage(toDraw, 7, y, Graphics.TOP | Graphics.LEFT);
+                        }
+                        y += imageHeight + 4;
+                        totalBodyHeight += imageHeight + 4;
+                    } else {
+                        Font imageFont = normal;
+                        g.setFont(imageFont);
+                        g.setColor(80, 100, 120);
+                        g.drawString("[image unavailable]", 7, y, Graphics.TOP | Graphics.LEFT);
+                        y += imageFont.getHeight() + 3;
+                        totalBodyHeight += imageFont.getHeight() + 3;
+                    }
+                    continue;
+                }
                 Font lineFont = line.type == 1 ? Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM) :
                                 (line.type == 2 ? bold : normal);
                 g.setFont(lineFont);
@@ -1356,6 +1389,15 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 g.setFont(normal);
                 g.drawString("Loading...", w / 2, h - footerH + 3, Graphics.TOP | Graphics.HCENTER);
             }
+        }
+
+        private ImageRef findImage(String imageUrl) {
+            if (lastPageResult == null || lastPageResult.images == null || imageUrl == null) return null;
+            for (int i = 0; i < lastPageResult.images.size(); i++) {
+                ImageRef ref = (ImageRef)lastPageResult.images.elementAt(i);
+                if (imageUrl.equals(ref.url)) return ref;
+            }
+            return null;
         }
 
         private Vector wrap(String value, Font font, int maxWidth) {
