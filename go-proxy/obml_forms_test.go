@@ -70,6 +70,24 @@ func TestMobileResponseFallsBackToCompactSemanticPage(t *testing.T) {
 	}
 }
 
+func TestMobileViewportWidthIsBounded(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		want  int
+	}{
+		{"", defaultMobileViewportWidth},
+		{"240", 240},
+		{"320", 320},
+		{"80", minMobileViewportWidth},
+		{"999", maxMobileViewportWidth},
+		{"invalid", defaultMobileViewportWidth},
+	} {
+		if got := mobileViewportWidth(tc.input); got != tc.want {
+			t.Errorf("mobileViewportWidth(%q) = %d, want %d", tc.input, got, tc.want)
+		}
+	}
+}
+
 func TestEncodeMobilePacketPreservesTileAndLinkHitbox(t *testing.T) {
 	tiles := [][]byte{[]byte("0123456789jpeg-data")}
 	links := []pageLink{{Text: "Open", URL: "https://example.com/", X: 12, Y: 345, W: 67, H: 23}}
