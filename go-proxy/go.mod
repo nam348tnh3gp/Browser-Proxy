@@ -18,3 +18,5 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	golang.org/x/sys v0.23.0 // indirect
 )
+
+replace github.com/dlclark/regexp2 v1.4.1-0.20201116162257-a2a8dda75c91 => github.com/dlclark/regexp2 v1.7.0
