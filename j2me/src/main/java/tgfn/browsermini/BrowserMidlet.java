@@ -776,6 +776,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         int count = in.readUnsignedShort();
         if (count > 1100) throw new IOException("Too many compact page blocks");
         StringBuffer text = new StringBuffer();
+        boolean joinNextTableCell = false;
         for (int i = 0; i < count; i++) {
             int kind = in.readUnsignedByte();
             String label = readTBOString(in);
@@ -799,14 +800,33 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             if (kind == 6) {
                 result.blocks.addElement(new RenderBlock("", 0, null));
                 text.append('\n');
+                joinNextTableCell = false;
+                continue;
+            }
+            if (kind == 9) {
+                if (result.blocks.size() > 0) {
+                    RenderBlock previous = (RenderBlock)result.blocks.elementAt(result.blocks.size() - 1);
+                    if (previous.url == null && previous.text.length() > 0) previous.text += " | ";
+                }
+                joinNextTableCell = true;
                 continue;
             }
             if (kind == 5 && target.length() > 0) {
+                joinNextTableCell = false;
                 result.images.addElement(new ImageRef(label, target));
                 if (label.length() > 0) result.blocks.addElement(new RenderBlock(label, 0, null));
                 continue;
             }
             if (label.length() == 0) continue;
+            if (joinNextTableCell && kind != 4 && kind != 7 && result.blocks.size() > 0) {
+                RenderBlock previous = (RenderBlock)result.blocks.elementAt(result.blocks.size() - 1);
+                if (previous.url == null && previous.text.length() > 0) {
+                    previous.text += label;
+                    joinNextTableCell = false;
+                    continue;
+                }
+            }
+            joinNextTableCell = false;
             if (kind == 4 && target.length() > 0) {
                 result.links.addElement(new LinkItem(label, target));
                 result.blocks.addElement(new RenderBlock(label, 4, target));
