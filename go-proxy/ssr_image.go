@@ -115,7 +115,18 @@ func ssrImageResponse(resp *http.Response) error {
 		emulation.SetTouchEmulationEnabled(true),
 		emulation.SetUserAgentOverride("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"),
 		chromedp.Navigate(pageURL),
-		chromedp.Sleep(650*time.Millisecond),
+		chromedp.Evaluate(`(function() {
+			try {
+				var style = document.createElement('style');
+				style.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}';
+				(document.head || document.documentElement).appendChild(style);
+				var lazy = document.querySelectorAll('img[loading="lazy"]');
+				for (var i = 0; i < lazy.length; i++) lazy[i].loading = 'eager';
+				window.scrollTo(0, document.documentElement.scrollHeight || document.body.scrollHeight);
+				window.scrollTo(0, 0);
+			} catch (e) {}
+		})()`, nil),
+		chromedp.Sleep(450*time.Millisecond),
 		chromedp.FullScreenshot(&buf, 55),
 		chromedp.Evaluate(`
 			(function() {
