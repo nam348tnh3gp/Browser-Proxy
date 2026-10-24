@@ -46,6 +46,10 @@ func proxyHandler() http.Handler {
 		Director: func(req *http.Request) {
 			req.Header.Del("Proxy-Connection")
 			req.Header.Set("Via", "1.1 TGFN.BrowserMini")
+			// Ask for mobile HTML before converting it to the compact TBO1 format.
+			if req.Header.Get("X-TGFN-Format") == "TBO1" {
+				req.Header.Set("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36")
+			}
 		},
 		FlushInterval:  100 * time.Millisecond,
 		ModifyResponse: compactHTMLResponse,
