@@ -1,10 +1,9 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -15,21 +14,24 @@ const fullModeValue = "FULL"
 var (
 	fullDropScript = regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script\s*>`)
 	fullDropStyle  = regexp.MustCompile(`(?is)<style\b[^>]*>.*?</style\s*>`)
-	// Separate patterns — Go regexp (RE2) does not support backreferences
-	fullDropHeavy = []*regexp.Regexp{
+	fullDropHeavy  = []*regexp.Regexp{
 		regexp.MustCompile(`(?is)<iframe\b[^>]*>.*?</iframe\s*>`),
 		regexp.MustCompile(`(?is)<svg\b[^>]*>.*?</svg\s*>`),
 		regexp.MustCompile(`(?is)<canvas\b[^>]*>.*?</canvas\s*>`),
 		regexp.MustCompile(`(?is)<video\b[^>]*>.*?</video\s*>`),
 		regexp.MustCompile(`(?is)<audio\b[^>]*>.*?</audio\s*>`),
 		regexp.MustCompile(`(?is)<noscript\b[^>]*>.*?</noscript\s*>`),
+		regexp.MustCompile(`(?is)<object\b[^>]*>.*?</object\s*>`),
+		regexp.MustCompile(`(?is)<embed\b[^>]*/?>`),
 	}
 	fullImgSrc     = regexp.MustCompile(`(?is)(<img\b[^>]*?\s+src\s*=\s*["'])([^"']+)(["'])`)
-	fullWhitespace = regexp.MustCompile(`[\t\r\n ]+`)
+	fullHref       = regexp.MustCompile(`(?is)(<a\b[^>]*?\s+href\s*=\s*["'])([^"']+)(["'])`)
+	fullWhitespace = regexp.MustCompile(`[ \t\r\n]+`)
+	fullComments   = regexp.MustCompile(`(?s)<!--.*?-->`)
 )
 
-// fullCompressResponse keeps most HTML structure, links and basic CSS
-// while removing scripts and compressing images via the proxy.
+// fullCompressResponse keeps the original HTML structure (links, forms, semantic tags)
+// while removing only heavy non-content. Output is minified plain HTML that J2ME can parse.
 func fullCompressResponse(resp *http.Response) error {
 	if resp == nil || resp.Request == nil || resp.Request.Header.Get(fullModeHeader) != fullModeValue {
 		return nil
@@ -48,63 +50,64 @@ func fullCompressResponse(resp *http.Response) error {
 	}
 	_ = resp.Body.Close()
 
+	pageURL := resp.Request.URL
 	html := string(data)
-	// Remove heavy non-content
+
+	// Drop only heavy / non-renderable parts. Keep structure, links, forms, images.
 	html = fullDropScript.ReplaceAllString(html, "")
 	html = fullDropStyle.ReplaceAllString(html, "")
+	html = fullComments.ReplaceAllString(html, "")
 	for _, re := range fullDropHeavy {
 		html = re.ReplaceAllString(html, "")
 	}
 
-	// Rewrite image src to go through compression endpoint
-	html = fullImgSrc.ReplaceAllStringFunc(html, func(m string) string {
-		sub := fullImgSrc.FindStringSubmatch(m)
-		if len(sub) < 4 {
-			return m
-		}
-		orig := sub[2]
-		// Only rewrite absolute or protocol-relative http(s)
-		if strings.HasPrefix(orig, "http://") || strings.HasPrefix(orig, "https://") || strings.HasPrefix(orig, "//") {
-			if strings.HasPrefix(orig, "//") {
-				orig = "https:" + orig
-			}
-			return sub[1] + rewriteImageURL(orig) + sub[3]
-		}
-		return m
-	})
+	// Make image and link URLs absolute so the J2ME client can resolve them easily
+	html = rewriteAttr(html, fullImgSrc, pageURL, true)
+	html = rewriteAttr(html, fullHref, pageURL, false)
 
-	// Light whitespace cleanup (keep structure)
+	// Light whitespace collapse (preserve tag structure)
 	html = fullWhitespace.ReplaceAllString(html, " ")
-	html = strings.ReplaceAll(html, "> <", "><")
+	html = strings.TrimSpace(html)
 
-	compressed := []byte(html)
-
-	// Gzip the result
-	var gz bytes.Buffer
-	w := gzip.NewWriter(&gz)
-	_, _ = w.Write(compressed)
-	_ = w.Close()
-
-	resp.Body = io.NopCloser(bytes.NewReader(gz.Bytes()))
-	resp.ContentLength = int64(gz.Len())
-	resp.Header.Set("Content-Encoding", "gzip")
-	resp.Header.Set("Content-Length", itoa(gz.Len()))
+	out := []byte(html)
+	resp.Body = io.NopCloser(strings.NewReader(html))
+	resp.ContentLength = int64(len(out))
 	resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+	resp.Header.Set("Content-Length", itoa(len(out)))
+	resp.Header.Del("Content-Encoding")
 	resp.Header.Del("Content-MD5")
 	resp.Header.Del("ETag")
 	return nil
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
+func rewriteAttr(html string, re *regexp.Regexp, base *url.URL, isImage bool) string {
+	return re.ReplaceAllStringFunc(html, func(m string) string {
+		sub := re.FindStringSubmatch(m)
+		if len(sub) < 4 {
+			return m
+		}
+		orig := strings.TrimSpace(sub[2])
+		if orig == "" || strings.HasPrefix(orig, "data:") || strings.HasPrefix(orig, "javascript:") {
+			return m
+		}
+		abs := resolveAgainst(base, orig)
+		if abs == "" {
+			return m
+		}
+		if isImage {
+			abs = rewriteImageURL(abs)
+		}
+		return sub[1] + abs + sub[3]
+	})
+}
+
+func resolveAgainst(base *url.URL, ref string) string {
+	if base == nil {
+		return ref
 	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
+	u, err := url.Parse(ref)
+	if err != nil {
+		return ref
 	}
-	return string(b[i:])
+	return base.ResolveReference(u).String()
 }

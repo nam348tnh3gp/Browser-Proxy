@@ -65,3 +65,13 @@ On MOB1 pages, use the directional keys to focus links in place and FIRE/5 to op
 - Best on text-friendly or mobile sites
 
 Not affiliated with Opera.
+
+
+## FULL mode (structure-preserving mobile HTML)
+
+Client now requests `X-TGFN-Format: FULL` by default.
+- Proxy fetches with mobile User-Agent.
+- Removes only scripts, external styles, iframes, video, etc.
+- Keeps original HTML structure, links, forms, semantic tags and images.
+- Makes URLs absolute and routes images through compression.
+- Returns minified plain HTML that the J2ME parser can process directly.
