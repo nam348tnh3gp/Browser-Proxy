@@ -1152,7 +1152,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             int contentY = titleY + titleH;
             int contentH = h - contentY - footerH;
             g.setColor(255, 255, 255); g.fillRect(0, contentY, w, contentH);
-            g.setClip(4, contentY + 3, w - 8, Math.max(0, contentH - 6));
+            boolean edgeToEdgeMobile = lastPageResult != null && lastPageResult.mobileTiles;
+            g.setClip(edgeToEdgeMobile ? 0 : 4, contentY + 3, edgeToEdgeMobile ? w : w - 8, Math.max(0, contentH - 6));
             int y = contentY + 4 - scrollY;
             int mobileImageTop = y;
             float mobileScale = (float)w / 240.0f;
