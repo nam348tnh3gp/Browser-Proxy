@@ -14,19 +14,27 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 
 | Mode | Description |
 |------|-------------|
-| **SSRIMG** (default) | Chrome renders the real page → JPEG + link list (IMGL). Closest to Opera Mini visual look. |
+| **TBO1** (default) | Server-side semantic blocks: compact text, headings, lists, links and resized images. No browser engine required. |
 | SSR | Structured text blocks |
 | FULL | HTML + gzip |
-| TBO1 | Compact binary blocks |
+| SSRIMG | Optional screenshot mode for proxy-side clients that explicitly request it (requires Chrome/Chromium). |
 
-## How SSRIMG works (Opera Mini style)
+## Compact layout inspired by OBML research
 
-1. Client requests page with `X-TGFN-Format: SSRIMG`
-2. Proxy opens the page in headless Chrome
-3. Chrome renders full HTML/CSS
-4. Proxy captures screenshot + extracts links
-5. Sends **IMGL** packet (JPEG + links) to the phone
-6. Client shows the image and lets you open links via the **Links** menu
+1. Client requests page with `X-TGFN-Format: TBO1`, including HTTPS pages through `/__tgfn/fetch`.
+2. The Go proxy parses HTML and removes scripts, styles, and nonessential page chrome.
+3. It sends a bounded binary stream of semantic text blocks, independent link records, and image references.
+4. Image references point to `/__tgfn/img`, where the proxy resizes and JPEG-compresses images.
+5. The MIDP client lays out the blocks with device-native fonts and exposes links through keypad navigation and the Links menu.
+
+## OBML references and compatibility
+
+The implementation borrows design ideas from both reference projects:
+
+- [grawity/obml-parser](https://github.com/grawity/obml-parser): its format notes explain that OBML separates text from link hit regions and that pixel positions depend on the original device's font metrics. TBO1 therefore keeps links as separate semantic records rather than pretending browser text is inherently clickable.
+- [MacMailler/obml-renderer](https://github.com/MacMailler/obml-renderer): its OBMLv6 entity model informs the separation of text, images, links, and visual styles in the client/server pipeline.
+
+**Compatibility note:** TBO1 is TGFN's own protocol, not Opera's OBMLv6. Neither reference project supplies an HTML-to-Opera-OBML encoder that can be safely dropped into this Go/MIDP stack. This change does not copy their source code or claim binary OBML compatibility.
 
 ## Usage
 

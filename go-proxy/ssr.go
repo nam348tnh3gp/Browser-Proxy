@@ -33,7 +33,7 @@ func buildSSRPage(pageURL, source string) ([]byte, error) {
 	var blocks []ssrBlock
 	add := func(kind byte, text, link string) {
 		text = strings.TrimSpace(strings.Join(strings.Fields(text), " "))
-		if len(blocks) >= 3000 || (text == "" && kind != 6 && kind != 5) {
+		if len(blocks) >= 1100 || (text == "" && kind != 6 && kind != 5) {
 			return
 		}
 		if len(text) > 4000 {
