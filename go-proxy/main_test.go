@@ -181,7 +181,6 @@ func TestStatsEndpointReturnsMeasuredCounters(t *testing.T) {
 	}
 }
 
-
 func TestRegisterClientAndReadPerClientStats(t *testing.T) {
 	const id = "test-client-1234"
 	if !registerClient("192.0.2.10:54321", id) {
