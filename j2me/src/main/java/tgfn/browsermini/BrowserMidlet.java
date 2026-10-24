@@ -502,6 +502,15 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         display.setCurrent(browserCanvas);
     }
 
+
+    private void showFind() {
+        TextBox findBox = new TextBox("Find on page", "", 60, TextField.ANY);
+        findBox.addCommand(openCommand);
+        findBox.addCommand(cancelCommand);
+        findBox.setCommandListener(this);
+        display.setCurrent(findBox);
+    }
+
     private void showBrowserMenu() {
         browserMenu = new List("Browser menu", List.IMPLICIT);
         browserMenuHasPageLinks = lastPageResult == null || !lastPageResult.mobileTiles;
@@ -509,6 +518,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         if (browserMenuHasPageLinks) browserMenu.append("Page links", null);
         browserMenu.append("Bookmarks", null);
         browserMenu.append("Add bookmark", null);
+        browserMenu.append("Find", null);
         browserMenu.append("Reload page", null);
         browserMenu.append("Home", null);
         browserMenu.append("Forward", null);
@@ -523,6 +533,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         if (command == backCommand) { display.setCurrent(browserCanvas); return; }
         if (command != List.SELECT_COMMAND) return;
         int selected = browserMenu.getSelectedIndex();
+        if (selected >= 0 && "Find".equals(browserMenu.getString(selected))) { showFind(); return; }
         if (selected == 0) { showAddress(); return; }
         int offset = 1;
         if (browserMenuHasPageLinks) {
