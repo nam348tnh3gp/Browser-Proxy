@@ -51,6 +51,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 
 	title := pageURL
 	var blocks []obmlBlock
+	tableRowCells := 0
 	add := func(kind byte, text, link string) {
 		if kind != 7 {
 			text = strings.TrimSpace(strings.Join(strings.Fields(text), " "))
@@ -120,8 +121,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 
 		tag := strings.ToLower(n.Data)
 		if hidden(n) || tag == "script" || tag == "style" || tag == "noscript" || tag == "iframe" ||
-			tag == "svg" || tag == "canvas" || tag == "video" || tag == "audio" || tag == "nav" ||
-			tag == "footer" || tag == "header" || tag == "template" {
+			tag == "svg" || tag == "canvas" || tag == "video" || tag == "audio" || tag == "template" {
 			return
 		}
 		if tag == "title" && title == pageURL {
@@ -218,14 +218,21 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			newKind = 2
 		case "li":
 			add(3, "•", "")
-		case "p", "div", "br", "hr", "tr", "section", "article", "table", "ul", "ol", "fieldset":
+		case "p", "div", "br", "hr", "section", "article", "table", "ul", "ol", "fieldset":
+			if !inLink {
+				add(6, "", "")
+			}
+		case "tr":
+			tableRowCells = 0
 			if !inLink {
 				add(6, "", "")
 			}
 		case "td", "th":
-			if !inLink {
-				add(6, "", "")
+			if !inLink && tableRowCells > 0 {
+				// Keep table columns distinguishable after the narrow-screen reflow.
+				add(9, "|", "")
 			}
+			tableRowCells++
 		}
 
 		if tag == "img" {
