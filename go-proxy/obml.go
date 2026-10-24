@@ -124,36 +124,56 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		if node.Type == xhtml.ElementNode && strings.EqualFold(node.Data, "style") {
 			var css strings.Builder
 			for child := node.FirstChild; child != nil; child = child.NextSibling {
-				if child.Type == xhtml.TextNode { css.WriteString(child.Data) }
+				if child.Type == xhtml.TextNode {
+					css.WriteString(child.Data)
+				}
 			}
 			for _, rule := range cssRulePattern.FindAllStringSubmatch(css.String(), -1) {
 				declarations := strings.ToLower(rule[2])
-				if !strings.Contains(declarations, "background") { continue }
+				if !strings.Contains(declarations, "background") {
+					continue
+				}
 				urlMatch := cssURLPattern.FindStringSubmatch(rule[2])
-				if len(urlMatch) < 2 { continue }
+				if len(urlMatch) < 2 {
+					continue
+				}
 				for _, selector := range strings.Split(rule[1], ",") {
 					selector = strings.TrimSpace(selector)
 					// Support simple tag, class and ID selectors; skip combinators/pseudos.
-					if selector == "" || strings.ContainsAny(selector, " >+~:[") { continue }
+					if selector == "" || strings.ContainsAny(selector, " >+~:[") {
+						continue
+					}
 					cssBackgrounds[selector] = strings.TrimSpace(urlMatch[1])
 				}
 			}
 		}
-		for child := node.FirstChild; child != nil; child = child.NextSibling { collectStyles(child) }
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			collectStyles(child)
+		}
 	}
 	collectStyles(doc)
 	backgroundFor := func(node *xhtml.Node) string {
 		style := attr(node, "style")
 		if strings.Contains(strings.ToLower(style), "background") {
-			if match := cssURLPattern.FindStringSubmatch(style); len(match) > 1 { return strings.TrimSpace(match[1]) }
+			if match := cssURLPattern.FindStringSubmatch(style); len(match) > 1 {
+				return strings.TrimSpace(match[1])
+			}
 		}
-		if bg := attr(node, "background"); bg != "" { return bg }
-		if bg := cssBackgrounds[strings.ToLower(node.Data)]; bg != "" { return bg }
+		if bg := attr(node, "background"); bg != "" {
+			return bg
+		}
+		if bg := cssBackgrounds[strings.ToLower(node.Data)]; bg != "" {
+			return bg
+		}
 		if id := attr(node, "id"); id != "" {
-			if bg := cssBackgrounds["#"+id]; bg != "" { return bg }
+			if bg := cssBackgrounds["#"+strings.ToLower(id)]; bg != "" {
+				return bg
+			}
 		}
 		for _, className := range strings.Fields(attr(node, "class")) {
-			if bg := cssBackgrounds["."+className]; bg != "" { return bg }
+			if bg := cssBackgrounds["."+strings.ToLower(className)]; bg != "" {
+				return bg
+			}
 		}
 		return ""
 	}
@@ -320,7 +340,9 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		}
 
 		if bg := backgroundFor(n); bg != "" && tag != "html" && tag != "head" && tag != "style" {
-			if imageURL := obmlAbsolute(pageURL, bg); imageURL != "" { add(5, attr(n, "aria-label"), imageURL) }
+			if imageURL := obmlAbsolute(pageURL, bg); imageURL != "" {
+				add(5, attr(n, "aria-label"), imageURL)
+			}
 		}
 		if tag == "img" {
 			src, alt := attr(n, "src"), attr(n, "alt")
@@ -331,7 +353,10 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			if src == "" {
 				for _, candidate := range strings.Split(attr(n, "srcset"), ",") {
 					fields := strings.Fields(strings.TrimSpace(candidate))
-					if len(fields) > 0 && !strings.HasPrefix(strings.ToLower(fields[0]), "data:") { src = fields[0]; break }
+					if len(fields) > 0 && !strings.HasPrefix(strings.ToLower(fields[0]), "data:") {
+						src = fields[0]
+						break
+					}
 				}
 			}
 			if imageURL := obmlAbsolute(pageURL, src); imageURL != "" {
@@ -393,20 +418,32 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 				var findAlt func(*xhtml.Node) string
 				findAlt = func(child *xhtml.Node) string {
 					if child.Type == xhtml.ElementNode && strings.EqualFold(child.Data, "img") {
-						if alt := attr(child, "alt"); alt != "" { return alt }
-						if title := attr(child, "title"); title != "" { return title }
+						if alt := attr(child, "alt"); alt != "" {
+							return alt
+						}
+						if title := attr(child, "title"); title != "" {
+							return title
+						}
 					}
 					for nested := child.FirstChild; nested != nil; nested = nested.NextSibling {
-						if alt := findAlt(nested); alt != "" { return alt }
+						if alt := findAlt(nested); alt != "" {
+							return alt
+						}
 					}
 					return ""
 				}
 				label = findAlt(n)
 			}
-			if linkURL != "" && label != "" { add(4, label, linkURL) } else if label != "" { add(kind, label, "") }
+			if linkURL != "" && label != "" {
+				add(4, label, linkURL)
+			} else if label != "" {
+				add(kind, label, "")
+			}
 			// Preserve image/logo children in their original position instead of
 			// discarding them when the enclosing anchor is encountered.
-			for child := n.FirstChild; child != nil; child = child.NextSibling { walk(child, newKind, true) }
+			for child := n.FirstChild; child != nil; child = child.NextSibling {
+				walk(child, newKind, true)
+			}
 			return
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
