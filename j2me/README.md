@@ -22,8 +22,8 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 ## Compact layout inspired by OBML research
 
 1. Client requests page with `X-TGFN-Format: TBO1`, including HTTPS pages through `/__tgfn/fetch`.
-2. The Go proxy parses HTML and removes scripts, styles, and nonessential page chrome.
-3. It sends a bounded binary stream of semantic text blocks, links, basic table/block boundaries, image references, and form metadata.
+2. The Go proxy parses HTML, removes executable/heavy content, and keeps useful site chrome such as header/navigation/footer when it contains page content or links.
+3. It sends a bounded binary stream of semantic text blocks, links, table row/cell boundaries (rendered as compact separators on narrow screens), block boundaries, image references, and form metadata.
 4. Image references point to `/__tgfn/img`, where the proxy resizes and JPEG-compresses images.
 5. The MIDP client lays out blocks with device-native fonts and exposes links and forms through keypad navigation and the Links menu. Opening a form shows native text/password/number/email/URL fields; submitting currently serializes fields as a GET query.
 
@@ -55,7 +55,7 @@ Use **Menu → Links** to navigate.
 
 - Screenshot is static (no live JavaScript after load)
 - Interaction is through the link list (not pixel-perfect click map yet)
-- CSS support is intentionally limited to structural HTML and inline `display:none` / `visibility:hidden`; external stylesheets, complex grid/flex layouts, and pixel-perfect desktop CSS are not reproduced.
+- Layout preservation is semantic and mobile-first: headings, paragraphs, lists, navigation, footer content, links, and table rows/cells are retained and reflowed for narrow screens. Inline `display:none` / `visibility:hidden` is filtered. External CSS, complex grid/flex positioning, exact colors, and pixel-perfect desktop CSS are not reproduced.
 - Common GET forms are supported; POST forms, JavaScript-driven forms, file uploads, and full checkbox/radio/select semantics are not yet browser-equivalent.
 - Best on text-friendly or mobile sites
 
