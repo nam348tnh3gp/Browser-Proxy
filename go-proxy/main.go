@@ -211,6 +211,14 @@ func registerClient(remoteAddr, id string) bool {
 	if clientTracking.stats == nil {
 		clientTracking.stats = make(map[string]*clientCounterSet)
 	}
+	// Remove stale IP aliases for this installation before recording its
+	// current address; otherwise traffic from a previously used IP could keep
+	// being charged to this device after it moved networks.
+	for oldHost, oldID := range clientTracking.idByIP {
+		if oldID == id && oldHost != host {
+			delete(clientTracking.idByIP, oldHost)
+		}
+	}
 	if existing := clientTracking.idByIP[host]; existing != "" && existing != id {
 		// A source IP shared by different installations cannot identify a client.
 		// Mark it ambiguous instead of silently charging all traffic to the last ID.
