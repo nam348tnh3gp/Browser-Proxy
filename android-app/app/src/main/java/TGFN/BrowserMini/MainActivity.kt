@@ -776,8 +776,8 @@ class MainActivity : Activity() {
         }
         val explanation = TextView(this).apply {
             text = tr(
-                "Số liệu đo tại Go proxy từ lúc tiến trình proxy khởi động hoặc từ lần đặt lại mốc trên thiết bị này. HTTPS CONNECT chỉ đo byte tunnel mã hóa; tiết kiệm gzip chỉ tính cho phản hồi HTTP được nén thực tế.",
-                "Measured by the Go proxy since its process started or this device's local baseline reset. HTTPS CONNECT counts encrypted tunnel bytes; gzip savings include only HTTP responses actually compressed."
+                "Số liệu đo tại Go proxy từ lúc tiến trình khởi động hoặc từ lần đặt lại mốc trên thiết bị này. Đây là số liệu toàn proxy nếu nhiều client dùng chung; byte HTTP chỉ tính phần thân phản hồi, chưa gồm header/TCP/IP. HTTPS CONNECT chỉ đo byte tunnel mã hóa và được cộng khi tunnel đóng; gzip chỉ tính phần tiết kiệm thực tế.",
+                "Measured by the Go proxy since process start or this device's local baseline reset. Counters are proxy-wide if clients share it; HTTP counts response-body bytes and excludes headers/TCP/IP overhead. HTTPS CONNECT counts encrypted tunnel bytes when a tunnel closes; gzip savings include only responses actually compressed."
             )
             textSize = 12f
             setTextColor(muted)
