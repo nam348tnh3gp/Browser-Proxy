@@ -7,6 +7,7 @@ import (
 
 func TestBuildOBMLPagePreservesFormsAndLayout(t *testing.T) {
 	source := "<html><head><title>Search</title></head><body>" +
+		"<header>Site Header</header><nav><a href=\"/home\">Home</a></nav>" +
 		"<div style=\"display:none\">CSS-HIDDEN-SENTINEL</div>" +
 		"<table><tr><td>Cell A</td><td>Cell B</td></tr></table>" +
 		"<form action=\"/search\" method=\"get\" aria-label=\"Site search\">" +
@@ -21,7 +22,7 @@ func TestBuildOBMLPagePreservesFormsAndLayout(t *testing.T) {
 	if bytes.Contains(packet, []byte("CSS-HIDDEN-SENTINEL")) {
 		t.Fatal("hidden CSS content leaked into page")
 	}
-	for _, want := range []string{"Cell A", "Cell B", "Site search", "token", "abc123", "Search the web", "https://example.test/search"} {
+	for _, want := range []string{"Site Header", "Home", "Cell A", "Cell B", "|", "Site search", "token", "abc123", "Search the web", "https://example.test/search"} {
 		if !bytes.Contains(packet, []byte(want)) {
 			t.Errorf("packet missing %q", want)
 		}
