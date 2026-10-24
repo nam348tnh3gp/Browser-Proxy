@@ -110,7 +110,8 @@ func compactHTMLResponse(resp *http.Response) error {
 	if resp != nil && resp.Request != nil {
 		switch resp.Request.Header.Get("X-TGFN-Format") {
 		case "TBO1":
-			return obmlResponse(resp)
+			// Upgraded: TBO1 now returns lightly minified HTML (structure kept)
+			return fullCompressResponse(resp)
 		case "FULL":
 			return fullCompressResponse(resp)
 		case "SSR":

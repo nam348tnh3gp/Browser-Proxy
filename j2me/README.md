@@ -114,3 +114,6 @@ Browser sends X-TGFN-Format: FULL so the proxy returns lightly compressed full H
 
 ## Prefer TBO1
 Client requests TBO1 by default. Test showed TBO1 renders more completely than FULL on the J2ME side.
+
+## TBO1 = HTML minify
+TBO1 path now returns lightly minified HTML (structure, CSS, links kept) instead of binary blocks.
