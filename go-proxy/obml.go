@@ -68,8 +68,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 				last.text += " " + text
 				if len(last.text) > maxOBMLString {
 					last.text = last.text[:maxOBMLString]
-					for !utf8.ValidString(last.text) {
-					last.text = last.text[:len(last.text)-1]
+					last.text = strings.ToValidUTF8(last.text[:maxOBMLString], "")
 				}
 				}
 				return
