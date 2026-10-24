@@ -127,6 +127,7 @@ func ssrImageResponse(resp *http.Response) error {
 					if (seen[key]) continue;
 					seen[key] = true;
 					var r = a.getBoundingClientRect();
+					if (!r || r.width < 1 || r.height < 1) continue;
 					var sx = window.pageXOffset || document.documentElement.scrollLeft || 0;
 					var sy = window.pageYOffset || document.documentElement.scrollTop || 0;
 					out.push({text: t, url: href, x: Math.max(0, Math.round(r.left + sx)), y: Math.max(0, Math.round(r.top + sy)), w: Math.max(1, Math.round(r.width)), h: Math.max(1, Math.round(r.height))});
