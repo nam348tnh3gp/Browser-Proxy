@@ -1364,8 +1364,56 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     }
                 }
             }
-            Vector lines = new Vector();
+            // OBML-style absolute layout when positions are available
+            boolean useAbsolute = false;
+            int absCount = 0;
             Vector sourceBlocks = lastPageResult != null && lastPageResult.blocks != null ? lastPageResult.blocks : null;
+            if (sourceBlocks != null) {
+                for (int b = 0; b < sourceBlocks.size(); b++) {
+                    RenderBlock blk = (RenderBlock)sourceBlocks.elementAt(b);
+                    if (blk.layoutY > 0 || blk.layoutX > 0) absCount++;
+                }
+                useAbsolute = absCount > sourceBlocks.size() / 4;
+            }
+            if (useAbsolute && sourceBlocks != null) {
+                int maxY = 0;
+                float scale = w / 240.0f;
+                if (scale < 0.5f) scale = 0.5f;
+                if (scale > 1.5f) scale = 1.5f;
+                for (int b = 0; b < sourceBlocks.size(); b++) {
+                    RenderBlock blk = (RenderBlock)sourceBlocks.elementAt(b);
+                    if (blk.text == null || blk.text.length() == 0) continue;
+                    int px = (int)(blk.layoutX * scale);
+                    int py = contentY + (int)(blk.layoutY * scale) - scrollY;
+                    if (py + 20 < contentY || py > contentY + contentH) continue;
+                    Font f = fontForType(blk.type);
+                    g.setFont(f);
+                    if (blk.type == 22 && blk.url != null && blk.url.length() >= 4 && blk.url.charAt(0) == '#') {
+                        try {
+                            int rgb = Integer.parseInt(blk.url.substring(1), 16);
+                            g.setColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+                        } catch (Exception e) { g.setColor(0); }
+                    } else if (blk.url != null) {
+                        g.setColor(0, 72, 160);
+                    } else {
+                        g.setColor(30, 40, 50);
+                    }
+                    g.drawString(shorten(blk.text, w - px - 4, f), px, py, Graphics.TOP | Graphics.LEFT);
+                    int bottom = blk.layoutY + (blk.layoutH > 0 ? blk.layoutH : 16);
+                    if (bottom > maxY) maxY = bottom;
+                }
+                totalBodyHeight = (int)(maxY * scale) + 40;
+                // Skip normal flow drawing
+                g.setColor(255, 255, 255);
+                g.fillRect(0, h - footerH, w, footerH);
+                g.setColor(20, 40, 70);
+                g.setFont(normal);
+                g.drawString("Menu", 5, h - footerH + 3, Graphics.TOP | Graphics.LEFT);
+                g.drawString("Back", w - 5, h - footerH + 3, Graphics.TOP | Graphics.RIGHT);
+                return;
+            }
+            Vector lines = new Vector();
+
             if (lastPageResult != null && lastPageResult.mobileTiles) {
                 // The screenshot already contains the full page; do not append a fake text/link section.
             } else if (sourceBlocks == null || sourceBlocks.size() == 0) {
