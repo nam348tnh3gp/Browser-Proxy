@@ -1154,6 +1154,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             g.setColor(255, 255, 255); g.fillRect(0, contentY, w, contentH);
             g.setClip(4, contentY + 3, w - 8, Math.max(0, contentH - 6));
             int y = contentY + 4 - scrollY;
+            int mobileImageTop = y;
+            float mobileScale = (float)(w - 14) / 240.0f;
             totalBodyHeight = 0;
             if (lastPageResult != null && lastPageResult.images != null) {
                 for (int imageIndex = 0; imageIndex < lastPageResult.images.size() && imageIndex < 8; imageIndex++) {
@@ -1169,8 +1171,28 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                         if (y + toDraw.getHeight() > contentY && y < contentY + contentH) {
                             g.drawImage(toDraw, 7, y, Graphics.TOP | Graphics.LEFT);
                         }
-                        y += toDraw.getHeight() + 4;
-                        totalBodyHeight += toDraw.getHeight() + 4;
+                        int imageAdvance = toDraw.getHeight() + (lastPageResult.mobileTiles ? 0 : 4);
+                        y += imageAdvance;
+                        totalBodyHeight += imageAdvance;
+                    }
+                }
+            }
+            // IML2 keeps link hitboxes aligned with the captured page; underline links in blue
+            // and outline the focused target directly over the screenshot (no duplicate link list).
+            if (lastPageResult != null && lastPageResult.mobileTiles && lastPageResult.links != null) {
+                for (int li = 0; li < lastPageResult.links.size(); li++) {
+                    LinkItem link = (LinkItem)lastPageResult.links.elementAt(li);
+                    if (link.x < 0 || link.y < 0 || link.width <= 0 || link.height <= 0) continue;
+                    int lx = 7 + (int)(link.x * mobileScale);
+                    int ly = mobileImageTop + (int)(link.y * mobileScale) - scrollY;
+                    int lw = Math.max(2, (int)(link.width * mobileScale));
+                    int lh = Math.max(2, (int)(link.height * mobileScale));
+                    if (ly + lh < contentY || ly > contentY + contentH) continue;
+                    g.setColor(0, 82, 190);
+                    g.drawLine(lx, ly + lh - 1, lx + lw, ly + lh - 1);
+                    if (li == selectedLink) {
+                        g.setColor(0, 90, 220);
+                        g.drawRect(lx, ly, lw, lh);
                     }
                 }
             }
@@ -1256,6 +1278,17 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         }
 
         protected void keyPressed(int keyCode) {
+            int action = getGameAction(keyCode);
+            if (lastPageResult != null && lastPageResult.mobileTiles &&
+                (action == UP || keyCode == KEY_NUM2)) {
+                moveMobileLink(-1);
+                return;
+            }
+            if (lastPageResult != null && lastPageResult.mobileTiles &&
+                (action == DOWN || keyCode == KEY_NUM8)) {
+                moveMobileLink(1);
+                return;
+            }
             // PicoBrowser-style quick navigation
             if (keyCode == Canvas.KEY_NUM5 || keyCode == Canvas.KEY_NUM8) { // next link
                 moveLink(1);
@@ -1270,7 +1303,6 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 return;
             }
 
-            int action = getGameAction(keyCode);
             if (action == UP || keyCode == KEY_NUM2) {
                 scrollY = Math.max(0, scrollY - 30);
                 repaint();
@@ -1323,6 +1355,31 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
         }
 
+        private void moveMobileLink(int dir) {
+            if (lastPageResult == null || lastPageResult.links == null || lastPageResult.links.size() == 0) {
+                scrollY = Math.max(0, Math.min(Math.max(0, totalBodyHeight - (getHeight() - 90)), scrollY + dir * 30));
+                repaint();
+                return;
+            }
+            if (selectedLink < 0) selectedLink = dir > 0 ? 0 : lastPageResult.links.size() - 1;
+            else {
+                selectedLink += dir;
+                if (selectedLink < 0) selectedLink = lastPageResult.links.size() - 1;
+                if (selectedLink >= lastPageResult.links.size()) selectedLink = 0;
+            }
+            LinkItem link = (LinkItem)lastPageResult.links.elementAt(selectedLink);
+            if (link.y >= 0) {
+                int top = (int)(link.y * ((float)(getWidth() - 14) / 240.0f));
+                int bottom = top + Math.max(1, (int)(link.height * ((float)(getWidth() - 14) / 240.0f)));
+                int visible = Math.max(1, getHeight() - 90);
+                if (top < scrollY) scrollY = top;
+                else if (bottom > scrollY + visible) scrollY = Math.max(0, bottom - visible);
+                int maxScroll = Math.max(0, totalBodyHeight - visible);
+                if (scrollY > maxScroll) scrollY = maxScroll;
+            }
+            repaint();
+        }
+
         private void moveLink(int dir) {
             if (renderedLinkLines.size() == 0) return;
             if (selectedLink < 0) selectedLink = 0;
@@ -1335,6 +1392,12 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         }
 
         private void openSelectedLink() {
+            if (lastPageResult != null && lastPageResult.mobileTiles && lastPageResult.links != null) {
+                if (selectedLink >= 0 && selectedLink < lastPageResult.links.size()) {
+                    openTarget(((LinkItem)lastPageResult.links.elementAt(selectedLink)).url, true);
+                }
+                return;
+            }
             if (selectedLink < 0 || lastPageResult == null || lastPageResult.blocks == null) return;
             int seen = -1;
             for (int i = 0; i < lastPageResult.blocks.size(); i++) {
@@ -1350,7 +1413,11 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private static final class LinkItem {
         String label;
         String url;
-        LinkItem(String label, String url) { this.label = label; this.url = url; }
+        int x, y, width, height;
+        LinkItem(String label, String url) { this(label, url, -1, -1, 0, 0); }
+        LinkItem(String label, String url, int x, int y, int width, int height) {
+            this.label = label; this.url = url; this.x = x; this.y = y; this.width = width; this.height = height;
+        }
     }
 
     private static final class ImageRef {
@@ -1397,6 +1464,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         Vector images;
         Vector blocks;
         Vector forms;
+        boolean mobileTiles;
     }
 
     private Image scaleImage(Image src, int newW, int newH) {
@@ -1429,6 +1497,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         result.links = new Vector();
         result.images = new Vector();
         result.blocks = new Vector();
+        result.mobileTiles = tiled;
         if (tiled) {
             int tileCount = in.readUnsignedShort();
             if (tileCount < 1 || tileCount > 32) throw new IOException("Bad mobile tile count");
@@ -1465,9 +1534,13 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             byte[] ub = new byte[uLen];
             in.readFully(ub);
             String link = new String(ub, "UTF-8");
+            int linkX = tiled ? in.readUnsignedShort() : -1;
+            int linkY = tiled ? in.readUnsignedShort() : -1;
+            int linkW = tiled ? in.readUnsignedShort() : 0;
+            int linkH = tiled ? in.readUnsignedShort() : 0;
             if (text.length() > 0 && link.length() > 0) {
-                result.links.addElement(new LinkItem(text, link));
-                result.blocks.addElement(new RenderBlock(text, 4, link));
+                result.links.addElement(new LinkItem(text, link, linkX, linkY, linkW, linkH));
+                if (!tiled) result.blocks.addElement(new RenderBlock(text, 4, link));
             }
         }
         return result;
