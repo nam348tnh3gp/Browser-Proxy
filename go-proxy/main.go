@@ -26,14 +26,14 @@ import (
 var (
 	proxyProcessStartedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	proxyStats            struct {
-		httpRequests             atomic.Int64
-		httpResponseBytes        atomic.Int64
-		gzipResponses            atomic.Int64
-		gzipOriginalBytes        atomic.Int64
-		gzipCompressedBytes      atomic.Int64
-		connectTunnels           atomic.Int64
-		connectClientToUpstream  atomic.Int64
-		connectUpstreamToClient  atomic.Int64
+		httpRequests            atomic.Int64
+		httpResponseBytes       atomic.Int64
+		gzipResponses           atomic.Int64
+		gzipOriginalBytes       atomic.Int64
+		gzipCompressedBytes     atomic.Int64
+		connectTunnels          atomic.Int64
+		connectClientToUpstream atomic.Int64
+		connectUpstreamToClient atomic.Int64
 	}
 )
 
