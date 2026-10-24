@@ -57,13 +57,28 @@ func mobileResponse(resp *http.Response) error {
 		return nil
 	}
 
-	originalHeaders := resp.Header.Clone()
 	originalRequestHeader := resp.Request.Header.Clone()
+	if findChromeBinary() == "" {
+		resp.Request.Header.Set("X-TGFN-Format", "TBO1")
+		err := obmlResponse(resp)
+		resp.Request.Header = originalRequestHeader
+		return err
+	}
+
+	originalHeaders := resp.Header.Clone()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCompactHTMLBytes+1))
-	_ = resp.Body.Close()
 	if err != nil {
 		return err
 	}
+	if len(data) > maxCompactHTMLBytes {
+		// Preserve the bytes already read and the still-open upstream stream.
+		resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(data), resp.Body))
+		resp.Request.Header.Set("X-TGFN-Format", "TBO1")
+		err = obmlResponse(resp)
+		resp.Request.Header = originalRequestHeader
+		return err
+	}
+	_ = resp.Body.Close()
 	resp.Body = io.NopCloser(bytes.NewReader(data))
 	resp.ContentLength = int64(len(data))
 
@@ -73,12 +88,9 @@ func mobileResponse(resp *http.Response) error {
 		resp.Header = originalHeaders.Clone()
 		resp.Request.Header = originalRequestHeader.Clone()
 		resp.Request.Header.Set("X-TGFN-Format", "TBO1")
-		err := obmlResponse(resp)
+		fallbackErr := obmlResponse(resp)
 		resp.Request.Header = originalRequestHeader
-		return err
-	}
-	if len(data) > maxCompactHTMLBytes || findChromeBinary() == "" {
-		return fallback()
+		return fallbackErr
 	}
 
 	resp.Request.Header.Set("X-TGFN-Format", ssrImageMode)
