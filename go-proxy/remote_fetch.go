@@ -70,7 +70,7 @@ func serveRemoteFetch(w http.ResponseWriter, r *http.Request) bool {
 		http.Error(w, "Invalid remote URL", http.StatusBadRequest)
 		return true
 	}
-	req.Header.Set("User-Agent", "TGFN-BrowserMini-RemoteFetch/2.0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36")
 	req.Header.Set("Accept", r.Header.Get("Accept"))
 	if req.Header.Get("Accept") == "" {
 		req.Header.Set("Accept", "text/html,text/plain,image/*,*/*")
