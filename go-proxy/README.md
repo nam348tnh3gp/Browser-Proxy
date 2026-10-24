@@ -22,7 +22,7 @@ This is an original, OBML-inspired protocol for this project, **not** Opera's pr
 ## J2ME HTTP and HTTPS support
 
 - HTTP pages use the normal absolute-URL forward-proxy request path.
-- HTTPS pages and HTTPS images use the server-side `/__tgfn/fetch?url=...` endpoint over the phone-to-proxy HTTP connection. The Go proxy fetches the remote HTTPS resource with normal certificate verification, follows a limited number of redirects, and transforms eligible HTML into TBO1. This avoids needing portable TLS-over-CONNECT support in MIDP.
+- HTTPS pages and HTTPS images use the server-side `/__tgfn/fetch?url=...` endpoint over the phone-to-proxy HTTP connection. The Go proxy fetches the remote HTTPS resource with normal certificate verification, follows a limited number of redirects, and applies the requested mobile transform: MOB1 Chromium-rendered JPEG tiles when available, or TBO1 semantic blocks as fallback. This avoids needing portable TLS-over-CONNECT support in MIDP.
 - The endpoint only permits HTTP(S), rejects URL credentials, blocks loopback/private/link-local/reserved destinations, rechecks redirect targets and validates addresses again when dialing to reduce SSRF/DNS-rebinding risk.
 - HTTPS through this endpoint is **server-side fetching**, not an end-to-end CONNECT tunnel: the proxy server can observe the requested URL and response content, and the destination sees the proxy server's network address. Use only a trusted proxy.
 - The normal HTTP CONNECT handler remains available for clients such as Android WebView that perform TLS themselves.
