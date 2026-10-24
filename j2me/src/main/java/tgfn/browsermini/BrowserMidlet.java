@@ -178,7 +178,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     lastPageResult = result;
                     for (int imageIndex = 0; imageIndex < result.images.size() && imageIndex < 8; imageIndex++) {
                         ImageRef imageRef = (ImageRef)result.images.elementAt(imageIndex);
-                        try { imageRef.image = loadImage(imageRef.url); } catch (Exception ignoredImage) {}
+                        if (imageRef.image == null && imageRef.url != null && imageRef.url.length() > 0) {
+                            try { imageRef.image = loadImage(imageRef.url); } catch (Exception ignoredImage) {}
+                        }
                     }
                     synchronized (BrowserMidlet.this) {
                         links.removeAllElements();
@@ -1419,24 +1421,40 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
         byte[] magic = new byte[4];
         in.readFully(magic);
-        int jpegLen = in.readInt();
-        if (jpegLen < 10 || jpegLen > data.length - 6) throw new IOException("Bad IMGL");
-        byte[] jpeg = new byte[jpegLen];
-        in.readFully(jpeg);
-        int linkCount = in.readUnsignedShort();
-        if (linkCount > 100) linkCount = 100;
+        boolean tiled = magic[0] == 'I' && magic[1] == 'M' && magic[2] == 'L' && magic[3] == '2';
         PageResult result = new PageResult();
         result.title = url;
-        result.text = "[Rendered page]";
+        result.text = "[Mobile-rendered page]";
         result.links = new Vector();
         result.images = new Vector();
         result.blocks = new Vector();
-        try {
-            Image img = Image.createImage(jpeg, 0, jpeg.length);
-            ImageRef ref = new ImageRef("page", url);
-            ref.image = img;
-            result.images.addElement(ref);
-        } catch (Exception ignored) {}
+        if (tiled) {
+            int tileCount = in.readUnsignedShort();
+            if (tileCount < 1 || tileCount > 32) throw new IOException("Bad mobile tile count");
+            for (int i = 0; i < tileCount; i++) {
+                int jpegLen = in.readInt();
+                if (jpegLen < 10 || jpegLen > in.available()) throw new IOException("Bad mobile tile length");
+                byte[] jpeg = new byte[jpegLen];
+                in.readFully(jpeg);
+                Image img = Image.createImage(jpeg, 0, jpeg.length);
+                ImageRef ref = new ImageRef("page", "");
+                ref.image = img;
+                result.images.addElement(ref);
+            }
+        } else {
+            int jpegLen = in.readInt();
+            if (jpegLen < 10 || jpegLen > in.available() - 2) throw new IOException("Bad IMGL");
+            byte[] jpeg = new byte[jpegLen];
+            in.readFully(jpeg);
+            try {
+                Image img = Image.createImage(jpeg, 0, jpeg.length);
+                ImageRef ref = new ImageRef("page", "");
+                ref.image = img;
+                result.images.addElement(ref);
+            } catch (Exception ignored) {}
+        }
+        int linkCount = in.readUnsignedShort();
+        if (linkCount > 100) throw new IOException("Too many image links");
         for (int i = 0; i < linkCount; i++) {
             int tLen = in.readUnsignedShort();
             byte[] tb = new byte[tLen];
