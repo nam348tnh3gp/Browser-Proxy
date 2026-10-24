@@ -14,7 +14,7 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 
 | Mode | Description |
 |------|-------------|
-| **TBO1** (default) | Server-side semantic blocks: compact text, headings, lists, links and resized images. No browser engine required. |
+| **TBO1** (default) | Server-side semantic blocks: compact text, headings, lists, links, images, and native MIDP forms for common GET searches. No browser engine required. |
 | SSR | Structured text blocks |
 | FULL | HTML + gzip |
 | SSRIMG | Optional screenshot mode for proxy-side clients that explicitly request it (requires Chrome/Chromium). |
@@ -23,9 +23,9 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 
 1. Client requests page with `X-TGFN-Format: TBO1`, including HTTPS pages through `/__tgfn/fetch`.
 2. The Go proxy parses HTML and removes scripts, styles, and nonessential page chrome.
-3. It sends a bounded binary stream of semantic text blocks, independent link records, and image references.
+3. It sends a bounded binary stream of semantic text blocks, links, basic table/block boundaries, image references, and form metadata.
 4. Image references point to `/__tgfn/img`, where the proxy resizes and JPEG-compresses images.
-5. The MIDP client lays out the blocks with device-native fonts and exposes links through keypad navigation and the Links menu.
+5. The MIDP client lays out blocks with device-native fonts and exposes links and forms through keypad navigation and the Links menu. Opening a form shows native text/password/number/email/URL fields; submitting currently serializes fields as a GET query.
 
 ## OBML references and compatibility
 
@@ -55,6 +55,8 @@ Use **Menu → Links** to navigate.
 
 - Screenshot is static (no live JavaScript after load)
 - Interaction is through the link list (not pixel-perfect click map yet)
+- CSS support is intentionally limited to structural HTML and inline `display:none` / `visibility:hidden`; external stylesheets, complex grid/flex layouts, and pixel-perfect desktop CSS are not reproduced.
+- Common GET forms are supported; POST forms, JavaScript-driven forms, file uploads, and full checkbox/radio/select semantics are not yet browser-equivalent.
 - Best on text-friendly or mobile sites
 
 Not affiliated with Opera.
