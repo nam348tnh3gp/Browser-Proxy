@@ -336,6 +336,14 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			newKind = 12
 		case "del", "s", "strike":
 			newKind = 15
+		case "mark":
+			newKind = 16
+		case "u", "ins":
+			newKind = 17
+		case "small":
+			newKind = 18
+		case "big":
+			newKind = 19
 		case "hr":
 			add(13, "────────", "")
 		case "li":
@@ -368,6 +376,17 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		}
 		if strings.Contains(inlineStyle, "text-decoration:line-through") || strings.Contains(inlineStyle, "text-decoration: line-through") {
 			newKind = 15
+		}
+		if strings.Contains(inlineStyle, "text-decoration:underline") || strings.Contains(inlineStyle, "text-decoration: underline") {
+			newKind = 17
+		}
+		if strings.Contains(inlineStyle, "font-size:smaller") || strings.Contains(inlineStyle, "font-size: smaller") ||
+			strings.Contains(inlineStyle, "font-size:x-small") || strings.Contains(inlineStyle, "font-size: x-small") {
+			newKind = 18
+		}
+		if strings.Contains(inlineStyle, "font-size:larger") || strings.Contains(inlineStyle, "font-size: larger") ||
+			strings.Contains(inlineStyle, "font-size:x-large") || strings.Contains(inlineStyle, "font-size: x-large") {
+			newKind = 19
 		}
 		if bg := backgroundFor(n); bg != "" && tag != "html" && tag != "head" && tag != "style" {
 			if imageURL := obmlAbsolute(pageURL, bg); imageURL != "" {
