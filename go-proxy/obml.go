@@ -389,7 +389,10 @@ func obmlResponse(resp *http.Response) error {
 	}
 	_ = resp.Body.Close()
 	pageURL := resp.Request.URL.String()
-	packet, err := buildOBMLPage(pageURL, string(data))
+	// Execute bounded inline JavaScript before converting the resulting HTML
+	// into TBO1. This is a static-rendering subset, not a full browser DOM.
+	renderedHTML := renderInlineJavaScript(pageURL, string(data))
+	packet, err := buildOBMLPage(pageURL, renderedHTML)
 	if err != nil {
 		return err
 	}
