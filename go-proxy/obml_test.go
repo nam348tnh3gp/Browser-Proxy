@@ -68,11 +68,18 @@ func TestBuildOBMLPageKeepsCSSBannersAndLazyImages(t *testing.T) {
 }
 
 func TestBuildOBMLPagePreservesTypographyStyles(t *testing.T) {
-	source := `<!doctype html><html><body>
+	source := `<!doctype html><html><head><style>
+		.css-italic { font-style: italic; }
+		.css-underline { text-decoration: underline; }
+		.css-highlight { background-color: yellow; }
+		</style></head><body>
 		<h3>Heading</h3><em>Italic</em><code>Code</code><blockquote>Quoted</blockquote>
 		<hr><del>Removed</del><mark>Highlighted</mark><u>Underlined</u>
 		<small>Small</small><big>Large</big>
 		<span style="text-decoration: underline">CSS underline</span>
+		<span class="css-italic">CSS italic</span>
+		<span class="css-underline">CSS class underline</span>
+		<span class="css-highlight">CSS highlight</span>
 	</body></html>`
 	packet, err := buildOBMLPage("https://example.test/", source)
 	if err != nil {
@@ -96,18 +103,29 @@ func TestBuildOBMLPagePreservesTypographyStyles(t *testing.T) {
 		t.Fatal(err)
 	}
 	found := make(map[byte]bool)
+	kindByText := make(map[string]byte)
 	for i := 0; i < int(count); i++ {
 		kind, err := reader.ReadByte()
 		if err != nil {
 			t.Fatalf("read block %d kind: %v", i, err)
 		}
-		_ = readString()
+		label := readString()
 		_ = readString()
 		found[kind] = true
+		kindByText[label] = kind
 	}
 	for _, kind := range []byte{10, 11, 12, 13, 14, 15, 16, 17, 18, 19} {
 		if !found[kind] {
 			t.Errorf("missing typography block kind %d", kind)
+		}
+	}
+	for label, wantKind := range map[string]byte{
+		"CSS italic": 10,
+		"CSS class underline": 17,
+		"CSS highlight": 16,
+	} {
+		if got := kindByText[label]; got != wantKind {
+			t.Errorf("%q style kind = %d, want %d", label, got, wantKind)
 		}
 	}
 }
