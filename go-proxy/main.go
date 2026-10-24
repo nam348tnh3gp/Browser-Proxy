@@ -44,7 +44,7 @@ var (
 		idByIP map[string]string
 		stats  map[string]*clientCounterSet
 	}
-	proxyStats            clientCounterSet
+	proxyStats clientCounterSet
 )
 
 type proxyStatsSnapshot struct {
