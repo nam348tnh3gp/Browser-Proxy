@@ -214,6 +214,7 @@ func TestRegisterClientAndReadPerClientStats(t *testing.T) {
 		`"gzip_saved_bytes":600`,
 		`"connect_tunnels":2`,
 		`"registered_clients":1`,
+		`"client_attribution_status":"matched_source_ip"`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("per-client stats missing %s: %s", expected, body)
