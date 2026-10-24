@@ -45,7 +45,6 @@ var compactAllowedTags = map[string]bool{
 	"tr": true, "u": true, "ul": true, "html": true, "head": true, "body": true,
 }
 
-
 // mobileResponse prefers a real mobile-viewport render for J2ME. If Chromium
 // is unavailable or rendering fails, it falls back to the semantic TBO1 page.
 func mobileResponse(resp *http.Response) error {
