@@ -68,7 +68,9 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 				last.text += " " + text
 				if len(last.text) > maxOBMLString {
 					last.text = last.text[:maxOBMLString]
-					for !utf8.ValidString(last.text) { last.text = last.text[:len(last.text)-1] }
+					for !utf8.ValidString(last.text) {
+					last.text = last.text[:len(last.text)-1]
+				}
 				}
 				return
 			}
@@ -95,7 +97,9 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 	}
 	hasAttr := func(n *xhtml.Node, key string) bool {
 		for _, a := range n.Attr {
-			if strings.EqualFold(a.Key, key) { return true }
+			if strings.EqualFold(a.Key, key) {
+				return true
+			}
 		}
 		return false
 	}
