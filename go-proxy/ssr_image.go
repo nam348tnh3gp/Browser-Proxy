@@ -24,6 +24,7 @@ const ssrImageMode = "SSRIMG"
 const imglMagic = "IML2"
 const maxMobileTiles = 32
 const mobileTileHeight = 500
+const maxMobilePacketBytes = 3 << 20
 
 var chromeCandidates = []string{
 	"/data/data/com.termux/files/usr/bin/chromium-browser",
@@ -172,6 +173,9 @@ func ssrImageResponse(resp *http.Response) error {
 		_ = binary.Write(&packet, binary.BigEndian, uint32(len(tile)))
 		packet.Write(tile)
 	}
+	if packet.Len() > maxMobilePacketBytes {
+		return fmt.Errorf("mobile render exceeds %d-byte transfer limit", maxMobilePacketBytes)
+	}
 	if len(links) > 60 {
 		links = links[:60]
 	}
@@ -179,6 +183,9 @@ func ssrImageResponse(resp *http.Response) error {
 	for _, l := range links {
 		writeLenStr(&packet, l.Text)
 		writeLenStr(&packet, l.URL)
+	}
+	if packet.Len() > maxMobilePacketBytes {
+		return fmt.Errorf("mobile render exceeds %d-byte transfer limit", maxMobilePacketBytes)
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(packet.Bytes()))
