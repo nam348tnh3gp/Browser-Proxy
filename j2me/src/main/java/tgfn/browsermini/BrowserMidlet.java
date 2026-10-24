@@ -800,10 +800,24 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 if (formRef != null) {
                     int formIndex = result.forms.size();
                     result.forms.addElement(formRef);
-                    String formLabel = "[Form: " + formRef.label + "]";
+                    String formLabel = formRef.label.length() == 0 ? "Web form" : formRef.label;
                     String formTarget = "form:" + formIndex;
-                    result.links.addElement(new LinkItem(formLabel, formTarget));
-                    result.blocks.addElement(new RenderBlock(formLabel, 4, formTarget));
+                    result.links.addElement(new LinkItem("[Form: " + formLabel + "]", formTarget));
+                    // Render controls in document flow instead of hiding the whole form
+                    // behind one generic link. Selecting any control opens the native
+                    // MIDP form editor, where the user can edit values and submit.
+                    result.blocks.addElement(new RenderBlock(formLabel, 2, null));
+                    for (int fi = 0; fi < formRef.fields.size(); fi++) {
+                        FormField field = (FormField)formRef.fields.elementAt(fi);
+                        if (field.name.length() == 0 || "hidden".equals(field.type)) continue;
+                        String fieldLabel = field.label.length() == 0 ? field.name : field.label;
+                        String fieldType = field.type == null || field.type.length() == 0 ? "text" : field.type;
+                        String shownValue = "password".equals(fieldType) ? "" : field.value;
+                        String control = fieldLabel + "  [" + fieldType + "]";
+                        if (shownValue != null && shownValue.length() > 0) control += " " + shownValue;
+                        result.blocks.addElement(new RenderBlock(control, 4, formTarget));
+                    }
+                    result.blocks.addElement(new RenderBlock("[Edit / submit " + formLabel + "]", 4, formTarget));
                 }
                 continue;
             }
