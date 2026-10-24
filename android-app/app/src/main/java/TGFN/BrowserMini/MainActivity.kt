@@ -885,9 +885,10 @@ class MainActivity : Activity() {
                     val network = fetchStats(false)
                     runOnUiThread {
                         if (resetBaseline) {
+                            // Reset only this installation's baseline. The network-wide
+                            // baseline must remain unchanged when the user resets device stats.
                             prefs.edit()
                                 .putString("data_saver_client_baseline", current.toString())
-                                .putString("data_saver_network_baseline", network.toString())
                                 .apply()
                         }
                         val storedClient = prefs.getString("data_saver_client_baseline", null)
@@ -922,7 +923,10 @@ class MainActivity : Activity() {
                             append(summary(network, storedNetwork)).append('\n')
                             append(tr("Proxy khởi động: ", "Proxy started: "))
                                 .append(network.optString("process_started_at", "—"))
-                            if (resetBaseline) append("\n\n").append(tr("Đã đặt lại mốc thống kê trên thiết bị này.", "Local analytics baselines reset."))
+                            if (resetBaseline) append("\n\n").append(tr(
+                                "Đã đặt lại mốc thống kê riêng của thiết bị này; mốc toàn mạng được giữ nguyên.",
+                                "This device's baseline was reset; the network-wide baseline was preserved."
+                            ))
                         }
                     }
                 } catch (e: Exception) {
