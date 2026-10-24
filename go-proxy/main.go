@@ -71,7 +71,7 @@ func snapshotCounters(c *clientCounterSet) proxyStatsSnapshot {
 	clientTracking.RLock()
 	registeredClients := len(clientTracking.stats)
 	clientTracking.RUnlock()
-	compressed := proxyStats.gzipCompressedBytes.Load()
+	compressed := c.gzipCompressedBytes.Load()
 	return proxyStatsSnapshot{
 		ProcessStartedAt:        proxyProcessStartedAt,
 		HTTPRequests:            c.httpRequests.Load(),
@@ -85,6 +85,16 @@ func snapshotCounters(c *clientCounterSet) proxyStatsSnapshot {
 		ConnectUpstreamToClient: c.connectUpstreamToClient.Load(),
 		RegisteredClients:       registeredClients,
 	}
+}
+
+func lookupClientCounters(id string) *clientCounterSet {
+	if id == "" {
+		return nil
+	}
+	clientTracking.RLock()
+	counters := clientTracking.stats[id]
+	clientTracking.RUnlock()
+	return counters
 }
 
 func clientCounters(id string) *clientCounterSet {
@@ -259,7 +269,7 @@ func proxyHandlerWithAuth(username, password string) http.Handler {
 			id := r.URL.Query().Get("client_id")
 			stats := currentProxyStats()
 			if id != "" {
-				if counters := clientCounters(id); counters != nil {
+				if counters := lookupClientCounters(id); counters != nil {
 					stats = snapshotCounters(counters)
 				} else {
 					stats = snapshotCounters(&clientCounterSet{})
