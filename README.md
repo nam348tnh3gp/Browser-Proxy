@@ -22,7 +22,7 @@ A lightweight Android browser prototype with a Kotlin/WebView client and a stand
 - Desktop-site mode using a desktop browser user agent and wide viewport settings; websites may still adapt their layout independently.
 - In-page translation to Vietnamese, English, Japanese, Korean, French, or Spanish without navigating away; the user can restore the original text. Translation uses Google's online translation endpoint and is not offline.
 - Optional HTTP proxy configuration; direct browsing remains available when the proxy is disabled.
-- Optional Data Saver toggle that keeps images and network access enabled, uses WebView cache validation, and persists across launches. The Go proxy can gzip eligible small text responses when the client advertises gzip.
+- Optional Data Saver toggle that keeps images and network access enabled, uses WebView cache validation, and persists across launches. The Go proxy can gzip eligible small text responses when the client advertises gzip. The **Menu → Data Saver analytics** screen reads measured Go proxy counters for response bytes, completed HTTPS tunnel bytes, and actual gzip savings; counters are proxy-wide and reset when the proxy process restarts.
 - Settings for the home page, proxy endpoint, and desktop-site preference.
 
 The browser uses Android System WebView; it is not the full Chromium desktop/mobile browser and does not provide Chrome account sync or extensions.

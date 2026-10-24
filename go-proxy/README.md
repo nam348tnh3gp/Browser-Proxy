@@ -19,6 +19,7 @@ By default, the proxy listens on `127.0.0.1:8080`. To allow a phone or another m
 - Eligible HTTP text responses may be gzip-compressed when the request advertises `Accept-Encoding: gzip`. Compression applies only to successful GET responses without a Range request, only when the body is at most 8 MiB and gzip makes it smaller. Existing `Content-Encoding`, `Cache-Control: no-transform`, non-text content, and other ineligible responses are left unchanged. `Vary: Accept-Encoding` is added when compression is applied.
 - HTTPS `CONNECT` is a byte tunnel: the proxy cannot compress or inspect its encrypted page content.
 - Logs include request method, target host, status and duration. CONNECT logs include tunnel establishment/closure, byte counts and errors. Full URLs, query strings and proxy credentials are not logged.
+- The local `GET /__tgfn/stats` endpoint returns measured process-lifetime counters for HTTP response-body bytes, gzip-compressed response counts and byte savings, and completed CONNECT tunnel byte counts. Counters are in memory and reset when the proxy process restarts. The endpoint is subject to configured proxy authentication; the Android analytics screen currently works with authentication disabled.
 
 ## Optional proxy authentication
 
@@ -35,7 +36,7 @@ The proxy then requires HTTP Basic credentials through the standard `Proxy-Autho
 
 ## Data saving behavior
 
-Gzip is negotiated per request and only applied to eligible ordinary HTTP responses. It does not transcode images or modify HTTPS traffic inside CONNECT tunnels, and savings depend on the response content. The Android Data Saver toggle uses WebView cache behavior separately; it does not itself enable image blocking or Chrome-Lite-style rewriting.
+Gzip is negotiated per request and only applied to eligible ordinary HTTP responses. It does not transcode images or modify HTTPS traffic inside CONNECT tunnels, and savings depend on the response content. The Android Data Saver toggle uses WebView cache behavior separately; it does not itself enable image blocking or Chrome-Lite-style rewriting. Open **Menu → Data Saver analytics** in the app to inspect measured counters from this Go proxy. Received bytes combine HTTP response-body bytes with downstream CONNECT tunnel bytes; gzip savings are counted only when the proxy actually emits a smaller gzip body. These counters are proxy-wide, not per-tab or per-device, when clients share a proxy.
 
 ## Security
 

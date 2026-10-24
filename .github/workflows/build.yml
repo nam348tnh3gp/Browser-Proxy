@@ -183,7 +183,7 @@ jobs:
           cache-dependency-path: go-proxy/go.mod
       - name: Format check
         run: |
-          gofmt -d go-proxy/main.go
+          gofmt -d go-proxy/*.go
           gofmt -l go-proxy/*.go
           test -z "$(gofmt -l go-proxy/*.go)"
       - name: Test

@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -18,8 +19,60 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+var (
+	proxyProcessStartedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	proxyStats            struct {
+		httpRequests            atomic.Int64
+		httpResponseBytes       atomic.Int64
+		gzipResponses           atomic.Int64
+		gzipOriginalBytes       atomic.Int64
+		gzipCompressedBytes     atomic.Int64
+		connectTunnels          atomic.Int64
+		connectClientToUpstream atomic.Int64
+		connectUpstreamToClient atomic.Int64
+	}
+)
+
+type proxyStatsSnapshot struct {
+	ProcessStartedAt        string `json:"process_started_at"`
+	HTTPRequests            int64  `json:"http_requests"`
+	HTTPResponseBytes       int64  `json:"http_response_bytes"`
+	GzipResponses           int64  `json:"gzip_responses"`
+	GzipOriginalBytes       int64  `json:"gzip_original_bytes"`
+	GzipCompressedBytes     int64  `json:"gzip_compressed_bytes"`
+	GzipSavedBytes          int64  `json:"gzip_saved_bytes"`
+	ConnectTunnels          int64  `json:"connect_tunnels"`
+	ConnectClientToUpstream int64  `json:"connect_client_to_upstream_bytes"`
+	ConnectUpstreamToClient int64  `json:"connect_upstream_to_client_bytes"`
+}
+
+func currentProxyStats() proxyStatsSnapshot {
+	original := proxyStats.gzipOriginalBytes.Load()
+	compressed := proxyStats.gzipCompressedBytes.Load()
+	return proxyStatsSnapshot{
+		ProcessStartedAt:        proxyProcessStartedAt,
+		HTTPRequests:            proxyStats.httpRequests.Load(),
+		HTTPResponseBytes:       proxyStats.httpResponseBytes.Load(),
+		GzipResponses:           proxyStats.gzipResponses.Load(),
+		GzipOriginalBytes:       original,
+		GzipCompressedBytes:     compressed,
+		GzipSavedBytes:          maxInt64(original-compressed, 0),
+		ConnectTunnels:          proxyStats.connectTunnels.Load(),
+		ConnectClientToUpstream: proxyStats.connectClientToUpstream.Load(),
+		ConnectUpstreamToClient: proxyStats.connectUpstreamToClient.Load(),
+	}
+}
+
+func maxInt64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
 
 func main() {
 	username := os.Getenv("PROXY_USERNAME")
@@ -91,12 +144,23 @@ func proxyHandlerWithAuth(username, password string) http.Handler {
 			log.Printf("request rejected method=%s client=%q reason=proxy_auth status=%d", r.Method, safeLogValue(r.RemoteAddr), http.StatusProxyAuthRequired)
 			return
 		}
+		// Native app analytics requests use origin-form directly against the proxy
+		// listener. Normal forward-proxy requests use absolute-form URLs.
+		if r.Method == http.MethodGet && r.URL != nil && !r.URL.IsAbs() && r.URL.Path == "/__tgfn/stats" {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			if err := json.NewEncoder(w).Encode(currentProxyStats()); err != nil {
+				log.Printf("stats response failed: %v", err)
+			}
+			return
+		}
 		if r.Method == http.MethodConnect {
 			log.Printf("request method=CONNECT client=%q target=%q", r.RemoteAddr, safeLogValue(r.Host))
 			handleConnect(w, r)
 			return
 		}
 
+		proxyStats.httpRequests.Add(1)
 		target := ""
 		if r.URL != nil {
 			target = r.URL.Host
@@ -182,6 +246,9 @@ func gzipTextResponse(resp *http.Response) error {
 	resp.Header.Del("ETag")
 	resp.Header.Del("Content-Range")
 	addVary(resp.Header, "Accept-Encoding")
+	proxyStats.gzipResponses.Add(1)
+	proxyStats.gzipOriginalBytes.Add(int64(len(data)))
+	proxyStats.gzipCompressedBytes.Add(int64(compressed.Len()))
 	return nil
 }
 
@@ -264,7 +331,9 @@ func (w *statusLoggingWriter) WriteHeader(status int) {
 }
 
 func (w *statusLoggingWriter) Write(p []byte) (int, error) {
-	return w.ResponseWriter.Write(p)
+	n, err := w.ResponseWriter.Write(p)
+	proxyStats.httpResponseBytes.Add(int64(n))
+	return n, err
 }
 
 func (w *statusLoggingWriter) Flush() {
@@ -401,6 +470,9 @@ func tunnel(upstream, client net.Conn, clientReader io.Reader, host string, star
 				safeLogValue(host), result.direction, result.err)
 		}
 	}
+	proxyStats.connectTunnels.Add(1)
+	proxyStats.connectClientToUpstream.Add(clientToUpstream)
+	proxyStats.connectUpstreamToClient.Add(upstreamToClient)
 	log.Printf("CONNECT closed target=%q duration=%s bytes_client_to_upstream=%d bytes_upstream_to_client=%d reason=%s",
 		safeLogValue(host), time.Since(started).Round(time.Millisecond),
 		clientToUpstream, upstreamToClient, reason)
