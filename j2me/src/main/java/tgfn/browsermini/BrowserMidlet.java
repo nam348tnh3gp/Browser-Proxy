@@ -547,7 +547,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     public void commandAction(Command command, Displayable source) {
-        if (source == browserCanvas && command == menuCommand) {
+        if (source == webForm && command == submitWebFormCommand) {
+            submitWebForm();
+        } else if (source == browserCanvas && command == menuCommand) {
             showBrowserMenu();
         } else if (source == browserCanvas && command == backCommand) {
             if (historyIndex > 0) { historyIndex--; navigate((String)history.elementAt(historyIndex), false); }
@@ -628,12 +630,10 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     public void commandAction(Command command, Item item) {
-        if (source == webForm && command == submitWebFormCommand) {
-            submitWebForm();
-        } else if (command == openLinkCommand) {
+        if (command == openLinkCommand) {
             int index = pageLinkItems.indexOf(item);
             if (index >= 0 && index < links.size()) {
-                navigate(((LinkItem)links.elementAt(index)).url, true);
+                openTarget(((LinkItem)links.elementAt(index)).url, true);
             }
         }
     }
