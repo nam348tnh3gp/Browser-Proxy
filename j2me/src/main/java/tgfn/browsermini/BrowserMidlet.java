@@ -812,7 +812,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         result.blocks = new Vector();
         result.title = readTBOString(in);
         int count = in.readUnsignedShort();
-        if (count > 2500) throw new IOException("Too many compact page blocks");
+        if (count > 4000) throw new IOException("Too many compact page blocks");
         StringBuffer text = new StringBuffer();
         boolean joinNextTableCell = false;
         for (int i = 0; i < count; i++) {

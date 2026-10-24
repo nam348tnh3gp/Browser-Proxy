@@ -92,3 +92,9 @@ Client defaults to **TBO1**. The proxy converts the full mobile HTML into a comp
 
 ## Opera Mini style full-web → TBO1
 Proxy receives the full mobile page (HTML + CSS), extracts text, links, images, forms, colors and basic styles, then compresses into TBO1 binary for the J2ME client — similar to how Opera Mini processed pages on its servers.
+
+## TBO1 full-web (Opera Mini style)
+- Receives full mobile HTML+CSS
+- Up to 4000 blocks per page
+- Images up to 240px, quality 55
+- Colors, links, forms, semantic structure preserved in binary
