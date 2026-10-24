@@ -83,3 +83,9 @@ Client defaults to **TBO1**. The proxy converts the full mobile HTML into a comp
 - Links and images (compressed)
 - Forms (GET)
 - More content per page (up to 2500 blocks)
+
+## Opera Mini 4.2 style features
+- * / # : zoom out / zoom in
+- Images compressed more aggressively (width 200, quality 45)
+- Small-screen reflow via TBO1
+- Find in page (menu)

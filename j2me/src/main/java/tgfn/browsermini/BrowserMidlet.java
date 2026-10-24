@@ -89,6 +89,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private final Command forwardCommand = new Command("Forward", Command.SCREEN, 3);
     private final Command homeCommand = new Command("Home", Command.SCREEN, 4);
     private final Command linksCommand = new Command("Links", Command.SCREEN, 5);
+    private final Command findCommand = new Command("Find", Command.SCREEN, 5);
     private final Command addressCommand = new Command("Address", Command.SCREEN, 6);
     private final Command reloadCommand = new Command("Reload", Command.SCREEN, 7);
     private final Command exitCommand = new Command("Exit", Command.EXIT, 9);
@@ -1229,6 +1230,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         private int scrollY;
         private int totalBodyHeight;
         private int selectedLink = -1;
+        private int zoom = 100; // 100 = 1x, Opera Mini style
         private final Vector renderedLinkLines = new Vector();
 
         BrowserCanvas() {
@@ -1279,6 +1281,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             boolean edgeToEdgeMobile = lastPageResult != null && lastPageResult.mobileTiles;
             g.setClip(edgeToEdgeMobile ? 0 : 4, contentY + 3, edgeToEdgeMobile ? w : w - 8, Math.max(0, contentH - 6));
             int y = contentY + 4 - scrollY;
+            int zoomPct = zoom < 50 ? 100 : zoom;
             int mobileImageTop = y;
             float mobileScale = (float)w / Math.max(1, lastPageResult == null ? 240 : lastPageResult.mobileViewportWidth);
             totalBodyHeight = 0;
@@ -1526,6 +1529,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         }
 
         protected void keyPressed(int keyCode) {
+            // Opera Mini 4.x style zoom
+            if (keyCode == KEY_STAR) { zoom = Math.max(50, zoom - 25); repaint(); return; }
+            if (keyCode == KEY_POUND) { zoom = Math.min(200, zoom + 25); repaint(); return; }
             int action = getGameAction(keyCode);
             if (lastPageResult != null && lastPageResult.mobileTiles &&
                 (action == UP || keyCode == KEY_NUM2)) {

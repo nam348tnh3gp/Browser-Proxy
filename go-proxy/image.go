@@ -12,8 +12,8 @@ import (
 )
 
 const imageCompressPath = "/__tgfn/img"
-const maxImageWidth = 240
-const jpegQuality = 60
+const maxImageWidth = 200
+const jpegQuality = 45
 
 // serveCompressedImage fetches, resizes and JPEG-compresses an image for J2ME clients.
 func serveCompressedImage(w http.ResponseWriter, r *http.Request) bool {
