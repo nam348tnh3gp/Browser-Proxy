@@ -14,19 +14,18 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 
 | Mode | Description |
 |------|-------------|
-| **MOB1** (default for J2ME) | Mobile viewport render using Chromium when available (240×500, mobile user-agent, responsive CSS/media queries, JPEG compression, edge-to-edge tiles, and inline link hitboxes/focus). Falls back to TBO1 when Chromium is unavailable or rendering fails. |
-| **TBO1** | Server-side semantic blocks: compact text, headings, lists, links, images, and native MIDP forms for common GET searches. No browser engine required. |
+| **TBO1** (default for J2ME) | Chromium-free HTML parsing into compact binary semantic blocks: headings, paragraphs, lists, links, images, tables, and native MIDP form controls. The proxy requests mobile HTML when sites provide it. |
+| **MOB1** | Legacy Chromium mobile screenshot mode; not used by the default J2ME client. |
 | SSR | Structured text blocks |
 | FULL | HTML + gzip |
 | SSRIMG | Optional screenshot mode for proxy-side clients that explicitly request it (requires Chrome/Chromium). |
 
-## Compact layout inspired by OBML research
+## Compact mobile document protocol
 
-1. Client requests page with `X-TGFN-Format: MOB1`, including HTTPS pages through `/__tgfn/fetch`.
-2. When Chromium is available, the Go proxy opens the page at the handset canvas width (bounded to 160–360 pixels) and a 500-pixel viewport height with mobile device emulation, so responsive CSS/media queries and mobile layout are applied before capture.
-3. The complete mobile page is captured as a scrollable sequence of handset-width, 500-pixel-high JPEG tiles in the compact `IML2` envelope. Each link includes its rendered hitbox coordinates; the MIDP client draws tiles edge-to-edge at the matching screen width, underlines links in blue, and moves a focus outline with the directional keys. Press FIRE/5 to open the focused link in place. MOB1 does not append a duplicate list of page links.
-4. If Chromium is unavailable or rendering fails, the proxy falls back to TBO1 semantic blocks and native MIDP GET forms. TBO1 image references use `/__tgfn/img` for resizing and JPEG compression.
-5. This approach prioritizes faithful mobile appearance on devices that cannot run a modern HTML/CSS engine; the captured page is static, but link selection uses the original on-page coordinates rather than a separate link list.
+1. The J2ME client requests TBO1; the proxy does not start Chromium.
+2. The proxy asks the website for its mobile HTML variant, parses returned HTML into bounded semantic records, resolves links and image URLs, and encodes them in the compact TBO1 binary envelope.
+3. The MIDP client lays out text and links to its own screen width and turns supported GET forms into native Java ME input fields. It can navigate without downloading screenshot tiles or decoding large page images.
+4. Images are fetched and resized separately by the proxy. CSS and JavaScript are not executed; the renderer reconstructs a readable mobile layout from HTML structure rather than reproducing arbitrary browser CSS.
 
 ## OBML references and compatibility
 
@@ -54,9 +53,9 @@ On MOB1 pages, use the directional keys to focus links in place and FIRE/5 to op
 
 ## Limits
 
-- MOB1 screenshot is static after capture; extracted link hitboxes support directional-key focus and opening in place, but arbitrary JavaScript interactions are not executed on the handset. Very long pages are bounded to 32 tiles to protect older handset memory; content beyond the cap is clipped rather than rescaled, so text and link hitboxes remain sharp and aligned.
-- MOB1 uses Chromium when available; without it, TBO1 fallback retains readable content and native GET forms.
-- Layout preservation is semantic and mobile-first: headings, paragraphs, lists, navigation, footer content, links, and table rows/cells are retained and reflowed for narrow screens. Inline `display:none` / `visibility:hidden` is filtered. External CSS, complex grid/flex positioning, exact colors, and pixel-perfect desktop CSS are not reproduced.
+- The default TBO1 mode does not use Chromium and does not execute JavaScript. It parses HTML and rebuilds a mobile-friendly semantic layout, so complex CSS grid/flex, arbitrary CSS positioning, and pixel-perfect browser rendering are not reproduced.
+- Common GET forms become native MIDP fields; POST, JavaScript-driven forms, file uploads, and full checkbox/radio/select behavior are not yet browser-equivalent.
+- Mobile variants depend on the website honoring a mobile User-Agent. If it does not, the proxy still reflows the returned HTML structure for the narrow handset screen.
 - Common GET forms are supported; POST forms, JavaScript-driven forms, file uploads, and full checkbox/radio/select semantics are not yet browser-equivalent.
 - Best on text-friendly or mobile sites
 
