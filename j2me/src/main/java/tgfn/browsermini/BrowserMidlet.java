@@ -764,7 +764,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         result.blocks = new Vector();
         result.title = readTBOString(in);
         int count = in.readUnsignedShort();
-        if (count > 1200) throw new IOException("Too many compact page blocks");
+        if (count > 1100) throw new IOException("Too many compact page blocks");
         StringBuffer text = new StringBuffer();
         for (int i = 0; i < count; i++) {
             int kind = in.readUnsignedByte();
@@ -806,21 +806,27 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     private byte[] fetchProxyBytes(String url, int maxBytes) throws IOException {
+        boolean internalResource = url.startsWith("/__tgfn/img?");
         boolean remoteFetch = url.startsWith("https://");
-        if (!remoteFetch && !url.startsWith("http://")) throw new IOException("Only HTTP(S) resources are supported");
-        String rest = url.substring(remoteFetch ? "https://".length() : "http://".length());
-        int slash = rest.length();
-        int slashAt = rest.indexOf('/');
-        int queryAt = rest.indexOf('?');
-        int fragmentAt = rest.indexOf('#');
-        if (slashAt >= 0 && slashAt < slash) slash = slashAt;
-        if (queryAt >= 0 && queryAt < slash) slash = queryAt;
-        if (fragmentAt >= 0 && fragmentAt < slash) slash = fragmentAt;
-        String hostPort = rest.substring(0, slash);
-        String path = slash == rest.length() ? "/" : rest.substring(slash);
-        if (path.startsWith("?")) path = "/" + path;
-        if (path.startsWith("#")) path = "/";
-        if (hostPort.indexOf('@') >= 0) throw new IOException("URL userinfo is not allowed");
+        if (!internalResource && !remoteFetch && !url.startsWith("http://")) {
+            throw new IOException("Only HTTP(S) resources and proxy image paths are supported");
+        }
+        String hostPort = proxyHost + ":" + proxyPort;
+        if (!internalResource) {
+            String rest = url.substring(remoteFetch ? "https://".length() : "http://".length());
+            int slash = rest.length();
+            int slashAt = rest.indexOf('/');
+            int queryAt = rest.indexOf('?');
+            int fragmentAt = rest.indexOf('#');
+            if (slashAt >= 0 && slashAt < slash) slash = slashAt;
+            if (queryAt >= 0 && queryAt < slash) slash = queryAt;
+            if (fragmentAt >= 0 && fragmentAt < slash) slash = fragmentAt;
+            hostPort = rest.substring(0, slash);
+            String path = slash == rest.length() ? "/" : rest.substring(slash);
+            if (path.startsWith("?")) path = "/" + path;
+            if (path.startsWith("#")) path = "/";
+            if (hostPort.indexOf('@') >= 0) throw new IOException("URL userinfo is not allowed");
+        }
         if (proxyHost.length() == 0 || proxyPort.length() == 0) throw new IOException("Proxy host/port is empty");
         SocketConnection socket = null;
         InputStream input = null;
@@ -831,15 +837,14 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             input = socket.openInputStream();
             output = socket.openOutputStream();
             OutputStreamWriter writer = new OutputStreamWriter(output, "ISO-8859-1");
-            String requestTarget = remoteFetch
-                ? "/__tgfn/fetch?url=" + encodeURLComponent(url)
-                : url;
-            String requestHost = remoteFetch ? proxyHost + ":" + proxyPort : hostPort;
+            String requestTarget = internalResource ? url :
+                (remoteFetch ? "/__tgfn/fetch?url=" + encodeURLComponent(url) : url);
+            String requestHost = (remoteFetch || internalResource) ? proxyHost + ":" + proxyPort : hostPort;
             writer.write("GET " + requestTarget + " HTTP/1.1\r\n");
             writer.write("Host: " + requestHost + "\r\n");
-            writer.write("User-Agent: TGFN-BrowserMini-J2ME/2.0\r\n");
-            writer.write("Accept: application/x-tgfn-obml,text/html,text/plain,image/*,*/*\r\n");
-            writer.write("X-TGFN-Format: SSRIMG\r\n");
+            writer.write("User-Agent: TGFN-BrowserMini-J2ME/2.1\r\n");
+            writer.write("Accept: application/x-tgfn-obml,image/jpeg,image/*,text/html,text/plain,*/*\r\n");
+            if (!internalResource) writer.write("X-TGFN-Format: TBO1\r\n");
             writer.write("Connection: close\r\n\r\n");
             writer.flush();
             String status = readAsciiLine(input);
@@ -864,9 +869,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                         break;
                     }
                     for (int i = 0; i < size && bytes.size() < maxBytes; i++) {
-                        int b = input.read();
-                        if (b < 0) break;
-                        bytes.write(b);
+                        int value = input.read();
+                        if (value < 0) break;
+                        bytes.write(value);
                     }
                     readAsciiLine(input);
                 }
@@ -888,7 +893,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
 
     private Image loadImage(String url) throws IOException {
         byte[] data;
-        if (proxyEnabled && (url.startsWith("http://") || url.startsWith("https://"))) {
+        if (proxyEnabled && (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/__tgfn/img?"))) {
             data = fetchProxyBytes(url, 12000);
         } else {
             HttpConnection connection = null;
