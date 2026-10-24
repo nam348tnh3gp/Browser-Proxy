@@ -103,3 +103,8 @@ Proxy receives the full mobile page (HTML + CSS), extracts text, links, images, 
 - Positions stored as deltas from previous position (saves bytes)
 - Structured binary blocks instead of raw HTML
 - Text, links and images kept as separate records
+
+## Inspired by open source
+- grawity/obml-parser: separate text and link layers, delta coordinates
+- picomidp: keypad navigation ideas
+- Link hit rectangles drawn as overlays in absolute layout mode

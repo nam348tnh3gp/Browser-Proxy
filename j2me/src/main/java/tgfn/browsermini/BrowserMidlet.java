@@ -1399,6 +1399,13 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                         g.setColor(30, 40, 50);
                     }
                     g.drawString(shorten(blk.text, w - px - 4, f), px, py, Graphics.TOP | Graphics.LEFT);
+                    // OBML-style: link is a separate hit rectangle
+                    if (blk.type == 4 && blk.layoutW > 0 && blk.layoutH > 0) {
+                        int lw = (int)(blk.layoutW * scale);
+                        int lh = (int)(blk.layoutH * scale);
+                        g.setColor(0, 82, 190);
+                        g.drawRect(px, py, Math.max(2, lw), Math.max(2, lh));
+                    }
                     int bottom = blk.layoutY + (blk.layoutH > 0 ? blk.layoutH : 16);
                     if (bottom > maxY) maxY = bottom;
                 }
