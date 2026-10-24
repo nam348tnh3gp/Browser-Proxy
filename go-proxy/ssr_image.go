@@ -6,8 +6,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"image"
-	"image/jpeg"
 	"image/draw"
+	"image/jpeg"
 	_ "image/png"
 	"io"
 	"net/http"
@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	"github.com/chromedp/cdproto/emulation"
+	"github.com/chromedp/chromedp"
 )
 
 const ssrImageMode = "SSRIMG"
@@ -209,8 +209,12 @@ func ssrImageResponse(resp *http.Response) error {
 }
 
 func writeCoord(b *bytes.Buffer, v int) {
-	if v < 0 { v = 0 }
-	if v > 65535 { v = 65535 }
+	if v < 0 {
+		v = 0
+	}
+	if v > 65535 {
+		v = 65535
+	}
 	_ = binary.Write(b, binary.BigEndian, uint16(v))
 }
 
@@ -221,7 +225,6 @@ func writeLenStr(b *bytes.Buffer, s string) {
 	_ = binary.Write(b, binary.BigEndian, uint16(len(s)))
 	b.WriteString(s)
 }
-
 
 // resizeMobileImage scales a rendered page to the MIDP-friendly viewport width.
 func resizeMobileImage(src image.Image, maxWidth int) image.Image {
