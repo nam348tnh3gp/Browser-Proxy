@@ -62,6 +62,23 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 	title := pageURL
 	var blocks []obmlBlock
 	tableRowCells := 0
+	setLastPos := func(n *xhtml.Node) {
+		if len(blocks) == 0 || n == nil {
+			return
+		}
+		x := attr(n, "data-obml-x")
+		y := attr(n, "data-obml-y")
+		w := attr(n, "data-obml-w")
+		h := attr(n, "data-obml-h")
+		if x == "" {
+			return
+		}
+		last := &blocks[len(blocks)-1]
+		fmt.Sscanf(x, "%d", &last.x)
+		fmt.Sscanf(y, "%d", &last.y)
+		fmt.Sscanf(w, "%d", &last.w)
+		fmt.Sscanf(h, "%d", &last.h)
+	}
 	add := func(kind byte, text, link string) {
 		if kind != 7 {
 			text = strings.TrimSpace(strings.Join(strings.Fields(text), " "))
@@ -315,6 +332,8 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		}
 
 		tag := strings.ToLower(n.Data)
+		// After any content is added for this node, positions can be applied
+		defer func() { setLastPos(n) }()
 		if hidden(n) || tag == "script" || tag == "style" || tag == "noscript" || tag == "iframe" ||
 			tag == "svg" || tag == "canvas" || tag == "video" || tag == "audio" || tag == "template" {
 			return
@@ -740,7 +759,22 @@ func fetchRenderedHTML(pageURL string) (string, error) {
 	err := chromedp.Run(chromeCtx,
 		chromedp.Navigate(pageURL),
 		chromedp.Sleep(2*time.Second),
-		chromedp.OuterHTML("html", &html),
+		// Inject approximate layout positions (OBML-style) as data attributes
+		chromedp.Evaluate(`
+			(function() {
+				var els = document.querySelectorAll('h1,h2,h3,p,a,img,li,div,span,button,input');
+				for (var i = 0; i < els.length && i < 800; i++) {
+					var r = els[i].getBoundingClientRect();
+					if (r.width > 2 && r.height > 2) {
+						els[i].setAttribute('data-obml-x', Math.round(r.left));
+						els[i].setAttribute('data-obml-y', Math.round(r.top + window.scrollY));
+						els[i].setAttribute('data-obml-w', Math.round(r.width));
+						els[i].setAttribute('data-obml-h', Math.round(r.height));
+					}
+				}
+				return document.documentElement.outerHTML;
+			})()
+		`, &html),
 	)
 	if err != nil || len(html) < 50 {
 		return "", err
