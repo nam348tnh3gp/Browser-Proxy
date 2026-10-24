@@ -54,6 +54,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private String visibleBody = "Welcome to BrowserMini.";
     private List linkList;
     private List browserMenu;
+    private boolean browserMenuHasPageLinks;
     private final Command menuCommand = new Command("Menu", Command.SCREEN, 1);
     private TextBox addressBox;
     private boolean loading;
@@ -489,8 +490,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
 
     private void showBrowserMenu() {
         browserMenu = new List("Browser menu", List.IMPLICIT);
+        browserMenuHasPageLinks = lastPageResult == null || !lastPageResult.mobileTiles;
         browserMenu.append("Open address / search", null);
-        browserMenu.append("Page links", null);
+        if (browserMenuHasPageLinks) browserMenu.append("Page links", null);
         browserMenu.append("Bookmarks", null);
         browserMenu.append("Add bookmark", null);
         browserMenu.append("Reload page", null);
@@ -507,21 +509,29 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         if (command == backCommand) { display.setCurrent(browserCanvas); return; }
         if (command != List.SELECT_COMMAND) return;
         int selected = browserMenu.getSelectedIndex();
-        if (selected == 0) showAddress();
-        else if (selected == 1) showLinks();
-        else if (selected == 2) showBookmarks();
-        else if (selected == 3) addBookmark(currentUrl);
-        else if (selected == 4) navigate(currentUrl, false);
-        else if (selected == 5) navigate("https://lite.duckduckgo.com/lite/", true);
-        else if (selected == 6) {
+        if (selected == 0) { showAddress(); return; }
+        int offset = 1;
+        if (browserMenuHasPageLinks) {
+            if (selected == offset) { showLinks(); return; }
+            offset++;
+        }
+        if (selected == offset) showBookmarks();
+        else if (selected == offset + 1) addBookmark(currentUrl);
+        else if (selected == offset + 2) navigate(currentUrl, false);
+        else if (selected == offset + 3) navigate("https://lite.duckduckgo.com/lite/", true);
+        else if (selected == offset + 4) {
             if (historyIndex >= 0 && historyIndex + 1 < history.size()) {
                 historyIndex++; navigate((String)history.elementAt(historyIndex), false);
             } else showError("Forward", "There is no next page in history.");
-        } else if (selected == 7) showProxySettings();
-        else if (selected == 8) notifyDestroyed();
+        } else if (selected == offset + 5) showProxySettings();
+        else if (selected == offset + 6) notifyDestroyed();
     }
 
     private void showLinks() {
+        if (lastPageResult != null && lastPageResult.mobileTiles) {
+            if (browserCanvas != null) display.setCurrent(browserCanvas);
+            return;
+        }
         if (links.size() == 0) {
             showError("No links", "This page did not expose any simple HTML links.");
             return;
