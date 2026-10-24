@@ -41,10 +41,10 @@ var (
 	proxyProcessStartedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	clientTracking        struct {
 		sync.RWMutex
-		idByIP       map[string]string
-		ambiguousIPs map[string]bool
+		idByIP        map[string]string
+		ambiguousIPs  map[string]bool
 		registeredIDs map[string]struct{}
-		stats        map[string]*clientCounterSet
+		stats         map[string]*clientCounterSet
 	}
 	proxyStats clientCounterSet
 )
