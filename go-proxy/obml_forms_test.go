@@ -68,3 +68,93 @@ func TestMobileResponseFallsBackToCompactSemanticPage(t *testing.T) {
 		t.Errorf("request format header mutated to %q", got)
 	}
 }
+
+
+func TestEncodeMobilePacketPreservesTileAndLinkHitbox(t *testing.T) {
+	tiles := [][]byte{[]byte("0123456789jpeg-data")}
+	links := []pageLink{{Text: "Open", URL: "https://example.com/", X: 12, Y: 345, W: 67, H: 23}}
+	packet, err := encodeMobilePacket(tiles, links)
+	if err != nil {
+		t.Fatalf("encodeMobilePacket: %v", err)
+	}
+	in := bytes.NewReader(packet)
+	magic := make([]byte, 4)
+	if _, err := io.ReadFull(in, magic); err != nil {
+		t.Fatal(err)
+	}
+	if string(magic) != imglMagic {
+		t.Fatalf("magic = %q, want %q", magic, imglMagic)
+	}
+	var tileCount uint16
+	if err := binary.Read(in, binary.BigEndian, &tileCount); err != nil {
+		t.Fatal(err)
+	}
+	if tileCount != 1 {
+		t.Fatalf("tile count = %d, want 1", tileCount)
+	}
+	var tileLen uint32
+	if err := binary.Read(in, binary.BigEndian, &tileLen); err != nil {
+		t.Fatal(err)
+	}
+	if int(tileLen) != len(tiles[0]) {
+		t.Fatalf("tile length = %d, want %d", tileLen, len(tiles[0]))
+	}
+	tile := make([]byte, tileLen)
+	if _, err := io.ReadFull(in, tile); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(tile, tiles[0]) {
+		t.Fatal("tile bytes changed during encoding")
+	}
+	var linkCount uint16
+	if err := binary.Read(in, binary.BigEndian, &linkCount); err != nil {
+		t.Fatal(err)
+	}
+	if linkCount != 1 {
+		t.Fatalf("link count = %d, want 1", linkCount)
+	}
+	readString := func() string {
+		t.Helper()
+		var n uint16
+		if err := binary.Read(in, binary.BigEndian, &n); err != nil {
+			t.Fatal(err)
+		}
+		b := make([]byte, n)
+		if _, err := io.ReadFull(in, b); err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	if got := readString(); got != links[0].Text {
+		t.Fatalf("link text = %q", got)
+	}
+	if got := readString(); got != links[0].URL {
+		t.Fatalf("link URL = %q", got)
+	}
+	want := []uint16{12, 345, 67, 23}
+	for i, expected := range want {
+		var got uint16
+		if err := binary.Read(in, binary.BigEndian, &got); err != nil {
+			t.Fatal(err)
+		}
+		if got != expected {
+			t.Fatalf("hitbox coordinate %d = %d, want %d", i, got, expected)
+		}
+	}
+	if in.Len() != 0 {
+		t.Fatalf("unexpected %d trailing bytes", in.Len())
+	}
+}
+
+func TestEncodeMobilePacketRejectsInvalidTileCount(t *testing.T) {
+	if _, err := encodeMobilePacket(nil, nil); err == nil {
+		t.Fatal("expected empty tile list to be rejected")
+	}
+}
+
+func TestEncodeMobilePacketRejectsOversizedPacket(t *testing.T) {
+	tile := make([]byte, maxMobilePacketBytes+1)
+	if _, err := encodeMobilePacket([][]byte{tile}, nil); err == nil {
+		t.Fatal("expected oversized tile packet to be rejected")
+	}
+}
