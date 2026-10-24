@@ -44,6 +44,10 @@ func obmlAbsolute(base, ref string) string {
 }
 
 func buildOBMLPage(pageURL, source string) ([]byte, error) {
+	// Execute a tightly sandboxed subset of inline JavaScript before parsing so
+	// document.write()/writeln() generated markup becomes part of the TBO1 page.
+	// External scripts and browser APIs are intentionally unavailable.
+	source = renderInlineJavaScript(pageURL, source)
 	doc, err := xhtml.Parse(strings.NewReader(source))
 	if err != nil {
 		return nil, err
