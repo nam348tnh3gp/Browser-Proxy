@@ -43,10 +43,10 @@ func TestMobileResponseFallsBackToCompactSemanticPage(t *testing.T) {
 	}
 	req.Header.Set("X-TGFN-Format", "MOB1")
 	resp := &http.Response{
-		StatusCode: http.StatusOK,
-		Header: http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
-		Body: io.NopCloser(strings.NewReader(body)),
-		Request: req,
+		StatusCode:    http.StatusOK,
+		Header:        http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
+		Body:          io.NopCloser(strings.NewReader(body)),
+		Request:       req,
 		ContentLength: int64(len(body)),
 	}
 	if err := mobileResponseWithChrome(resp, ""); err != nil {
