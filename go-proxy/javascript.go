@@ -57,7 +57,9 @@ func renderInlineJavaScript(pageURL, source string) string {
 	location := rt.NewObject()
 	_ = location.Set("href", pageURL)
 	_ = location.Set("protocol", func() string {
-		if strings.HasPrefix(pageURL, "https:") { return "https:" }
+		if strings.HasPrefix(pageURL, "https:") {
+			return "https:"
+		}
 		return "http:"
 	}())
 	_ = rt.Set("location", location)
