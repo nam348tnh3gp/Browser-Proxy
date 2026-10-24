@@ -41,6 +41,10 @@ class MainActivity : Activity() {
     private lateinit var progress: ProgressBar
     private lateinit var webContainer: FrameLayout
     private lateinit var proxySummary: TextView
+    private var browserRoot: View? = null
+    private var fullscreenView: View? = null
+    private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
+    private var previousSystemUiVisibility: Int = 0
 
     private val prefs by lazy { getSharedPreferences("browser_settings", Context.MODE_PRIVATE) }
     private val clientId: String by lazy {
@@ -270,6 +274,7 @@ class MainActivity : Activity() {
         }
         statusRow.addView(proxySummary)
         root.addView(statusRow)
+        browserRoot = root
         setContentView(root)
     }
 
@@ -354,6 +359,44 @@ class MainActivity : Activity() {
             override fun onReceivedTitle(view: WebView?, title: String?) {
                 if (!title.isNullOrBlank()) tab.title = title
                 updateTabButton()
+            }
+
+            // Support HTML5 fullscreen requests (for example, video players).
+            override fun onShowCustomView(view: View?, callback: WebChromeClient.CustomViewCallback?) {
+                if (view == null || fullscreenView != null) {
+                    callback?.onCustomViewHidden()
+                    return
+                }
+                val decor = window.decorView as? FrameLayout
+                if (decor == null) {
+                    callback?.onCustomViewHidden()
+                    return
+                }
+
+                previousSystemUiVisibility = decor.systemUiVisibility
+                fullscreenView = view
+                fullscreenCallback = callback
+                browserRoot?.visibility = View.GONE
+                decor.addView(
+                    view,
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                )
+                @Suppress("DEPRECATION")
+                decor.systemUiVisibility = (
+                    View.SYSTEM_UI_FLAG_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    )
+            }
+
+            override fun onHideCustomView() {
+                hideFullscreenView()
             }
         }
         if (select) selectTab(tabs.lastIndex)
@@ -1477,13 +1520,30 @@ class MainActivity : Activity() {
         super.onSaveInstanceState(outState)
     }
 
+    private fun hideFullscreenView() {
+        val view = fullscreenView ?: return
+        (view.parent as? ViewGroup)?.removeView(view)
+        fullscreenView = null
+        browserRoot?.visibility = View.VISIBLE
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = previousSystemUiVisibility
+        val callback = fullscreenCallback
+        fullscreenCallback = null
+        callback?.onCustomViewHidden()
+    }
+
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
+        if (fullscreenView != null) {
+            hideFullscreenView()
+            return
+        }
         val web = currentWebView()
         if (web != null && web.canGoBack()) web.goBack() else if (tabs.size > 1) closeCurrentTab() else super.onBackPressed()
     }
 
     override fun onDestroy() {
+        hideFullscreenView()
         persistSession()
         tabs.forEach { tab ->
             (tab.webView.parent as? ViewGroup)?.removeView(tab.webView)
