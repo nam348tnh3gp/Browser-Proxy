@@ -70,7 +70,6 @@ func TestMobileResponseFallsBackToCompactSemanticPage(t *testing.T) {
 	}
 }
 
-
 func TestEncodeMobilePacketPreservesTileAndLinkHitbox(t *testing.T) {
 	tiles := [][]byte{[]byte("0123456789jpeg-data")}
 	links := []pageLink{{Text: "Open", URL: "https://example.com/", X: 12, Y: 345, W: 67, H: 23}}
