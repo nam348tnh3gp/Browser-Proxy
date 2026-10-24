@@ -2,15 +2,19 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"fmt"
 	htmlpkg "html"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"github.com/chromedp/chromedp"
 	xhtml "golang.org/x/net/html"
 )
 
@@ -662,9 +666,15 @@ func obmlResponse(resp *http.Response) error {
 	}
 	_ = resp.Body.Close()
 	pageURL := resp.Request.URL.String()
-	// Execute bounded inline JavaScript before converting the resulting HTML
-	// into TBO1. This is a static-rendering subset, not a full browser DOM.
-	renderedHTML := renderInlineJavaScript(pageURL, string(data))
+	// Prefer full rendered HTML from Chrome (Opera Mini style). Fall back to
+	// the raw response + limited inline JS if Chrome is unavailable.
+	var renderedHTML string
+	if html, ferr := fetchRenderedHTML(pageURL); ferr == nil && len(html) > 100 {
+		renderedHTML = html
+		fmt.Println("[TBO1] using Chrome-rendered HTML, len", len(html))
+	} else {
+		renderedHTML = renderInlineJavaScript(pageURL, string(data))
+	}
 	packet, err := buildOBMLPage(pageURL, renderedHTML)
 	if err != nil {
 		return err
@@ -691,4 +701,39 @@ func strconvItoa(n int) string {
 		n /= 10
 	}
 	return string(b[i:])
+}
+
+// fetchRenderedHTML uses headless Chrome (when available) to get the page
+// after layout/JS, similar to Opera Mini's server-side engine, then the
+// result is converted to TBO1.
+func fetchRenderedHTML(pageURL string) (string, error) {
+	chromePath := findChromeBinary()
+	if chromePath == "" {
+		return "", fmt.Errorf("no chrome")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath(chromePath),
+		chromedp.WindowSize(240, 500),
+		chromedp.DisableGPU,
+		chromedp.NoSandbox,
+		chromedp.Headless,
+		chromedp.Flag("disable-dev-shm-usage", true),
+	)
+	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
+	defer allocCancel()
+	chromeCtx, chromeCancel := chromedp.NewContext(allocCtx)
+	defer chromeCancel()
+
+	var html string
+	err := chromedp.Run(chromeCtx,
+		chromedp.Navigate(pageURL),
+		chromedp.Sleep(2*time.Second),
+		chromedp.OuterHTML("html", &html),
+	)
+	if err != nil || len(html) < 50 {
+		return "", err
+	}
+	return html, nil
 }
