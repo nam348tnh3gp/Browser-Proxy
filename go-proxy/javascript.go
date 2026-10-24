@@ -32,21 +32,33 @@ func renderInlineJavaScript(pageURL, source string) string {
 	document := rt.NewObject()
 	_ = document.Set("write", func(call goja.FunctionCall) goja.Value {
 		for _, arg := range call.Arguments {
-			written.WriteString(arg.String())
-			if written.Len() > maxCompactHTMLBytes {
+			if written.Len() >= maxCompactHTMLBytes {
 				break
 			}
+			value := arg.String()
+			remaining := maxCompactHTMLBytes - written.Len()
+			if len(value) > remaining {
+				value = value[:remaining]
+			}
+			written.WriteString(value)
 		}
 		return goja.Undefined()
 	})
 	_ = document.Set("writeln", func(call goja.FunctionCall) goja.Value {
 		for _, arg := range call.Arguments {
-			written.WriteString(arg.String())
-			if written.Len() > maxCompactHTMLBytes {
+			if written.Len() >= maxCompactHTMLBytes {
 				break
 			}
+			value := arg.String()
+			remaining := maxCompactHTMLBytes - written.Len()
+			if len(value) > remaining {
+				value = value[:remaining]
+			}
+			written.WriteString(value)
 		}
-		written.WriteByte(' ')
+		if written.Len() < maxCompactHTMLBytes {
+			written.WriteByte(' ')
+		}
 		return goja.Undefined()
 	})
 	_ = document.Set("title", "")
