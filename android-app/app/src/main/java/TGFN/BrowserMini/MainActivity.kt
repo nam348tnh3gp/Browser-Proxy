@@ -863,6 +863,27 @@ class MainActivity : Activity() {
         fun loadStats(resetBaseline: Boolean) {
             statsText.text = tr("Đang đọc bộ đếm proxy…", "Reading proxy counters…")
             Thread {
+                // Re-register on every analytics refresh. Proxy counters and client
+                // registrations live in memory, so a proxy restart otherwise leaves
+                // this still-running browser with network totals but no device attribution.
+                fun registerCurrentClient() {
+                    var connection: java.net.HttpURLConnection? = null
+                    try {
+                        val query = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8")
+                        val url = java.net.URI("http", null, endpoint.first, endpoint.second, "/__tgfn/register", query, null).toURL()
+                        connection = (url.openConnection() as java.net.HttpURLConnection).apply {
+                            connectTimeout = 3500
+                            readTimeout = 3500
+                            requestMethod = "GET"
+                            useCaches = false
+                        }
+                        connection.responseCode // registration is best-effort for older proxy versions
+                    } catch (_: Exception) {
+                        // Keep analytics usable even when the proxy has no registration endpoint.
+                    } finally {
+                        connection?.disconnect()
+                    }
+                }
                 fun fetchStats(forClient: Boolean): org.json.JSONObject {
                     val query = if (forClient) "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") else null
                     val url = java.net.URI("http", null, endpoint.first, endpoint.second, "/__tgfn/stats", query, null).toURL()
@@ -881,6 +902,7 @@ class MainActivity : Activity() {
                     }
                 }
                 try {
+                    registerCurrentClient()
                     val current = fetchStats(true)
                     val network = fetchStats(false)
                     runOnUiThread {
@@ -916,6 +938,16 @@ class MainActivity : Activity() {
                         }
                         statsText.text = buildString {
                             append("━━ ").append(tr("THIẾT BỊ NÀY", "THIS DEVICE")).append(" ━━\n")
+                            val attributionStatus = current.optString("client_attribution_status", "")
+                            val attributionMessage = when (attributionStatus) {
+                                "matched_source_ip" -> tr("Định danh: IP nguồn khớp thiết bị", "Attribution: source IP matched")
+                                "single_client_fallback" -> tr("Định danh: dự phòng vì chỉ có một thiết bị đăng ký", "Attribution: fallback (only one registered client)")
+                                "ambiguous_source_ip" -> tr("Cảnh báo: nhiều thiết bị dùng chung IP; proxy không thể phân biệt chính xác bộ đếm riêng.", "Warning: multiple clients share this IP; per-device attribution is ambiguous.")
+                                "source_ip_mapped_to_other_client" -> tr("Cảnh báo: IP nguồn hiện được ánh xạ sang thiết bị khác.", "Warning: this source IP is mapped to another client.")
+                                "source_ip_unmapped" -> tr("Cảnh báo: chưa ánh xạ được IP nguồn; bộ đếm riêng có thể thiếu.", "Warning: source IP is unmapped; per-device counters may be incomplete.")
+                                else -> ""
+                            }
+                            if (attributionMessage.isNotEmpty()) append(attributionMessage).append('\n')
                             append(summary(current, storedClient)).append("\n\n")
                             append("━━ ").append(tr("TOÀN MẠNG PROXY", "WHOLE PROXY NETWORK")).append(" ━━\n")
                             append(tr("Thiết bị đã đăng ký: ", "Registered devices: "))
