@@ -14,7 +14,7 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 
 | Mode | Description |
 |------|-------------|
-| **TBO1** (default for J2ME) | Chromium-free HTML parsing into compact binary semantic blocks: headings, paragraphs, lists, links, images, tables, and native MIDP form controls. The proxy requests mobile HTML when sites provide it. |
+| **TBO1** (default for J2ME) | Chromium-free HTML parsing into compact binary semantic blocks: headings, bold/italic text, code/pre blocks, blockquotes, horizontal rules, lists, links, images, tables, and native MIDP form controls. The proxy requests mobile HTML when sites provide it. |
 | **MOB1** | Legacy Chromium mobile screenshot mode; not used by the default J2ME client. |
 | SSR | Structured text blocks |
 | FULL | HTML + gzip |
@@ -25,7 +25,7 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 1. The J2ME client requests TBO1; the proxy does not start Chromium.
 2. The proxy asks the website for its mobile HTML variant, runs a bounded sandboxed subset of inline JavaScript (`document.write()` / `document.writeln()`), parses the resulting HTML into bounded semantic records, resolves links and image URLs, and encodes them in the compact TBO1 binary envelope.
 3. The MIDP client lays out text and links to its own screen width. Form field labels/types are shown inline in the document flow; selecting a field opens the native Java ME form editor for editing and GET submission. It can navigate without downloading screenshot tiles or decoding large page images. The JS sandbox has no network, filesystem, browser DOM, timers or event loop; external scripts are skipped and inline execution is bounded by script count, script size and runtime.
-4. Images are fetched and resized separately by the proxy, then painted inline at their original positions in the page flow. TBO1 supports regular images, common lazy-load attributes (`data-src`, `data-original`, `srcset`), linked logo images, and simple CSS background images using tag/class/ID selectors. The renderer keeps a readable mobile layout rather than reproducing every browser CSS rule; external stylesheets, CSS grid/flex and arbitrary positioning are not fully emulated. Only a small inline-JavaScript subset is executed for static HTML generation.
+4. Images are fetched and resized separately by the proxy, then painted inline at their original positions in the page flow. TBO1 supports regular images, common lazy-load attributes (`data-src`, `data-original`, `srcset`), linked logo images, and simple CSS background images using tag/class/ID selectors. The renderer keeps a readable mobile layout, including semantic italic/code/quote/rule styles inspired by the recovered Opera Mini J2ME source, rather than reproducing every browser CSS rule; external stylesheets, CSS grid/flex and arbitrary positioning are not fully emulated. Only a small inline-JavaScript subset is executed for static HTML generation.
 
 ## OBML references and compatibility
 
