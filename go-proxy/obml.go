@@ -212,6 +212,23 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		}
 		return ""
 	}
+	colorFor := func(node *xhtml.Node) string {
+		style := strings.ToLower(attr(node, "style"))
+		// color:#xxx or color:rgb
+		if idx := strings.Index(style, "color:"); idx >= 0 {
+			rest := style[idx+6:]
+			rest = strings.TrimSpace(strings.Split(rest, ";")[0])
+			if strings.HasPrefix(rest, "#") && len(rest) >= 4 {
+				return rest
+			}
+			// named colors
+			named := map[string]string{"red":"#c00","blue":"#06c","green":"#060","black":"#000","white":"#fff","gray":"#666","grey":"#666","orange":"#f60","purple":"#60c"}
+			if hex, ok := named[rest]; ok {
+				return hex
+			}
+		}
+		return ""
+	}
 	textStyleFor := func(node *xhtml.Node) byte {
 		if kind := cssTextStyles[strings.ToLower(node.Data)]; kind != 0 {
 			return kind
@@ -249,7 +266,13 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 	walk = func(n *xhtml.Node, kind byte, inLink bool) {
 		if n.Type == xhtml.TextNode {
 			if !inLink {
-				add(kind, htmlpkg.UnescapeString(n.Data), "")
+				col := colorFor(n.Parent)
+				txt := htmlpkg.UnescapeString(n.Data)
+				if col != "" && txt != "" {
+					add(22, txt, col) // kind 22 = colored text, url holds #hex
+				} else {
+					add(kind, txt, "")
+				}
 			}
 			return
 		}

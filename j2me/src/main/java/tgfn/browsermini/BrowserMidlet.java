@@ -881,7 +881,10 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 }
             }
             joinNextTableCell = false;
-            if (kind == 4 && target.length() > 0) {
+            if (kind == 22 && target.length() > 0 && label.length() > 0) {
+                // Colored text: target holds #hex
+                result.blocks.addElement(new RenderBlock(label, 22, target));
+            } else if (kind == 4 && target.length() > 0) {
                 result.links.addElement(new LinkItem(label, target));
                 result.blocks.addElement(new RenderBlock(label, 4, target));
             } else {
@@ -1423,9 +1426,15 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 if (line.type == 16 && y + lineHeight > contentY && y < contentY + contentH) {
                     g.setColor(255, 244, 170); g.fillRect(5, y, w - 10, lineHeight);
                 }
+                if (line.type == 22 && line.url != null && line.url.length() >= 4 && line.url.charAt(0) == '#') {
+                    int rgb = 0;
+                    try { rgb = Integer.parseInt(line.url.substring(1), 16); } catch (Exception ignored) {}
+                    g.setColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+                } else {
                 g.setColor(line.url != null ? 0 : (line.type == 1 ? 20 : (line.type == 2 || line.type == 14 ? 30 : (line.type == 12 ? 65 : 35))),
                            line.url != null ? 72 : (line.type == 1 ? 65 : (line.type == 2 || line.type == 14 ? 55 : 43)),
                            line.url != null ? 160 : (line.type == 1 ? 115 : (line.type == 2 || line.type == 14 ? 90 : 52)));
+                }
                 int textX = tx;
                 int textAnchor = Graphics.LEFT;
                 if (line.type == 20) {
