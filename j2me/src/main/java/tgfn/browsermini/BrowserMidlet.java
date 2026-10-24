@@ -848,7 +848,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             if (kind == 5 && target.length() > 0) {
                 joinNextTableCell = false;
                 result.images.addElement(new ImageRef(label, target));
-                if (label.length() > 0) result.blocks.addElement(new RenderBlock(label, 0, null));
+                result.blocks.addElement(new RenderBlock("", 5, target));
                 continue;
             }
             if (label.length() == 0) continue;
@@ -1357,7 +1357,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                         Font imageFont = normal;
                         g.setFont(imageFont);
                         g.setColor(80, 100, 120);
-                        g.drawString("[image unavailable]", 7, y, Graphics.TOP | Graphics.LEFT);
+                        String altText = imageRef == null || imageRef.alt == null || imageRef.alt.length() == 0 ? "[image unavailable]" : imageRef.alt;
+                        g.drawString(shorten(altText, w - 14, imageFont), 7, y, Graphics.TOP | Graphics.LEFT);
                         y += imageFont.getHeight() + 3;
                         totalBodyHeight += imageFont.getHeight() + 3;
                     }
