@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/cdproto/emulation"
 )
 
 const ssrImageMode = "SSRIMG"
@@ -97,6 +98,9 @@ func ssrImageResponse(resp *http.Response) error {
 	var buf []byte
 	var links []pageLink
 	err := chromedp.Run(chromeCtx,
+		emulation.SetDeviceMetricsOverride(240, 500, 1, true),
+		emulation.SetTouchEmulationEnabled(true),
+		emulation.SetUserAgentOverride("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"),
 		chromedp.Navigate(pageURL),
 		chromedp.Sleep(2800*time.Millisecond),
 		chromedp.CaptureScreenshot(&buf),
