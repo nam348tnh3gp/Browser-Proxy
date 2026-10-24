@@ -54,9 +54,9 @@ On MOB1 pages, use the directional keys to focus links in place and FIRE/5 to op
 ## Limits
 
 - The default TBO1 mode does not use Chromium and does not execute JavaScript. It parses HTML and rebuilds a mobile-friendly semantic layout, so complex CSS grid/flex, arbitrary CSS positioning, and pixel-perfect browser rendering are not reproduced.
-- Common GET forms become native MIDP fields; POST, JavaScript-driven forms, file uploads, and full checkbox/radio/select behavior are not yet browser-equivalent.
+- Standard GET forms with named fields and hidden values are supported. Text, password, numeric, URL, email, checkbox, radio and select controls map to native MIDP inputs; select options and checked state are carried in TBO1.
+- Radio groups are simplified; POST, file uploads, JavaScript-driven validation and advanced client-side behavior are not browser-equivalent.
 - Mobile variants depend on the website honoring a mobile User-Agent. If it does not, the proxy still reflows the returned HTML structure for the narrow handset screen.
-- Common GET forms are supported; POST forms, JavaScript-driven forms, file uploads, and full checkbox/radio/select semantics are not yet browser-equivalent.
 - Best on text-friendly or mobile sites
 
 Not affiliated with Opera.
