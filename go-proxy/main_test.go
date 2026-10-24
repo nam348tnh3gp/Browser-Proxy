@@ -233,7 +233,6 @@ func TestRegisterClientRejectsInvalidIDs(t *testing.T) {
 	}
 }
 
-
 // resetClientTrackingForTest keeps global counter tests independent.
 func resetClientTrackingForTest() {
 	clientTracking.Lock()
@@ -326,7 +325,6 @@ func TestSharedSourceIPIsMarkedAmbiguousInsteadOfMisattributed(t *testing.T) {
 		t.Fatalf("spoofed header changed registered client count to %d", got)
 	}
 }
-
 
 func TestReRegisteringClientRemovesStaleIPMapping(t *testing.T) {
 	resetClientTrackingForTest()
