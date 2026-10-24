@@ -42,11 +42,36 @@ class Handler(BaseHTTPRequestHandler):
                 orig = resp.headers.get("X-Original-Size", "?")
                 comp = resp.headers.get("X-Compressed-Size", "?")
                 fmt = resp.headers.get("X-TGFN-Format", "?")
-            info = (
-                f"<div style='background:#eef;padding:8px;font-family:sans-serif'>"
-                f"test.py → proxy:8090 | format={fmt} | {orig} → {comp} bytes</div>\n"
-            )
-            out = info.encode() + body
+            if body[:4] == b"TBO1":
+                # Decode minimal TBO1 for viewing
+                import struct
+                n = struct.unpack(">H", body[4:6])[0]
+                pos = 6
+                lines = []
+                for _ in range(n):
+                    if pos >= len(body): break
+                    kind = body[pos]; pos += 1
+                    tl = struct.unpack(">H", body[pos:pos+2])[0]; pos += 2
+                    text = body[pos:pos+tl].decode("utf-8", "ignore"); pos += tl
+                    ul = struct.unpack(">H", body[pos:pos+2])[0]; pos += 2
+                    url = body[pos:pos+ul].decode("utf-8", "ignore"); pos += ul
+                    pos += 8  # positions
+                    if kind == 4 and url:
+                        lines.append(f'<a href="{url}">{text}</a>')
+                    elif text:
+                        lines.append(text)
+                preview = "<br>\n".join(lines)
+                info = (
+                    f"<div style='background:#eef;padding:8px;font-family:sans-serif'>"
+                    f"test.py → proxy:8090 | TBO1 binary | {orig} → {comp} bytes | {n} blocks</div>\n"
+                )
+                out = info.encode() + preview.encode()
+            else:
+                info = (
+                    f"<div style='background:#eef;padding:8px;font-family:sans-serif'>"
+                    f"test.py → proxy:8090 | format={fmt} | {orig} → {comp} bytes</div>\n"
+                )
+                out = info.encode() + body
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(out)))
