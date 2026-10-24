@@ -1,8 +1,8 @@
 package main
 
 import (
-	"encoding/binary"
 	"bytes"
+	"encoding/binary"
 	"io"
 	"net/http"
 	"strings"
