@@ -231,3 +231,97 @@ func TestRegisterClientRejectsInvalidIDs(t *testing.T) {
 		t.Fatal("registerClient accepted an invalid remote address")
 	}
 }
+
+
+// resetClientTrackingForTest keeps global counter tests independent.
+func resetClientTrackingForTest() {
+	clientTracking.Lock()
+	clientTracking.idByIP = make(map[string]string)
+	clientTracking.ambiguousIPs = make(map[string]bool)
+	clientTracking.registeredIDs = make(map[string]struct{})
+	clientTracking.stats = make(map[string]*clientCounterSet)
+	clientTracking.Unlock()
+}
+
+func TestPerClientCountersFollowSingleRegisteredDeviceAcrossAddressChanges(t *testing.T) {
+	resetClientTrackingForTest()
+	const id = "main-device-1234"
+	if !registerClient("192.0.2.10:4321", id) {
+		t.Fatal("registerClient failed")
+	}
+
+	// Registration and WebView traffic can arrive over different local/interface
+	// addresses; mapped IPv4/IPv6 forms should also resolve to the same client.
+	if got := clientIDFromRemoteAddr("[::ffff:192.0.2.10]:5000"); got != id {
+		t.Fatalf("mapped IPv4 attribution = %q, want %q", got, id)
+	}
+	if got := clientIDFromRemoteAddr("198.51.100.9:5000"); got != id {
+		t.Fatalf("single-client fallback = %q, want %q", got, id)
+	}
+
+	body := strings.Repeat("device counter body ", 20)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = io.WriteString(w, body)
+	}))
+	defer upstream.Close()
+
+	handler := proxyHandlerWithAuth("", "")
+	beforeNetworkRequests := proxyStats.httpRequests.Load()
+	beforeNetworkBytes := proxyStats.httpResponseBytes.Load()
+	beforeClient := lookupClientCounters(id)
+	beforeClientRequests := beforeClient.httpRequests.Load()
+	beforeClientBytes := beforeClient.httpResponseBytes.Load()
+
+	req := httptest.NewRequest(http.MethodGet, upstream.URL, nil)
+	req.RemoteAddr = "198.51.100.9:6000" // differs from registration IP
+	req.Header.Set("Accept-Encoding", "identity")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("proxy response status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != body {
+		t.Fatal("proxy response body differs from upstream")
+	}
+	if got := proxyStats.httpRequests.Load() - beforeNetworkRequests; got != 1 {
+		t.Fatalf("network HTTP request delta = %d, want 1", got)
+	}
+	if got := proxyStats.httpResponseBytes.Load() - beforeNetworkBytes; got != int64(len(body)) {
+		t.Fatalf("network response-byte delta = %d, want %d", got, len(body))
+	}
+	if got := beforeClient.httpRequests.Load() - beforeClientRequests; got != 1 {
+		t.Fatalf("device HTTP request delta = %d, want 1", got)
+	}
+	if got := beforeClient.httpResponseBytes.Load() - beforeClientBytes; got != int64(len(body)) {
+		t.Fatalf("device response-byte delta = %d, want %d", got, len(body))
+	}
+}
+
+func TestSharedSourceIPIsMarkedAmbiguousInsteadOfMisattributed(t *testing.T) {
+	resetClientTrackingForTest()
+	if !registerClient("203.0.113.7:1001", "device-client-1111") {
+		t.Fatal("first registration failed")
+	}
+	if !registerClient("203.0.113.7:1002", "device-client-2222") {
+		t.Fatal("second registration failed")
+	}
+	if got := clientIDFromRemoteAddr("203.0.113.7:6000"); got != "" {
+		t.Fatalf("shared-IP attribution = %q, want ambiguous/empty", got)
+	}
+	if got := snapshotCounters(&proxyStats).RegisteredClients; got != 2 {
+		t.Fatalf("registered client count = %d, want 2", got)
+	}
+
+	// A caller must not be able to inflate device counters by inventing an ID
+	// in X-TGFN-Client-ID; an unregistered ID falls back to the ambiguous source.
+	req := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	req.RemoteAddr = "203.0.113.7:6000"
+	req.Header.Set("X-TGFN-Client-ID", "spoofed-device-9999")
+	if got := clientIDFromRequest(req); got != "" {
+		t.Fatalf("unregistered header attribution = %q, want empty", got)
+	}
+	if got := snapshotCounters(&proxyStats).RegisteredClients; got != 2 {
+		t.Fatalf("spoofed header changed registered client count to %d", got)
+	}
+}
