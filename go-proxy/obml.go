@@ -205,17 +205,17 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 									if optionValue == "" {
 										optionValue = optionLabel
 									}
-									cleanOption := strings.NewReplacer("\\x1d", " ", "\\x1e", " ")
+									cleanOption := strings.NewReplacer("\x1d", " ", "\x1e", " ")
 									optionLabel = cleanOption.Replace(optionLabel)
 									optionValue = cleanOption.Replace(optionValue)
-									encodedOptions = append(encodedOptions, optionLabel+"\\x1d"+optionValue)
+									encodedOptions = append(encodedOptions, optionLabel+"\x1d"+optionValue)
 									if selectedValue == "" || hasAttr(o, "selected") {
 										selectedValue = optionValue
 								}
 								}
 								value = selectedValue
 								if len(encodedOptions) > 0 {
-									value += "\\x1e" + strings.Join(encodedOptions, "\\x1e")
+									value += "\x1e" + strings.Join(encodedOptions, "\x1e")
 								}
 							}
 							if (typ == "checkbox" || typ == "radio") && hasAttr(c, "checked") {
