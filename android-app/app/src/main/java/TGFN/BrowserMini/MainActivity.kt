@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.Message
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -278,7 +279,7 @@ class MainActivity : Activity() {
         setContentView(root)
     }
 
-    private fun createTab(url: String?, select: Boolean) {
+    private fun createTab(url: String?, select: Boolean, popupTransport: Message? = null) {
         val web = WebView(this).apply {
             setBackgroundColor(canvas)
             settings.javaScriptEnabled = true
@@ -292,18 +293,20 @@ class MainActivity : Activity() {
             settings.builtInZoomControls = true
             settings.displayZoomControls = false
             settings.userAgentString = if (isDesktopModeEnabled()) DESKTOP_USER_AGENT else null
-            settings.javaScriptCanOpenWindowsAutomatically = false
-            settings.setSupportMultipleWindows(false)
+            settings.javaScriptCanOpenWindowsAutomatically = true
+            settings.setSupportMultipleWindows(true)
         }
         val requestedUrl = url?.trim().orEmpty()
-        val shouldShowNewTab = requestedUrl.isBlank() ||
-            requestedUrl.equals("about:blank", ignoreCase = true) ||
-            requestedUrl == NEW_TAB_SESSION_URL ||
-            requestedUrl == "https://tgfn.browser/"
+        val shouldShowNewTab = popupTransport == null && (
+            requestedUrl.isBlank() ||
+                requestedUrl.equals("about:blank", ignoreCase = true) ||
+                requestedUrl == NEW_TAB_SESSION_URL ||
+                requestedUrl == "https://tgfn.browser/"
+            )
         val tab = BrowserTab(
             webView = web,
             title = tr("Tab mới", "New tab"),
-            url = if (shouldShowNewTab) NEW_TAB_SESSION_URL else requestedUrl,
+            url = if (shouldShowNewTab) NEW_TAB_SESSION_URL else requestedUrl.ifBlank { "about:blank" },
             isNewTab = shouldShowNewTab
         )
         tabs.add(tab)
@@ -361,6 +364,26 @@ class MainActivity : Activity() {
                 updateTabButton()
             }
 
+            // Route target="_blank" and window.open() into a managed browser tab.
+            override fun onCreateWindow(
+                view: WebView?,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message?
+            ): Boolean {
+                if (resultMsg == null) return false
+                createTab(null, true, resultMsg)
+                return true
+            }
+
+            override fun onCloseWindow(window: WebView?) {
+                val index = tabs.indexOfFirst { it.webView === window }
+                if (index >= 0) {
+                    closeTabAt(index)
+                    if (tabs.isEmpty()) createTab(null, true)
+                }
+            }
+
             // Support HTML5 fullscreen requests (for example, video players).
             override fun onShowCustomView(view: View?, callback: WebChromeClient.CustomViewCallback?) {
                 if (view == null || fullscreenView != null) {
@@ -400,7 +423,19 @@ class MainActivity : Activity() {
             }
         }
         if (select) selectTab(tabs.lastIndex)
-        if (shouldShowNewTab) loadNewTabPage(web) else web.loadUrl(requestedUrl)
+        if (popupTransport != null) {
+            val transport = popupTransport.obj as? WebView.WebViewTransport
+            if (transport == null) {
+                closeTabAt(tabs.indexOf(tab))
+                return
+            }
+            transport.webView = web
+            popupTransport.sendToTarget()
+        } else if (shouldShowNewTab) {
+            loadNewTabPage(web)
+        } else if (requestedUrl.isNotBlank()) {
+            web.loadUrl(requestedUrl)
+        }
     }
 
     /** Match web content darkening to the browser's own theme preference. */
