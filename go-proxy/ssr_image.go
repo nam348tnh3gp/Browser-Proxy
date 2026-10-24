@@ -173,18 +173,39 @@ func ssrImageResponse(resp *http.Response) error {
 		tiles = append(tiles, encoded.Bytes())
 	}
 
+	packet, err := encodeMobilePacket(tiles, links)
+	if err != nil {
+		return err
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(packet))
+	resp.ContentLength = int64(len(packet))
+	resp.Header.Set("Content-Type", "application/x-tgfn-imgl")
+	resp.Header.Set("Content-Length", itoa(len(packet)))
+	resp.Header.Del("Content-Encoding")
+	fmt.Println("[SSRIMG] OK tiles=", len(tiles), "bytes=", len(packet), "links=", len(links))
+	return nil
+}
+
+// encodeMobilePacket serializes the IML2 image tiles and their on-page link hitboxes.
+func encodeMobilePacket(tiles [][]byte, links []pageLink) ([]byte, error) {
+	if len(tiles) < 1 || len(tiles) > maxMobileTiles {
+		return nil, fmt.Errorf("invalid mobile tile count: %d", len(tiles))
+	}
+	if len(links) > 60 {
+		links = links[:60]
+	}
 	var packet bytes.Buffer
 	packet.WriteString(imglMagic)
 	_ = binary.Write(&packet, binary.BigEndian, uint16(len(tiles)))
 	for _, tile := range tiles {
+		if len(tile) < 10 {
+			return nil, fmt.Errorf("invalid mobile tile length: %d", len(tile))
+		}
 		_ = binary.Write(&packet, binary.BigEndian, uint32(len(tile)))
 		packet.Write(tile)
-	}
-	if packet.Len() > maxMobilePacketBytes {
-		return fmt.Errorf("mobile render exceeds %d-byte transfer limit", maxMobilePacketBytes)
-	}
-	if len(links) > 60 {
-		links = links[:60]
+		if packet.Len() > maxMobilePacketBytes {
+			return nil, fmt.Errorf("mobile render exceeds %d-byte transfer limit", maxMobilePacketBytes)
+		}
 	}
 	_ = binary.Write(&packet, binary.BigEndian, uint16(len(links)))
 	for _, l := range links {
@@ -194,18 +215,11 @@ func ssrImageResponse(resp *http.Response) error {
 		writeCoord(&packet, l.Y)
 		writeCoord(&packet, l.W)
 		writeCoord(&packet, l.H)
+		if packet.Len() > maxMobilePacketBytes {
+			return nil, fmt.Errorf("mobile render exceeds %d-byte transfer limit", maxMobilePacketBytes)
+		}
 	}
-	if packet.Len() > maxMobilePacketBytes {
-		return fmt.Errorf("mobile render exceeds %d-byte transfer limit", maxMobilePacketBytes)
-	}
-
-	resp.Body = io.NopCloser(bytes.NewReader(packet.Bytes()))
-	resp.ContentLength = int64(packet.Len())
-	resp.Header.Set("Content-Type", "application/x-tgfn-imgl")
-	resp.Header.Set("Content-Length", itoa(packet.Len()))
-	resp.Header.Del("Content-Encoding")
-	fmt.Println("[SSRIMG] OK tiles=", len(tiles), "bytes=", packet.Len(), "links=", len(links))
-	return nil
+	return packet.Bytes(), nil
 }
 
 func writeCoord(b *bytes.Buffer, v int) {
