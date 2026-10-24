@@ -120,9 +120,9 @@ func TestBuildOBMLPagePreservesTypographyStyles(t *testing.T) {
 		}
 	}
 	for label, wantKind := range map[string]byte{
-		"CSS italic": 10,
+		"CSS italic":          10,
 		"CSS class underline": 17,
-		"CSS highlight": 16,
+		"CSS highlight":       16,
 	} {
 		if got := kindByText[label]; got != wantKind {
 			t.Errorf("%q style kind = %d, want %d", label, got, wantKind)
