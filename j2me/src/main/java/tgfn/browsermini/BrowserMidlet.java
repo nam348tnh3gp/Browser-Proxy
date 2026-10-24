@@ -1003,13 +1003,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             writer.write("Host: " + requestHost + "\r\n");
             writer.write("User-Agent: TGFN-BrowserMini-J2ME/2.1\r\n");
             writer.write("Accept: application/x-tgfn-obml,image/jpeg,image/*,text/html,text/plain,*/*\r\n");
-            if (!internalResource) {
-                writer.write("X-TGFN-Format: MOB1\r\n");
-                int viewportWidth = browserCanvas == null ? 240 : browserCanvas.getWidth();
-                if (viewportWidth < 160) viewportWidth = 240;
-                if (viewportWidth > 360) viewportWidth = 360;
-                writer.write("X-TGFN-Viewport-Width: " + viewportWidth + "\r\n");
-            }
+            if (!internalResource) writer.write("X-TGFN-Format: TBO1\r\n");
             writer.write("Connection: close\r\n\r\n");
             writer.flush();
             String status = readAsciiLine(input);
