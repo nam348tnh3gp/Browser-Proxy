@@ -211,7 +211,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 									encodedOptions = append(encodedOptions, optionLabel+"\x1d"+optionValue)
 									if selectedValue == "" || hasAttr(o, "selected") {
 										selectedValue = optionValue
-								}
+									}
 								}
 								value = selectedValue
 								if len(encodedOptions) > 0 {
