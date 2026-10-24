@@ -45,6 +45,51 @@ var compactAllowedTags = map[string]bool{
 	"tr": true, "u": true, "ul": true, "html": true, "head": true, "body": true,
 }
 
+
+// mobileResponse prefers a real mobile-viewport render for J2ME. If Chromium
+// is unavailable or rendering fails, it falls back to the semantic TBO1 page.
+func mobileResponse(resp *http.Response) error {
+	if resp == nil || resp.Request == nil || resp.StatusCode < 200 || resp.StatusCode >= 300 || resp.Body == nil {
+		return nil
+	}
+	ct := strings.ToLower(resp.Header.Get("Content-Type"))
+	if !strings.Contains(ct, "text/html") && !strings.Contains(ct, "xhtml") {
+		return nil
+	}
+
+	originalHeaders := resp.Header.Clone()
+	originalRequestHeader := resp.Request.Header.Clone()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCompactHTMLBytes+1))
+	_ = resp.Body.Close()
+	if err != nil {
+		return err
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(data))
+	resp.ContentLength = int64(len(data))
+
+	fallback := func() error {
+		resp.Body = io.NopCloser(bytes.NewReader(data))
+		resp.ContentLength = int64(len(data))
+		resp.Header = originalHeaders.Clone()
+		resp.Request.Header = originalRequestHeader.Clone()
+		resp.Request.Header.Set("X-TGFN-Format", "TBO1")
+		err := obmlResponse(resp)
+		resp.Request.Header = originalRequestHeader
+		return err
+	}
+	if len(data) > maxCompactHTMLBytes || findChromeBinary() == "" {
+		return fallback()
+	}
+
+	resp.Request.Header.Set("X-TGFN-Format", ssrImageMode)
+	err = ssrImageResponse(resp)
+	resp.Request.Header = originalRequestHeader
+	if err != nil {
+		return fallback()
+	}
+	return nil
+}
+
 // compactHTMLResponse transforms only requests explicitly made by the J2ME client.
 func compactHTMLResponse(resp *http.Response) error {
 	if resp != nil && resp.Request != nil {
@@ -57,6 +102,8 @@ func compactHTMLResponse(resp *http.Response) error {
 			return ssrResponse(resp)
 		case "SSRIMG":
 			return ssrImageResponse(resp)
+		case "MOB1":
+			return mobileResponse(resp)
 		}
 	}
 	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Compact") != "1" {
