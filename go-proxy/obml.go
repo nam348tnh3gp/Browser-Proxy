@@ -132,6 +132,8 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			return 15
 		case strings.Contains(value, "text-decoration:underline"):
 			return 17
+		case strings.Contains(value, "font-family:monospace"), strings.Contains(value, "font-family:courier"):
+			return 11
 		case strings.Contains(value, "font-style:italic"):
 			return 10
 		case strings.Contains(value, "font-weight:bold"), strings.Contains(value, "font-weight:600"), strings.Contains(value, "font-weight:700"), strings.Contains(value, "font-weight:800"):
@@ -162,7 +164,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 					continue
 				}
 				for _, selector := range strings.Split(rule[1], ",") {
-					selector = strings.TrimSpace(selector)
+					selector = strings.ToLower(strings.TrimSpace(selector))
 					// Support simple tag, class and ID selectors; skip combinators/pseudos.
 					if selector == "" || strings.ContainsAny(selector, " >+~:[") {
 						continue
