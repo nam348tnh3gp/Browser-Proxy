@@ -366,16 +366,27 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 }
             }
             if (t.startsWith("h1")) style = 1;
-            else if (t.startsWith("h2") || t.startsWith("h3") || t.startsWith("strong") || t.startsWith("b")) style = 2;
-            else if (t.startsWith("li")) { blocks.addElement(new RenderBlock("• ", 3, null)); style = 3; }
-            else if (t.startsWith("p") || t.startsWith("div") || t.startsWith("br") || t.startsWith("hr") ||
+            else if (t.startsWith("h2") || t.startsWith("strong") || t.startsWith("b")) style = 2;
+            else if (t.startsWith("h3") || t.startsWith("h4") || t.startsWith("h5") || t.startsWith("h6")) style = 14;
+            else if (t.startsWith("em") || t.startsWith("i") || t.startsWith("cite")) style = 10;
+            else if (t.startsWith("code") || t.startsWith("pre") || t.startsWith("kbd") || t.startsWith("samp")) style = 11;
+            else if (t.startsWith("blockquote")) style = 12;
+            else if (t.startsWith("del") || t.startsWith("strike") || t.startsWith("s ")) style = 15;
+            else if (t.startsWith("hr")) {
+                blocks.addElement(new RenderBlock("────────", 13, null));
+                style = 0;
+            } else if (t.startsWith("li")) { blocks.addElement(new RenderBlock("• ", 3, null)); style = 3; }
+            else if (t.startsWith("p") || t.startsWith("div") || t.startsWith("br") ||
                      t.startsWith("/p") || t.startsWith("/div") || t.startsWith("/li") ||
                      t.startsWith("/h1") || t.startsWith("/h2") || t.startsWith("/h3") ||
-                     t.startsWith("/tr") || t.startsWith("tr")) {
+                     t.startsWith("/h4") || t.startsWith("/h5") || t.startsWith("/h6") ||
+                     t.startsWith("/tr") || t.startsWith("tr") || t.startsWith("/blockquote") ||
+                     t.startsWith("/pre") || t.startsWith("/code")) {
                 if (blocks.size() > 0) blocks.addElement(new RenderBlock("", 0, null));
                 style = 0;
-            } else if (t.startsWith("/strong") || t.startsWith("/b")) style = 0;
-            else if (t.startsWith("/h1") || t.startsWith("/h2") || t.startsWith("/h3")) style = 0;
+            } else if (t.startsWith("/strong") || t.startsWith("/b") || t.startsWith("/em") ||
+                       t.startsWith("/i") || t.startsWith("/cite") || t.startsWith("/del") ||
+                       t.startsWith("/strike") || t.startsWith("/s")) style = 0;
             pos = close + 1;
         }
         return blocks;
@@ -874,7 +885,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 result.links.addElement(new LinkItem(label, target));
                 result.blocks.addElement(new RenderBlock(label, 4, target));
             } else {
-                int style = kind >= 0 && kind <= 3 ? kind : 0;
+                int style = (kind >= 0 && kind <= 3) || (kind >= 10 && kind <= 15) ? kind : 0;
                 result.blocks.addElement(new RenderBlock(label, style, null));
             }
             if (text.length() > 0) text.append('\n');
@@ -1334,8 +1345,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                         continue;
                     }
                     if (block.text.length() == 0) { lines.addElement(new RenderLine("", 0, null)); continue; }
-                    Font bf = block.type == 1 ? Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM) :
-                              (block.type == 2 ? bold : normal);
+                    Font bf = fontForType(block.type);
                     Vector wrapped = wrap(block.text, bf, w - 14);
                     for (int j = 0; j < wrapped.size(); j++) lines.addElement(new RenderLine((String)wrapped.elementAt(j), block.type, block.url));
                 }
@@ -1386,8 +1396,15 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     }
                     continue;
                 }
-                Font lineFont = line.type == 1 ? Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM) :
-                                (line.type == 2 ? bold : normal);
+                if (line.type == 13) {
+                    int ruleY = y + Math.max(2, normal.getHeight() / 2);
+                    g.setColor(150, 165, 180);
+                    g.drawLine(7, ruleY, w - 7, ruleY);
+                    y += normal.getHeight() + 5;
+                    totalBodyHeight += normal.getHeight() + 5;
+                    continue;
+                }
+                Font lineFont = fontForType(line.type);
                 g.setFont(lineFont);
                 int lineHeight = lineFont.getHeight() + (line.type == 1 ? 3 : 1);
                 if (line.url != null) renderedLinkLines.addElement(new Integer(i));
@@ -1395,11 +1412,24 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 if (focused && y + lineHeight > contentY && y < contentY + contentH) {
                     g.setColor(222, 237, 255); g.fillRect(5, y, w - 10, lineHeight);
                 }
-                g.setColor(line.url != null ? 0 : (line.type == 1 ? 20 : (line.type == 2 ? 30 : 35)),
-                           line.url != null ? 72 : (line.type == 1 ? 65 : (line.type == 2 ? 55 : 43)),
-                           line.url != null ? 160 : (line.type == 1 ? 115 : (line.type == 2 ? 90 : 52)));
-                g.drawString(line.text, 7, y, Graphics.TOP | Graphics.LEFT);
-                if (line.url != null) g.drawLine(7, y + lineFont.getHeight() - 1, 7 + lineFont.stringWidth(line.text), y + lineFont.getHeight() - 1);
+                if (line.type == 11 && y + lineHeight > contentY && y < contentY + contentH) {
+                    g.setColor(244, 246, 248); g.fillRect(5, y, w - 10, lineHeight);
+                }
+                if (line.type == 12) {
+                    g.setColor(115, 135, 155);
+                    g.fillRect(7, y + 1, 2, Math.max(2, lineHeight - 2));
+                }
+                int tx = line.type == 12 ? 15 : (line.type == 11 ? 10 : 7);
+                if (line.type == 16 && y + lineHeight > contentY && y < contentY + contentH) {
+                    g.setColor(255, 244, 170); g.fillRect(5, y, w - 10, lineHeight);
+                }
+                g.setColor(line.url != null ? 0 : (line.type == 1 ? 20 : (line.type == 2 || line.type == 14 ? 30 : (line.type == 12 ? 65 : 35))),
+                           line.url != null ? 72 : (line.type == 1 ? 65 : (line.type == 2 || line.type == 14 ? 55 : 43)),
+                           line.url != null ? 160 : (line.type == 1 ? 115 : (line.type == 2 || line.type == 14 ? 90 : 52)));
+                g.drawString(line.text, tx, y, Graphics.TOP | Graphics.LEFT);
+                int textWidth = lineFont.stringWidth(line.text);
+                if (line.url != null) g.drawLine(tx, y + lineFont.getHeight() - 1, tx + textWidth, y + lineFont.getHeight() - 1);
+                if (line.type == 15) g.drawLine(tx, y + lineFont.getHeight() / 2, tx + textWidth, y + lineFont.getHeight() / 2);
                 y += lineHeight;
                 totalBodyHeight += lineHeight;
             }
@@ -1421,6 +1451,15 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 if (imageUrl.equals(ref.url)) return ref;
             }
             return null;
+        }
+
+        private Font fontForType(int type) {
+            if (type == 1) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM);
+            if (type == 2) return bold;
+            if (type == 10) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_ITALIC, Font.SIZE_MEDIUM);
+            if (type == 11) return Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_PLAIN, Font.SIZE_SMALL);
+            if (type == 14) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL);
+            return normal;
         }
 
         private Vector wrap(String value, Font font, int maxWidth) {
