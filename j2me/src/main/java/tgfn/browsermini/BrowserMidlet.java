@@ -1455,11 +1455,11 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
 
         private Font fontForType(int type) {
             if (type == 1) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM);
-            if (type == 2) return bold;
+            if (type == 2) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM);
             if (type == 10) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_ITALIC, Font.SIZE_MEDIUM);
             if (type == 11) return Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_PLAIN, Font.SIZE_SMALL);
             if (type == 14) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL);
-            return normal;
+            return Font.getDefaultFont();
         }
 
         private Vector wrap(String value, Font font, int maxWidth) {
