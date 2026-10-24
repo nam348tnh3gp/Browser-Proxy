@@ -21,12 +21,11 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 
 ## Compact layout inspired by OBML research
 
-1. Client requests page with `X-TGFN-Format: SSRIMG`
-2. Proxy opens the page in headless Chrome
-3. Chrome renders full HTML/CSS
-4. Proxy captures screenshot + extracts links
-5. Sends **IMGL** packet (JPEG + links) to the phone
-6. Client shows the image and lets you open links via the **Links** menu
+1. Client requests page with `X-TGFN-Format: TBO1`, including HTTPS pages through `/__tgfn/fetch`.
+2. The Go proxy parses HTML and removes scripts, styles, and nonessential page chrome.
+3. It sends a bounded binary stream of semantic text blocks, independent link records, and image references.
+4. Image references point to `/__tgfn/img`, where the proxy resizes and JPEG-compresses images.
+5. The MIDP client lays out the blocks with device-native fonts and exposes links through keypad navigation and the Links menu.
 
 ## OBML references and compatibility
 
