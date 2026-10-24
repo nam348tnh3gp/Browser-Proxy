@@ -180,3 +180,54 @@ func TestStatsEndpointReturnsMeasuredCounters(t *testing.T) {
 		}
 	}
 }
+
+func TestRegisterClientAndReadPerClientStats(t *testing.T) {
+	const id = "test-client-1234"
+	if !registerClient("192.0.2.10:54321", id) {
+		t.Fatal("registerClient rejected a valid ID and remote address")
+	}
+	if got := clientIDFromRemoteAddr("192.0.2.10:60000"); got != id {
+		t.Fatalf("clientIDFromRemoteAddr() = %q, want %q", got, id)
+	}
+	counters := clientCounters(id)
+	counters.httpRequests.Add(3)
+	counters.httpResponseBytes.Add(1024)
+	counters.gzipOriginalBytes.Add(900)
+	counters.gzipCompressedBytes.Add(300)
+	counters.gzipResponses.Add(1)
+	counters.connectTunnels.Add(2)
+	counters.connectUpstreamToClient.Add(2048)
+
+	handler := proxyHandlerWithAuth("", "")
+	req := httptest.NewRequest(http.MethodGet, "/__tgfn/stats?client_id="+id, nil)
+	req.RemoteAddr = "192.0.2.10:54321"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body := rec.Body.String()
+	for _, expected := range []string{
+		`"client_id":"test-client-1234"`,
+		`"http_requests":3`,
+		`"http_response_bytes":1024`,
+		`"gzip_saved_bytes":600`,
+		`"connect_tunnels":2`,
+		`"registered_clients":1`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("per-client stats missing %s: %s", expected, body)
+		}
+	}
+}
+
+func TestRegisterClientRejectsInvalidIDs(t *testing.T) {
+	for _, id := range []string{"", "short", "bad/id/with/slash", strings.Repeat("a", 81)} {
+		if registerClient("192.0.2.20:1234", id) {
+			t.Errorf("registerClient unexpectedly accepted ID %q", id)
+		}
+	}
+	if registerClient("invalid-remote-address", "valid-client-123") {
+		t.Fatal("registerClient accepted an invalid remote address")
+	}
+}

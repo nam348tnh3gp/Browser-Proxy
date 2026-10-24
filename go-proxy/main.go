@@ -19,22 +19,32 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
+type clientCounterSet struct {
+	httpRequests            atomic.Int64
+	httpResponseBytes       atomic.Int64
+	gzipResponses           atomic.Int64
+	gzipOriginalBytes       atomic.Int64
+	gzipCompressedBytes     atomic.Int64
+	connectTunnels          atomic.Int64
+	connectClientToUpstream atomic.Int64
+	connectUpstreamToClient atomic.Int64
+}
+
+type clientContextKey struct{}
+
 var (
 	proxyProcessStartedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	proxyStats            struct {
-		httpRequests            atomic.Int64
-		httpResponseBytes       atomic.Int64
-		gzipResponses           atomic.Int64
-		gzipOriginalBytes       atomic.Int64
-		gzipCompressedBytes     atomic.Int64
-		connectTunnels          atomic.Int64
-		connectClientToUpstream atomic.Int64
-		connectUpstreamToClient atomic.Int64
+	clientTracking        struct {
+		sync.RWMutex
+		idByIP map[string]string
+		stats  map[string]*clientCounterSet
 	}
+	proxyStats clientCounterSet
 )
 
 type proxyStatsSnapshot struct {
@@ -48,22 +58,115 @@ type proxyStatsSnapshot struct {
 	ConnectTunnels          int64  `json:"connect_tunnels"`
 	ConnectClientToUpstream int64  `json:"connect_client_to_upstream_bytes"`
 	ConnectUpstreamToClient int64  `json:"connect_upstream_to_client_bytes"`
+	RegisteredClients       int    `json:"registered_clients"`
+	ClientID                string `json:"client_id,omitempty"`
 }
 
 func currentProxyStats() proxyStatsSnapshot {
-	original := proxyStats.gzipOriginalBytes.Load()
-	compressed := proxyStats.gzipCompressedBytes.Load()
+	return snapshotCounters(&proxyStats)
+}
+
+func snapshotCounters(c *clientCounterSet) proxyStatsSnapshot {
+	original := c.gzipOriginalBytes.Load()
+	clientTracking.RLock()
+	registeredClients := len(clientTracking.stats)
+	clientTracking.RUnlock()
+	compressed := c.gzipCompressedBytes.Load()
 	return proxyStatsSnapshot{
 		ProcessStartedAt:        proxyProcessStartedAt,
-		HTTPRequests:            proxyStats.httpRequests.Load(),
-		HTTPResponseBytes:       proxyStats.httpResponseBytes.Load(),
-		GzipResponses:           proxyStats.gzipResponses.Load(),
+		HTTPRequests:            c.httpRequests.Load(),
+		HTTPResponseBytes:       c.httpResponseBytes.Load(),
+		GzipResponses:           c.gzipResponses.Load(),
 		GzipOriginalBytes:       original,
 		GzipCompressedBytes:     compressed,
 		GzipSavedBytes:          maxInt64(original-compressed, 0),
-		ConnectTunnels:          proxyStats.connectTunnels.Load(),
-		ConnectClientToUpstream: proxyStats.connectClientToUpstream.Load(),
-		ConnectUpstreamToClient: proxyStats.connectUpstreamToClient.Load(),
+		ConnectTunnels:          c.connectTunnels.Load(),
+		ConnectClientToUpstream: c.connectClientToUpstream.Load(),
+		ConnectUpstreamToClient: c.connectUpstreamToClient.Load(),
+		RegisteredClients:       registeredClients,
+	}
+}
+
+func lookupClientCounters(id string) *clientCounterSet {
+	if id == "" {
+		return nil
+	}
+	clientTracking.RLock()
+	counters := clientTracking.stats[id]
+	clientTracking.RUnlock()
+	return counters
+}
+
+func clientCounters(id string) *clientCounterSet {
+	if id == "" {
+		return nil
+	}
+	clientTracking.Lock()
+	defer clientTracking.Unlock()
+	if clientTracking.stats == nil {
+		clientTracking.stats = make(map[string]*clientCounterSet)
+	}
+	if clientTracking.stats[id] == nil {
+		clientTracking.stats[id] = &clientCounterSet{}
+	}
+	return clientTracking.stats[id]
+}
+
+func clientIDFromRemoteAddr(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return ""
+	}
+	clientTracking.RLock()
+	id := clientTracking.idByIP[host]
+	clientTracking.RUnlock()
+	return id
+}
+
+func registerClient(remoteAddr, id string) bool {
+	if len(id) < 8 || len(id) > 80 {
+		return false
+	}
+	for _, r := range id {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+			return false
+		}
+	}
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil || host == "" {
+		return false
+	}
+	clientTracking.Lock()
+	defer clientTracking.Unlock()
+	if clientTracking.idByIP == nil {
+		clientTracking.idByIP = make(map[string]string)
+	}
+	if clientTracking.stats == nil {
+		clientTracking.stats = make(map[string]*clientCounterSet)
+	}
+	clientTracking.idByIP[host] = id
+	if clientTracking.stats[id] == nil {
+		clientTracking.stats[id] = &clientCounterSet{}
+	}
+	return true
+}
+
+func clientIDFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if id := r.Header.Get("X-TGFN-Client-ID"); id != "" {
+		return id
+	}
+	if id, ok := r.Context().Value(clientContextKey{}).(string); ok {
+		return id
+	}
+	return clientIDFromRemoteAddr(r.RemoteAddr)
+}
+
+func addClientCounter(id string, update func(*clientCounterSet)) {
+	if counters := clientCounters(id); counters != nil {
+		update(counters)
 	}
 }
 
@@ -144,28 +247,55 @@ func proxyHandlerWithAuth(username, password string) http.Handler {
 			log.Printf("request rejected method=%s client=%q reason=proxy_auth status=%d", r.Method, safeLogValue(r.RemoteAddr), http.StatusProxyAuthRequired)
 			return
 		}
+		// Native app registers one stable ID per installation. Since WebView's
+		// proxy API cannot attach a custom header to every subresource/CONNECT,
+		// attribution falls back to the source IP registered by this endpoint.
+		if r.Method == http.MethodGet && r.URL != nil && !r.URL.IsAbs() && r.URL.Path == "/__tgfn/register" {
+			id := r.URL.Query().Get("client_id")
+			if !registerClient(r.RemoteAddr, id) {
+				http.Error(w, "Invalid client ID or remote address", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			_ = json.NewEncoder(w).Encode(map[string]any{"registered": true, "client_id": id})
+			return
+		}
 		// Native app analytics requests use origin-form directly against the proxy
 		// listener. Normal forward-proxy requests use absolute-form URLs.
 		if r.Method == http.MethodGet && r.URL != nil && !r.URL.IsAbs() && r.URL.Path == "/__tgfn/stats" {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store")
-			if err := json.NewEncoder(w).Encode(currentProxyStats()); err != nil {
+			id := r.URL.Query().Get("client_id")
+			stats := currentProxyStats()
+			if id != "" {
+				if counters := lookupClientCounters(id); counters != nil {
+					stats = snapshotCounters(counters)
+				} else {
+					stats = snapshotCounters(&clientCounterSet{})
+				}
+				stats.ClientID = id
+			}
+			if err := json.NewEncoder(w).Encode(stats); err != nil {
 				log.Printf("stats response failed: %v", err)
 			}
 			return
 		}
+		clientID := clientIDFromRequest(r)
+		r = r.WithContext(context.WithValue(r.Context(), clientContextKey{}, clientID))
 		if r.Method == http.MethodConnect {
-			log.Printf("request method=CONNECT client=%q target=%q", r.RemoteAddr, safeLogValue(r.Host))
-			handleConnect(w, r)
+			log.Printf("request method=CONNECT client=%q client_id=%q target=%q", r.RemoteAddr, clientID, safeLogValue(r.Host))
+			handleConnect(w, r, clientID)
 			return
 		}
 
 		proxyStats.httpRequests.Add(1)
+		addClientCounter(clientID, func(c *clientCounterSet) { c.httpRequests.Add(1) })
 		target := ""
 		if r.URL != nil {
 			target = r.URL.Host
 		}
-		logWriter := &statusLoggingWriter{ResponseWriter: w, status: http.StatusOK}
+		logWriter := &statusLoggingWriter{ResponseWriter: w, status: http.StatusOK, clientID: clientID}
 		defer func() {
 			log.Printf("request method=%s client=%q target=%q status=%d duration=%s",
 				r.Method, r.RemoteAddr, safeLogValue(target), logWriter.status, time.Since(started).Round(time.Millisecond))
@@ -249,6 +379,12 @@ func gzipTextResponse(resp *http.Response) error {
 	proxyStats.gzipResponses.Add(1)
 	proxyStats.gzipOriginalBytes.Add(int64(len(data)))
 	proxyStats.gzipCompressedBytes.Add(int64(compressed.Len()))
+	clientID := clientIDFromRequest(resp.Request)
+	addClientCounter(clientID, func(c *clientCounterSet) {
+		c.gzipResponses.Add(1)
+		c.gzipOriginalBytes.Add(int64(len(data)))
+		c.gzipCompressedBytes.Add(int64(compressed.Len()))
+	})
 	return nil
 }
 
@@ -322,7 +458,8 @@ func validProxyAuthorization(header, username, password string) bool {
 
 type statusLoggingWriter struct {
 	http.ResponseWriter
-	status int
+	status   int
+	clientID string
 }
 
 func (w *statusLoggingWriter) WriteHeader(status int) {
@@ -333,6 +470,7 @@ func (w *statusLoggingWriter) WriteHeader(status int) {
 func (w *statusLoggingWriter) Write(p []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(p)
 	proxyStats.httpResponseBytes.Add(int64(n))
+	addClientCounter(w.clientID, func(c *clientCounterSet) { c.httpResponseBytes.Add(int64(n)) })
 	return n, err
 }
 
@@ -357,7 +495,7 @@ func safeLogValue(value string) string {
 	return value
 }
 
-func handleConnect(w http.ResponseWriter, r *http.Request) {
+func handleConnect(w http.ResponseWriter, r *http.Request, clientID string) {
 	host := r.Host
 	if host == "" {
 		host = r.URL.Host
@@ -415,7 +553,7 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("CONNECT established target=%q dial_duration=%s",
 		safeLogValue(host), dialDuration.Round(time.Millisecond))
-	go tunnel(upstream, client, rw.Reader, host, time.Now())
+	go tunnel(upstream, client, rw.Reader, host, clientID, time.Now())
 }
 
 type tunnelCopyResult struct {
@@ -424,7 +562,7 @@ type tunnelCopyResult struct {
 	err       error
 }
 
-func tunnel(upstream, client net.Conn, clientReader io.Reader, host string, started time.Time) {
+func tunnel(upstream, client net.Conn, clientReader io.Reader, host, clientID string, started time.Time) {
 	results := make(chan tunnelCopyResult, 2)
 
 	go func() {
@@ -473,6 +611,11 @@ func tunnel(upstream, client net.Conn, clientReader io.Reader, host string, star
 	proxyStats.connectTunnels.Add(1)
 	proxyStats.connectClientToUpstream.Add(clientToUpstream)
 	proxyStats.connectUpstreamToClient.Add(upstreamToClient)
+	addClientCounter(clientID, func(c *clientCounterSet) {
+		c.connectTunnels.Add(1)
+		c.connectClientToUpstream.Add(clientToUpstream)
+		c.connectUpstreamToClient.Add(upstreamToClient)
+	})
 	log.Printf("CONNECT closed target=%q duration=%s bytes_client_to_upstream=%d bytes_upstream_to_client=%d reason=%s",
 		safeLogValue(host), time.Since(started).Round(time.Millisecond),
 		clientToUpstream, upstreamToClient, reason)
