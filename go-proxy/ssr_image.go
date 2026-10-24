@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
+	"image/draw"
 	_ "image/png"
 	"io"
 	"net/http"
@@ -20,7 +21,9 @@ import (
 )
 
 const ssrImageMode = "SSRIMG"
-const imglMagic = "IMGL"
+const imglMagic = "IML2"
+const maxMobileTiles = 32
+const mobileTileHeight = 500
 
 var chromeCandidates = []string{
 	"/data/data/com.termux/files/usr/bin/chromium-browser",
@@ -103,7 +106,7 @@ func ssrImageResponse(resp *http.Response) error {
 		emulation.SetUserAgentOverride("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"),
 		chromedp.Navigate(pageURL),
 		chromedp.Sleep(2800*time.Millisecond),
-		chromedp.CaptureScreenshot(&buf),
+		chromedp.FullScreenshot(&buf, 36),
 		chromedp.Evaluate(`
 			(function() {
 				var out = [];
@@ -136,15 +139,39 @@ func ssrImageResponse(resp *http.Response) error {
 	if err != nil {
 		return err
 	}
-	var jpegBuf bytes.Buffer
-	if err := jpeg.Encode(&jpegBuf, img, &jpeg.Options{Quality: 36}); err != nil {
-		return err
+	img = resizeMobileImage(img, 240)
+	bounds := img.Bounds()
+	tileCount := (bounds.Dy() + mobileTileHeight - 1) / mobileTileHeight
+	if tileCount > maxMobileTiles {
+		// Bound MIDP memory use while retaining a tall, scrollable mobile page.
+		newHeight := maxMobileTiles * mobileTileHeight
+		img = resizeMobileImageHeight(img, newHeight)
+		bounds = img.Bounds()
+		tileCount = (bounds.Dy() + mobileTileHeight - 1) / mobileTileHeight
+	}
+
+	var tiles [][]byte
+	for y := 0; y < bounds.Dy(); y += mobileTileHeight {
+		endY := y + mobileTileHeight
+		if endY > bounds.Dy() {
+			endY = bounds.Dy()
+		}
+		tile := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), endY-y))
+		draw.Draw(tile, tile.Bounds(), img, image.Point{X: bounds.Min.X, Y: bounds.Min.Y + y}, draw.Src)
+		var encoded bytes.Buffer
+		if err := jpeg.Encode(&encoded, tile, &jpeg.Options{Quality: 36}); err != nil {
+			return err
+		}
+		tiles = append(tiles, encoded.Bytes())
 	}
 
 	var packet bytes.Buffer
 	packet.WriteString(imglMagic)
-	_ = binary.Write(&packet, binary.BigEndian, uint32(jpegBuf.Len()))
-	packet.Write(jpegBuf.Bytes())
+	_ = binary.Write(&packet, binary.BigEndian, uint16(len(tiles)))
+	for _, tile := range tiles {
+		_ = binary.Write(&packet, binary.BigEndian, uint32(len(tile)))
+		packet.Write(tile)
+	}
 	if len(links) > 60 {
 		links = links[:60]
 	}
@@ -169,4 +196,49 @@ func writeLenStr(b *bytes.Buffer, s string) {
 	}
 	_ = binary.Write(b, binary.BigEndian, uint16(len(s)))
 	b.WriteString(s)
+}
+
+
+// resizeMobileImage scales a rendered page to the MIDP-friendly viewport width.
+func resizeMobileImage(src image.Image, maxWidth int) image.Image {
+	b := src.Bounds()
+	if b.Dx() <= maxWidth {
+		return src
+	}
+	width := maxWidth
+	height := b.Dy() * width / b.Dx()
+	if height < 1 {
+		height = 1
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		sy := b.Min.Y + y*b.Dy()/height
+		for x := 0; x < width; x++ {
+			sx := b.Min.X + x*b.Dx()/width
+			dst.Set(x, y, src.At(sx, sy))
+		}
+	}
+	return dst
+}
+
+// resizeMobileImageHeight bounds very long pages to a fixed number of tiles.
+func resizeMobileImageHeight(src image.Image, maxHeight int) image.Image {
+	b := src.Bounds()
+	if b.Dy() <= maxHeight {
+		return src
+	}
+	height := maxHeight
+	width := b.Dx() * height / b.Dy()
+	if width < 1 {
+		width = 1
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		sy := b.Min.Y + y*b.Dy()/height
+		for x := 0; x < width; x++ {
+			sx := b.Min.X + x*b.Dx()/width
+			dst.Set(x, y, src.At(sx, sy))
+		}
+	}
+	return dst
 }
