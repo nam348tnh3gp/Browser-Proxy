@@ -1,5 +1,10 @@
 # TGFN BrowserMini J2ME
 
+## J2ME rendering features
+
+The TBO1 renderer preserves semantic typography from the proxy: heading levels, bold text, italic/emphasis, monospace code, blockquotes, horizontal rules, strike-through, highlighted text, underline, and small/large text. On-device rendering uses MIDP fonts and drawing primitives, with keypad link focus, inline images and compact forms. This is a constrained mobile renderer, not a complete CSS engine or a direct execution of the decompiled Opera Mini source.
+
+
 Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP browsers.
 
 ## Inspiration
