@@ -324,11 +324,23 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		switch tag {
 		case "h1":
 			newKind = 1
-		case "h2", "h3", "h4", "h5", "h6", "strong", "b":
+		case "h2", "strong", "b":
 			newKind = 2
+		case "h3", "h4", "h5", "h6":
+			newKind = 14
+		case "em", "i", "cite", "var":
+			newKind = 10
+		case "code", "kbd", "samp", "pre":
+			newKind = 11
+		case "blockquote":
+			newKind = 12
+		case "del", "s", "strike":
+			newKind = 15
+		case "hr":
+			add(13, "────────", "")
 		case "li":
 			add(3, "•", "")
-		case "p", "div", "br", "hr", "section", "article", "table", "ul", "ol", "fieldset":
+		case "p", "div", "br", "section", "article", "table", "ul", "ol", "fieldset":
 			if !inLink {
 				add(6, "", "")
 			}
@@ -345,6 +357,18 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			tableRowCells++
 		}
 
+		// Preserve a few semantic CSS text styles even when the original
+		// stylesheet cannot be reproduced by the small MIDP renderer.
+		inlineStyle := strings.ToLower(attr(n, "style"))
+		if strings.Contains(inlineStyle, "font-style:italic") || strings.Contains(inlineStyle, "font-style: italic") {
+			newKind = 10
+		}
+		if strings.Contains(inlineStyle, "font-weight:bold") || strings.Contains(inlineStyle, "font-weight: bold") {
+			newKind = 2
+		}
+		if strings.Contains(inlineStyle, "text-decoration:line-through") || strings.Contains(inlineStyle, "text-decoration: line-through") {
+			newKind = 15
+		}
 		if bg := backgroundFor(n); bg != "" && tag != "html" && tag != "head" && tag != "style" {
 			if imageURL := obmlAbsolute(pageURL, bg); imageURL != "" {
 				add(5, attr(n, "aria-label"), imageURL)
