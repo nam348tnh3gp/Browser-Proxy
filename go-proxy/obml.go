@@ -349,7 +349,9 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			if src == "" || strings.HasPrefix(strings.ToLower(src), "data:") || strings.HasPrefix(src, "about:") {
 				src = attr(n, "data-src")
 			}
-			if src == "" { src = attr(n, "data-original") }
+			if src == "" {
+				src = attr(n, "data-original")
+			}
 			if src == "" {
 				for _, candidate := range strings.Split(attr(n, "srcset"), ",") {
 					fields := strings.Fields(strings.TrimSpace(candidate))
