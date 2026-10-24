@@ -57,6 +57,34 @@ func TestBuildOBMLPageEncodesSelectAndCheckedControls(t *testing.T) {
 	}
 }
 
+func TestRenderInlineJavaScriptDocumentWrite(t *testing.T) {
+	source := `<!doctype html><html><body><h1>Before</h1><script>document.write('<p id="generated">Generated <b>mobile</b> content</p>')</script><p>After</p></body></html>`
+	rendered := renderInlineJavaScript("https://example.test/page", source)
+	if !strings.Contains(rendered, `<p id="generated">Generated <b>mobile</b> content</p>`) {
+		t.Fatalf("document.write output missing: %q", rendered)
+	}
+	if strings.Contains(rendered, "<script") {
+		t.Fatalf("inline script tag should not reach the compact renderer: %q", rendered)
+	}
+	packet, err := buildOBMLPage("https://example.test/page", rendered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Before", "Generated", "mobile", "After"} {
+		if !bytes.Contains(packet, []byte(want)) {
+			t.Errorf("TBO1 packet missing rendered JavaScript content %q", want)
+		}
+	}
+}
+
+func TestRenderInlineJavaScriptSkipsExternalScripts(t *testing.T) {
+	source := `<html><body><script src="https://example.test/app.js"></script><p>Static</p></body></html>`
+	rendered := renderInlineJavaScript("https://example.test/page", source)
+	if strings.Contains(rendered, "app.js") || !strings.Contains(rendered, "Static") {
+		t.Fatalf("external script should be skipped without damaging static HTML: %q", rendered)
+	}
+}
+
 func TestOBMLResponseOnlyTransformsOptedInHTML(t *testing.T) {
 	body := "<html><head><title>Example</title></head><body><p>Hello</p></body></html>"
 	req, _ := http.NewRequest("GET", "http://example.test/page", nil)
