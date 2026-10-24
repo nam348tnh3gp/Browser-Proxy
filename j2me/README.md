@@ -108,3 +108,6 @@ Proxy receives the full mobile page (HTML + CSS), extracts text, links, images, 
 - grawity/obml-parser: separate text and link layers, delta coordinates
 - picomidp: keypad navigation ideas
 - Link hit rectangles drawn as overlays in absolute layout mode
+
+## Client now requests FULL
+Browser sends X-TGFN-Format: FULL so the proxy returns lightly compressed full HTML (structure preserved) instead of semantic TBO1 blocks.

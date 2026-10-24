@@ -346,8 +346,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             if (close < 0) break;
             String tag = html.substring(open + 1, close);
             String t = tag.toLowerCase();
-            if (t.startsWith("script") || t.startsWith("style") || t.startsWith("noscript")) {
-                String endTag = t.startsWith("script") ? "</script>" : (t.startsWith("style") ? "</style>" : "</noscript>");
+            if (t.startsWith("script") || t.startsWith("noscript")) {
+                String endTag = t.startsWith("script") ? "</script>" : "</noscript>";
                 int skip = lower.indexOf(endTag, close + 1);
                 pos = skip < 0 ? html.length() : skip + endTag.length();
                 continue;
@@ -377,7 +377,10 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 blocks.addElement(new RenderBlock("────────", 13, null));
                 style = 0;
             } else if (t.startsWith("li")) { blocks.addElement(new RenderBlock("• ", 3, null)); style = 3; }
-            else if (t.startsWith("p") || t.startsWith("div") || t.startsWith("br") ||
+            else if (t.startsWith("section") || t.startsWith("article") || t.startsWith("header") ||
+                     t.startsWith("footer") || t.startsWith("nav") || t.startsWith("main")) {
+                if (blocks.size() > 0) blocks.addElement(new RenderBlock("", 0, null));
+            } else if (t.startsWith("p") || t.startsWith("div") || t.startsWith("br") ||
                      t.startsWith("/p") || t.startsWith("/div") || t.startsWith("/li") ||
                      t.startsWith("/h1") || t.startsWith("/h2") || t.startsWith("/h3") ||
                      t.startsWith("/h4") || t.startsWith("/h5") || t.startsWith("/h6") ||
@@ -1145,7 +1148,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             writer.write("Host: " + requestHost + "\r\n");
             writer.write("User-Agent: TGFN-BrowserMini-J2ME/2.1\r\n");
             writer.write("Accept: application/x-tgfn-obml,image/jpeg,image/*,text/html,text/plain,*/*\r\n");
-            if (!internalResource) writer.write("X-TGFN-Format: TBO1\r\n");
+            if (!internalResource) writer.write("X-TGFN-Format: FULL\r\n");
             writer.write("Connection: close\r\n\r\n");
             writer.flush();
             String status = readAsciiLine(input);
