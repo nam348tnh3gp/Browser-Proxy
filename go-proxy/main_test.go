@@ -151,7 +151,6 @@ func TestProxyAcceptsCorrectCredentialsBeforeTargetValidation(t *testing.T) {
 	}
 }
 
-
 func TestStatsEndpointReturnsMeasuredCounters(t *testing.T) {
 	handler := proxyHandlerWithAuth("", "")
 	req := httptest.NewRequest(http.MethodGet, "/__tgfn/stats", nil)
