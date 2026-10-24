@@ -31,6 +31,30 @@ func TestBuildOBMLPageCreatesCompactBinaryBlocks(t *testing.T) {
 	}
 }
 
+func TestBuildOBMLPageRendersInlineJavaScriptDocumentWrite(t *testing.T) {
+	source := `<!doctype html><html><head><title>JS page</title></head><body><script>document.write('<h1>Rendered heading</h1><p><input name="q" value="hello"></p>')</script><p>After script</p></body></html>`
+	packet, err := buildOBMLPage("https://example.test/", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Rendered heading", "hello", "After script"} {
+		if !bytes.Contains(packet, []byte(want)) {
+			t.Errorf("rendered packet missing %q: %q", want, packet)
+		}
+	}
+	if bytes.Contains(packet, []byte("document.write")) {
+		t.Fatal("JavaScript source leaked into rendered page")
+	}
+}
+
+func TestRenderInlineJavaScriptSkipsExternalScripts(t *testing.T) {
+	source := `<html><body><script src="/app.js"></script><p>Static content</p></body></html>`
+	got := renderInlineJavaScript("https://example.test/", source)
+	if strings.Contains(got, "app.js") || !strings.Contains(got, "Static content") {
+		t.Fatalf("unexpected output for external script: %q", got)
+	}
+}
+
 func TestBuildOBMLPageCoalescesInlineTextForMobileReflow(t *testing.T) {
 	source := `<!doctype html><html><body><p>one <span>two</span> three</p></body></html>`
 	packet, err := buildOBMLPage("https://example.test/", source)
