@@ -19,4 +19,8 @@ require (
 	golang.org/x/sys v0.23.0 // indirect
 )
 
-replace github.com/dlclark/regexp2 v1.4.1-0.20201116162257-a2a8dda75c91 => github.com/dlclark/regexp2 v1.7.0
+replace (
+	github.com/dlclark/regexp2 v1.4.1-0.20201116162257-a2a8dda75c91 => github.com/dlclark/regexp2 v1.7.0
+	github.com/dop251/goja v0.0.0-20211022113120-dc8c55024d06 => github.com/dop251/goja v0.0.0-20240220182346-e401ed450204
+	github.com/dop251/goja_nodejs v0.0.0-20210225215109-d91c329300e7 => github.com/dop251/goja_nodejs v0.0.0-20211022123610-8dd9abb0616d
+)
