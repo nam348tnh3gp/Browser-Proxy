@@ -1155,21 +1155,22 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             g.setClip(4, contentY + 3, w - 8, Math.max(0, contentH - 6));
             int y = contentY + 4 - scrollY;
             int mobileImageTop = y;
-            float mobileScale = (float)(w - 14) / 240.0f;
+            float mobileScale = (float)w / 240.0f;
             totalBodyHeight = 0;
             if (lastPageResult != null && lastPageResult.images != null) {
-                for (int imageIndex = 0; imageIndex < lastPageResult.images.size() && imageIndex < 8; imageIndex++) {
+                for (int imageIndex = 0; imageIndex < lastPageResult.images.size() && (lastPageResult.mobileTiles || imageIndex < 8); imageIndex++) {
                     ImageRef ref = (ImageRef)lastPageResult.images.elementAt(imageIndex);
                     if (ref.image != null) {
                         Image toDraw = ref.image;
-                        // Scale down if wider than screen
-                        if (toDraw.getWidth() > w - 14) {
-                            int newH = toDraw.getHeight() * (w - 14) / toDraw.getWidth();
+                        // Mobile page tiles fill the complete display width; ordinary images stay inset.
+                        int targetImageWidth = lastPageResult.mobileTiles ? w : w - 14;
+                        if (toDraw.getWidth() != targetImageWidth && (lastPageResult.mobileTiles || toDraw.getWidth() > targetImageWidth)) {
+                            int newH = toDraw.getHeight() * targetImageWidth / toDraw.getWidth();
                             if (newH < 1) newH = 1;
-                            toDraw = scaleImage(toDraw, w - 14, newH);
+                            toDraw = scaleImage(toDraw, targetImageWidth, newH);
                         }
                         if (y + toDraw.getHeight() > contentY && y < contentY + contentH) {
-                            g.drawImage(toDraw, 7, y, Graphics.TOP | Graphics.LEFT);
+                            g.drawImage(toDraw, lastPageResult.mobileTiles ? 0 : 7, y, Graphics.TOP | Graphics.LEFT);
                         }
                         int imageAdvance = toDraw.getHeight() + (lastPageResult.mobileTiles ? 0 : 4);
                         y += imageAdvance;
@@ -1183,7 +1184,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 for (int li = 0; li < lastPageResult.links.size(); li++) {
                     LinkItem link = (LinkItem)lastPageResult.links.elementAt(li);
                     if (link.x < 0 || link.y < 0 || link.width <= 0 || link.height <= 0) continue;
-                    int lx = 7 + (int)(link.x * mobileScale);
+                    int lx = (int)(link.x * mobileScale);
                     int ly = mobileImageTop + (int)(link.y * mobileScale) - scrollY;
                     int lw = Math.max(2, (int)(link.width * mobileScale));
                     int lh = Math.max(2, (int)(link.height * mobileScale));
