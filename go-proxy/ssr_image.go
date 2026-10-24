@@ -58,6 +58,10 @@ func findChromeBinary() string {
 type pageLink struct {
 	Text string `json:"text"`
 	URL  string `json:"url"`
+	X    int    `json:"x"`
+	Y    int    `json:"y"`
+	W    int    `json:"w"`
+	H    int    `json:"h"`
 }
 
 func ssrImageResponse(resp *http.Response) error {
@@ -122,7 +126,7 @@ func ssrImageResponse(resp *http.Response) error {
 					var key = t + '|' + href;
 					if (seen[key]) continue;
 					seen[key] = true;
-					out.push({text: t, url: href});
+					var r = a.getBoundingClientRect();\n\t\t\t\t\tvar sx = window.pageXOffset || document.documentElement.scrollLeft || 0;\n\t\t\t\t\tvar sy = window.pageYOffset || document.documentElement.scrollTop || 0;\n\t\t\t\t\tout.push({text: t, url: href, x: Math.max(0, Math.round(r.left + sx)), y: Math.max(0, Math.round(r.top + sy)), w: Math.max(1, Math.round(r.width)), h: Math.max(1, Math.round(r.height))});
 				}
 				return out;
 			})()
@@ -183,6 +187,10 @@ func ssrImageResponse(resp *http.Response) error {
 	for _, l := range links {
 		writeLenStr(&packet, l.Text)
 		writeLenStr(&packet, l.URL)
+		writeCoord(&packet, l.X)
+		writeCoord(&packet, l.Y)
+		writeCoord(&packet, l.W)
+		writeCoord(&packet, l.H)
 	}
 	if packet.Len() > maxMobilePacketBytes {
 		return fmt.Errorf("mobile render exceeds %d-byte transfer limit", maxMobilePacketBytes)
@@ -195,6 +203,12 @@ func ssrImageResponse(resp *http.Response) error {
 	resp.Header.Del("Content-Encoding")
 	fmt.Println("[SSRIMG] OK tiles=", len(tiles), "bytes=", packet.Len(), "links=", len(links))
 	return nil
+}
+
+func writeCoord(b *bytes.Buffer, v int) {
+	if v < 0 { v = 0 }
+	if v > 65535 { v = 65535 }
+	_ = binary.Write(b, binary.BigEndian, uint16(v))
 }
 
 func writeLenStr(b *bytes.Buffer, s string) {
