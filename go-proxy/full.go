@@ -56,7 +56,6 @@ func fullCompressResponse(resp *http.Response) error {
 
 	// Drop only heavy / non-renderable parts. Keep structure, links, forms, images.
 	html = fullDropScript.ReplaceAllString(html, "")
-	html = // fullDropStyle.ReplaceAllString(html, "")
 	html = fullComments.ReplaceAllString(html, "")
 	for _, re := range fullDropHeavy {
 		html = re.ReplaceAllString(html, "")
