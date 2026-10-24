@@ -59,6 +59,20 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		if len(blocks) >= maxOBMLBlocks || (text == "" && kind != 6 && kind != 5 && kind != 7) {
 			return
 		}
+		// Coalesce adjacent inline text fragments of the same style. HTML parsers
+		// split text around entities and inline tags; emitting each fragment as a
+		// separate block creates a one-word-per-line layout on small Java ME screens.
+		if kind != 6 && kind != 5 && kind != 7 && kind != 9 && len(blocks) > 0 {
+			last := &blocks[len(blocks)-1]
+			if last.kind == kind && last.url == "" && last.text != "" && text != "" {
+				last.text += " " + text
+				if len(last.text) > maxOBMLString {
+					last.text = last.text[:maxOBMLString]
+					for !utf8.ValidString(last.text) { last.text = last.text[:len(last.text)-1] }
+				}
+				return
+			}
+		}
 		if len(text) > maxOBMLString {
 			text = text[:maxOBMLString]
 			for !utf8.ValidString(text) {
@@ -78,6 +92,12 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			}
 		}
 		return ""
+	}
+	hasAttr := func(n *xhtml.Node, key string) bool {
+		for _, a := range n.Attr {
+			if strings.EqualFold(a.Key, key) { return true }
+		}
+		return false
 	}
 	hidden := func(n *xhtml.Node) bool {
 		for _, a := range n.Attr {
@@ -179,7 +199,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 										if value == "" {
 											value = textContent(o)
 										}
-										if attr(o, "selected") != "" {
+										if hasAttr(o, "selected") {
 											break
 										}
 									}
