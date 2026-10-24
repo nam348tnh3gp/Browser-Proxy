@@ -14,18 +14,19 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 
 | Mode | Description |
 |------|-------------|
-| **TBO1** (default) | Server-side semantic blocks: compact text, headings, lists, links, images, and native MIDP forms for common GET searches. No browser engine required. |
+| **MOB1** (default for J2ME) | Mobile viewport render using Chromium when available (240×500, mobile user-agent, responsive CSS/media queries, JPEG compression, and extracted links). Falls back to TBO1 when Chromium is unavailable or rendering fails. |
+| **TBO1** | Server-side semantic blocks: compact text, headings, lists, links, images, and native MIDP forms for common GET searches. No browser engine required. |
 | SSR | Structured text blocks |
 | FULL | HTML + gzip |
 | SSRIMG | Optional screenshot mode for proxy-side clients that explicitly request it (requires Chrome/Chromium). |
 
 ## Compact layout inspired by OBML research
 
-1. Client requests page with `X-TGFN-Format: TBO1`, including HTTPS pages through `/__tgfn/fetch`.
-2. The Go proxy parses HTML, removes executable/heavy content, and keeps useful site chrome such as header/navigation/footer when it contains page content or links.
-3. It sends a bounded binary stream of semantic text blocks, links, table row/cell boundaries (rendered as compact separators on narrow screens), block boundaries, image references, and form metadata.
-4. Image references point to `/__tgfn/img`, where the proxy resizes and JPEG-compresses images.
-5. The MIDP client lays out blocks with device-native fonts and exposes links and forms through keypad navigation and the Links menu. Opening a form shows native text/password/number/email/URL fields; submitting currently serializes fields as a GET query.
+1. Client requests page with `X-TGFN-Format: MOB1`, including HTTPS pages through `/__tgfn/fetch`.
+2. When Chromium is available, the Go proxy opens the page at a 240×500 mobile viewport with mobile device emulation, so responsive CSS/media queries and mobile layout are applied before capture.
+3. The viewport is JPEG-compressed and sent in the compact `IMGL` envelope with extracted links; the MIDP client displays the rendered page image and exposes links through keypad navigation and the Links menu.
+4. If Chromium is unavailable or rendering fails, the proxy falls back to TBO1 semantic blocks and native MIDP GET forms. TBO1 image references use `/__tgfn/img` for resizing and JPEG compression.
+5. This approach prioritizes faithful mobile appearance on devices that cannot run a modern HTML/CSS engine; the rendered image itself is static, while navigation is handled separately through the link list.
 
 ## OBML references and compatibility
 
@@ -53,8 +54,8 @@ Use **Menu → Links** to navigate.
 
 ## Limits
 
-- Screenshot is static (no live JavaScript after load)
-- Interaction is through the link list (not pixel-perfect click map yet)
+- MOB1 screenshot is static after capture; interaction is through the extracted link list, not pixel-position click mapping.
+- MOB1 uses Chromium when available; without it, TBO1 fallback retains readable content and native GET forms.
 - Layout preservation is semantic and mobile-first: headings, paragraphs, lists, navigation, footer content, links, and table rows/cells are retained and reflowed for narrow screens. Inline `display:none` / `visibility:hidden` is filtered. External CSS, complex grid/flex positioning, exact colors, and pixel-perfect desktop CSS are not reproduced.
 - Common GET forms are supported; POST forms, JavaScript-driven forms, file uploads, and full checkbox/radio/select semantics are not yet browser-equivalent.
 - Best on text-friendly or mobile sites
