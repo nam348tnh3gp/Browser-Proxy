@@ -49,6 +49,10 @@ var compactAllowedTags = map[string]bool{
 // mobileResponse prefers a real mobile-viewport render for J2ME. If Chromium
 // is unavailable or rendering fails, it falls back to the semantic TBO1 page.
 func mobileResponse(resp *http.Response) error {
+	return mobileResponseWithChrome(resp, findChromeBinary())
+}
+
+func mobileResponseWithChrome(resp *http.Response, chromePath string) error {
 	if resp == nil || resp.Request == nil || resp.StatusCode < 200 || resp.StatusCode >= 300 || resp.Body == nil {
 		return nil
 	}
@@ -58,7 +62,7 @@ func mobileResponse(resp *http.Response) error {
 	}
 
 	originalRequestHeader := resp.Request.Header.Clone()
-	if findChromeBinary() == "" {
+	if chromePath == "" {
 		resp.Request.Header.Set("X-TGFN-Format", "TBO1")
 		err := obmlResponse(resp)
 		resp.Request.Header = originalRequestHeader
