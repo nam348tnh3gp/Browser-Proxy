@@ -69,7 +69,11 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		return ""
 	}
 	hidden := func(n *xhtml.Node) bool {
-		if attr(n, "hidden") != "" { return true }
+		for _, a := range n.Attr {
+			if strings.EqualFold(a.Key, "hidden") {
+				return true
+			}
+		}
 		style := strings.ToLower(strings.ReplaceAll(attr(n, "style"), " ", ""))
 		return strings.Contains(style, "display:none") || strings.Contains(style, "visibility:hidden")
 	}
