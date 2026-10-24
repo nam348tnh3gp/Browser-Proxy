@@ -819,6 +819,11 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             int kind = in.readUnsignedByte();
             String label = readTBOString(in);
             String target = readTBOString(in);
+            // OBML-style layout hints (may be 0)
+            int bx = 0, by = 0, bw = 0, bh = 0;
+            try {
+                bx = in.readShort(); by = in.readShort(); bw = in.readShort(); bh = in.readShort();
+            } catch (Exception ignored) {}
             if (kind == 7) {
                 FormRef formRef = parseFormPayload(label);
                 if (formRef != null) {

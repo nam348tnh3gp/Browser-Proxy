@@ -26,6 +26,7 @@ type obmlBlock struct {
 	kind byte
 	text string
 	url  string
+	x, y, w, h int // optional layout (OBML-style); 0 = flow layout
 }
 
 func obmlAbsolute(base, ref string) string {
@@ -629,6 +630,11 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		out.WriteByte(b.kind)
 		writeOBMLString(&out, b.text)
 		writeOBMLString(&out, b.url)
+		// OBML-style layout hint (0,0,0,0 = use flow)
+		_ = binary.Write(&out, binary.BigEndian, int16(b.x))
+		_ = binary.Write(&out, binary.BigEndian, int16(b.y))
+		_ = binary.Write(&out, binary.BigEndian, int16(b.w))
+		_ = binary.Write(&out, binary.BigEndian, int16(b.h))
 	}
 	return out.Bytes(), nil
 }
