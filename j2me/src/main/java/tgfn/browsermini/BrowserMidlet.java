@@ -1210,7 +1210,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
             Vector lines = new Vector();
             Vector sourceBlocks = lastPageResult != null && lastPageResult.blocks != null ? lastPageResult.blocks : null;
-            if (sourceBlocks == null || sourceBlocks.size() == 0) {
+            if (lastPageResult != null && lastPageResult.mobileTiles) {
+                // The screenshot already contains the full page; do not append a fake text/link section.
+            } else if (sourceBlocks == null || sourceBlocks.size() == 0) {
                 Vector plain = wrap(screenBody, normal, w - 14);
                 for (int i = 0; i < plain.size(); i++) lines.addElement(new RenderLine((String)plain.elementAt(i), 0, null));
             } else {
