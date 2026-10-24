@@ -914,6 +914,12 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 int style = (kind >= 0 && kind <= 3) || (kind >= 10 && kind <= 21) ? kind : 0;
                 result.blocks.addElement(new RenderBlock(label, style, null));
             }
+            if (bx != 0 || by != 0) {
+                if (result.blocks.size() > 0) {
+                    RenderBlock last = (RenderBlock)result.blocks.elementAt(result.blocks.size() - 1);
+                    last.layoutX = bx; last.layoutY = by; last.layoutW = bw; last.layoutH = bh;
+                }
+            }
             if (text.length() > 0) text.append('\n');
             text.append(label);
         }
@@ -1736,6 +1742,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         String text;
         int type;
         String url;
+        int layoutX, layoutY, layoutW, layoutH;
         RenderBlock(String text, int type, String url) { this.text = text; this.type = type; this.url = url; }
     }
 
