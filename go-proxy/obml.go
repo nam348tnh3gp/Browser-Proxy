@@ -84,7 +84,12 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			}
 		}
 		if kind == 5 && link != "" {
-			link = rewriteImageURL(link)
+			if separator := strings.IndexByte(link, '\x1f'); separator >= 0 {
+				imageURL := rewriteImageURL(link[:separator])
+				link = imageURL + "\x1f" + link[separator+1:]
+			} else {
+				link = rewriteImageURL(link)
+			}
 		}
 		blocks = append(blocks, obmlBlock{kind: kind, text: text, url: link})
 	}
@@ -193,6 +198,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		return strings.TrimSpace(strings.Join(strings.Fields(b.String()), " "))
 	}
 
+	activeAnchorURL := ""
 	var walk func(*xhtml.Node, byte, bool)
 	walk = func(n *xhtml.Node, kind byte, inLink bool) {
 		if n.Type == xhtml.TextNode {
@@ -362,7 +368,11 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 				}
 			}
 			if imageURL := obmlAbsolute(pageURL, src); imageURL != "" {
-				add(5, alt, imageURL)
+				imageTarget := imageURL
+				if activeAnchorURL != "" {
+					imageTarget += "\x1f" + activeAnchorURL
+				}
+				add(5, alt, imageTarget)
 			}
 			return
 		}
@@ -436,16 +446,19 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 				}
 				label = findAlt(n)
 			}
-			if linkURL != "" && label != "" {
+			if linkURL != "" && label != "" && textContent(n) != "" {
 				add(4, label, linkURL)
-			} else if label != "" {
+			} else if label != "" && textContent(n) != "" {
 				add(kind, label, "")
 			}
-			// Preserve image/logo children in their original position instead of
-			// discarding them when the enclosing anchor is encountered.
+			// Preserve image/logo children in their original position and carry
+			// the enclosing anchor URL so the image itself remains clickable.
+			previousAnchorURL := activeAnchorURL
+			activeAnchorURL = linkURL
 			for child := n.FirstChild; child != nil; child = child.NextSibling {
 				walk(child, newKind, true)
 			}
+			activeAnchorURL = previousAnchorURL
 			return
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
