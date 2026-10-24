@@ -916,6 +916,16 @@ class MainActivity : Activity() {
                         }
                         statsText.text = buildString {
                             append("━━ ").append(tr("THIẾT BỊ NÀY", "THIS DEVICE")).append(" ━━\n")
+                            val attributionStatus = current.optString("client_attribution_status", "")
+                            val attributionMessage = when (attributionStatus) {
+                                "matched_source_ip" -> tr("Định danh: IP nguồn khớp thiết bị", "Attribution: source IP matched")
+                                "single_client_fallback" -> tr("Định danh: dự phòng vì chỉ có một thiết bị đăng ký", "Attribution: fallback (only one registered client)")
+                                "ambiguous_source_ip" -> tr("Cảnh báo: nhiều thiết bị dùng chung IP; proxy không thể phân biệt chính xác bộ đếm riêng.", "Warning: multiple clients share this IP; per-device attribution is ambiguous.")
+                                "source_ip_mapped_to_other_client" -> tr("Cảnh báo: IP nguồn hiện được ánh xạ sang thiết bị khác.", "Warning: this source IP is mapped to another client.")
+                                "source_ip_unmapped" -> tr("Cảnh báo: chưa ánh xạ được IP nguồn; bộ đếm riêng có thể thiếu.", "Warning: source IP is unmapped; per-device counters may be incomplete.")
+                                else -> ""
+                            }
+                            if (attributionMessage.isNotEmpty()) append(attributionMessage).append('\n')
                             append(summary(current, storedClient)).append("\n\n")
                             append("━━ ").append(tr("TOÀN MẠNG PROXY", "WHOLE PROXY NETWORK")).append(" ━━\n")
                             append(tr("Thiết bị đã đăng ký: ", "Registered devices: "))
