@@ -122,8 +122,29 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 	// Extract simple inline stylesheet background images so banners and logos
 	// implemented with CSS are retained in the compact document flow.
 	cssBackgrounds := make(map[string]string)
+	cssTextStyles := make(map[string]byte)
 	cssRulePattern := regexp.MustCompile(`(?is)([^{}]+)\{([^{}]*)\}`)
 	cssURLPattern := regexp.MustCompile(`(?is)url\(\s*['"]?([^)'"]+)['"]?\s*\)`)
+	cssStyleKind := func(declarations string) byte {
+		value := strings.ToLower(strings.ReplaceAll(declarations, " ", ""))
+		switch {
+		case strings.Contains(value, "text-decoration:line-through"):
+			return 15
+		case strings.Contains(value, "text-decoration:underline"):
+			return 17
+		case strings.Contains(value, "font-style:italic"):
+			return 10
+		case strings.Contains(value, "font-weight:bold"), strings.Contains(value, "font-weight:600"), strings.Contains(value, "font-weight:700"), strings.Contains(value, "font-weight:800"):
+			return 2
+		case strings.Contains(value, "font-size:smaller"), strings.Contains(value, "font-size:x-small"), strings.Contains(value, "font-size:xx-small"):
+			return 18
+		case strings.Contains(value, "font-size:larger"), strings.Contains(value, "font-size:x-large"), strings.Contains(value, "font-size:xx-large"):
+			return 19
+		case strings.Contains(value, "background-color:yellow"), strings.Contains(value, "background-color:#ff0"), strings.Contains(value, "background-color:#ffff00"):
+			return 16
+		}
+		return 0
+	}
 	var collectStyles func(*xhtml.Node)
 	collectStyles = func(node *xhtml.Node) {
 		if node.Type == xhtml.ElementNode && strings.EqualFold(node.Data, "style") {
@@ -134,12 +155,10 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 				}
 			}
 			for _, rule := range cssRulePattern.FindAllStringSubmatch(css.String(), -1) {
-				declarations := strings.ToLower(rule[2])
-				if !strings.Contains(declarations, "background") {
-					continue
-				}
-				urlMatch := cssURLPattern.FindStringSubmatch(rule[2])
-				if len(urlMatch) < 2 {
+				declarations := rule[2]
+				urlMatch := cssURLPattern.FindStringSubmatch(declarations)
+				styleKind := cssStyleKind(declarations)
+				if len(urlMatch) < 2 && styleKind == 0 {
 					continue
 				}
 				for _, selector := range strings.Split(rule[1], ",") {
@@ -148,7 +167,12 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 					if selector == "" || strings.ContainsAny(selector, " >+~:[") {
 						continue
 					}
-					cssBackgrounds[selector] = strings.TrimSpace(urlMatch[1])
+					if len(urlMatch) > 1 && strings.Contains(strings.ToLower(declarations), "background") {
+						cssBackgrounds[selector] = strings.TrimSpace(urlMatch[1])
+					}
+					if styleKind != 0 {
+						cssTextStyles[selector] = styleKind
+					}
 				}
 			}
 		}
@@ -181,6 +205,22 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			}
 		}
 		return ""
+	}
+	textStyleFor := func(node *xhtml.Node) byte {
+		if kind := cssTextStyles[strings.ToLower(node.Data)]; kind != 0 {
+			return kind
+		}
+		if id := attr(node, "id"); id != "" {
+			if kind := cssTextStyles["#"+strings.ToLower(id)]; kind != 0 {
+				return kind
+			}
+		}
+		for _, className := range strings.Fields(attr(node, "class")) {
+			if kind := cssTextStyles["."+strings.ToLower(className)]; kind != 0 {
+				return kind
+			}
+		}
+		return 0
 	}
 	textContent := func(root *xhtml.Node) string {
 		var b strings.Builder
@@ -365,6 +405,11 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 			tableRowCells++
 		}
 
+		// Apply simple embedded stylesheet typography after tag defaults, then
+		// allow inline styles to override it.
+		if styleKind := textStyleFor(n); styleKind != 0 {
+			newKind = styleKind
+		}
 		// Preserve a few semantic CSS text styles even when the original
 		// stylesheet cannot be reproduced by the small MIDP renderer.
 		inlineStyle := strings.ToLower(attr(n, "style"))
