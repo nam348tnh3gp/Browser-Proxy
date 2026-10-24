@@ -172,6 +172,51 @@ func TestOBMLResponseLeavesOtherClientsUnchanged(t *testing.T) {
 	}
 }
 
+func TestBuildOBMLPagePreservesSemanticTextStyles(t *testing.T) {
+	packet, err := buildOBMLPage("https://example.test/", `<html><body><h1>Title</h1><h3>Small heading</h3><p><em>italic</em> <code>code</code> <del>removed</del></p><blockquote>quoted text</blockquote><hr></body></html>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	countOffset := 4 + 2 + len("https://example.test/")
+	if len(packet) < countOffset+2 {
+		t.Fatal("compact packet is truncated")
+	}
+	count := int(binary.BigEndian.Uint16(packet[countOffset : countOffset+2]))
+	pos := countOffset + 2
+	seen := map[byte]string{}
+	for i := 0; i < count; i++ {
+		if pos >= len(packet) {
+			t.Fatal("truncated block")
+		}
+		kind := packet[pos]
+		pos++
+		read := func() string {
+			if pos+2 > len(packet) {
+				t.Fatal("truncated string length")
+			}
+			n := int(binary.BigEndian.Uint16(packet[pos : pos+2]))
+			pos += 2
+			if pos+n > len(packet) {
+				t.Fatal("truncated string")
+			}
+			value := string(packet[pos : pos+n])
+			pos += n
+			return value
+		}
+		label := read()
+		_ = read()
+		seen[kind] += label + "|"
+	}
+	for kind, want := range map[byte]string{
+		1: "Title", 10: "italic", 11: "code", 12: "quoted text",
+		13: "────────", 14: "Small heading", 15: "removed",
+	} {
+		if !strings.Contains(seen[kind], want) {
+			t.Errorf("expected kind %d to preserve %q; got %q", kind, want, seen[kind])
+		}
+	}
+}
+
 func TestBuildOBMLPageCapsBlocksAtMIDPLimit(t *testing.T) {
 	pageURL := "http://example.test/"
 	source := "<html><body>" + strings.Repeat("<p>block</p>", maxOBMLBlocks*2) + "</body></html>"
