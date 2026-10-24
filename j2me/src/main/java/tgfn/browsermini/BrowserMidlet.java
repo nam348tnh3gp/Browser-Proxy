@@ -69,6 +69,11 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private final Vector bookmarks = new Vector();
     private final Vector pageLinkItems = new Vector();
     private final Vector pageImageItems = new Vector();
+    private Form webForm;
+    private Vector activeFormFields;
+    private Vector activeFormNames;
+    private FormRef activeForm;
+    private final Command submitWebFormCommand = new Command("Submit", Command.OK, 1);
     private final Command proxyCommand = new Command("Proxy", Command.SCREEN, 8);
     private final Command bookmarksCommand = new Command("Bookmarks", Command.SCREEN, 8);
     private final Command bookmarkCommand = new Command("Bookmark", Command.SCREEN, 8);
@@ -585,7 +590,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 if (selected >= 0 && showingBookmarks && selected < bookmarks.size()) {
                     navigate((String)bookmarks.elementAt(selected), true);
                 } else if (selected >= 0 && !showingBookmarks && selected < links.size()) {
-                    navigate(((LinkItem)links.elementAt(selected)).url, true);
+                    openTarget(((LinkItem)links.elementAt(selected)).url, true);
                 }
             } else if (command == backCommand) {
                 if (browserCanvas != null) display.setCurrent(browserCanvas);
@@ -621,7 +626,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     public void commandAction(Command command, Item item) {
-        if (command == openLinkCommand) {
+        if (source == webForm && command == submitWebFormCommand) {
+            submitWebForm();
+        } else if (command == openLinkCommand) {
             int index = pageLinkItems.indexOf(item);
             if (index >= 0 && index < links.size()) {
                 navigate(((LinkItem)links.elementAt(index)).url, true);
@@ -761,6 +768,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         PageResult result = new PageResult();
         result.links = new Vector();
         result.images = new Vector();
+        result.forms = new Vector();
         result.blocks = new Vector();
         result.title = readTBOString(in);
         int count = in.readUnsignedShort();
@@ -770,6 +778,22 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             int kind = in.readUnsignedByte();
             String label = readTBOString(in);
             String target = readTBOString(in);
+            if (kind == 7) {
+                FormRef formRef = parseFormPayload(label);
+                if (formRef != null) {
+                    int formIndex = result.forms.size();
+                    result.forms.addElement(formRef);
+                    String formLabel = "[Form: " + formRef.label + "]";
+                    String formTarget = "form:" + formIndex;
+                    result.links.addElement(new LinkItem(formLabel, formTarget));
+                    result.blocks.addElement(new RenderBlock(formLabel, 4, formTarget));
+                }
+                continue;
+            }
+            if (kind == 8) {
+                if (label.length() > 0) result.blocks.addElement(new RenderBlock(label, 0, null));
+                continue;
+            }
             if (kind == 6) {
                 result.blocks.addElement(new RenderBlock("", 0, null));
                 text.append('\n');
@@ -795,6 +819,87 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         if (result.text.length() == 0) result.text = "(No readable text was found on this page.)";
         if (result.title == null || result.title.length() == 0) result.title = baseUrl;
         return result;
+    }
+
+    private FormRef parseFormPayload(String payload) {
+        Vector parts = new Vector();
+        int start = 0;
+        for (int i = 0; i <= payload.length(); i++) {
+            if (i == payload.length() || payload.charAt(i) == 31) {
+                parts.addElement(payload.substring(start, i));
+                start = i + 1;
+            }
+        }
+        if (parts.size() < 3) return null;
+        FormRef formRef = new FormRef((String)parts.elementAt(0), (String)parts.elementAt(1), (String)parts.elementAt(2));
+        for (int i = 3; i + 3 < parts.size(); i += 4) {
+            formRef.fields.addElement(new FormField((String)parts.elementAt(i), (String)parts.elementAt(i + 1),
+                (String)parts.elementAt(i + 2), (String)parts.elementAt(i + 3)));
+        }
+        return formRef;
+    }
+
+    private void openTarget(String target, boolean addHistory) {
+        if (target != null && target.startsWith("form:")) {
+            try {
+                int index = Integer.parseInt(target.substring(5));
+                if (lastPageResult != null && lastPageResult.forms != null && index >= 0 && index < lastPageResult.forms.size()) {
+                    showWebForm((FormRef)lastPageResult.forms.elementAt(index));
+                    return;
+                }
+            } catch (Exception ignored) {}
+        }
+        navigate(target, addHistory);
+    }
+
+    private void showWebForm(FormRef formRef) {
+        activeForm = formRef;
+        activeFormFields = new Vector();
+        activeFormNames = new Vector();
+        webForm = new Form(formRef.label.length() == 0 ? "Web form" : formRef.label);
+        for (int i = 0; i < formRef.fields.size(); i++) {
+            FormField field = (FormField)formRef.fields.elementAt(i);
+            if ("hidden".equals(field.type) || field.name.length() == 0) continue;
+            int constraints = TextField.ANY;
+            if ("password".equals(field.type)) constraints = TextField.PASSWORD;
+            else if ("number".equals(field.type) || "tel".equals(field.type)) constraints = TextField.NUMERIC;
+            else if ("url".equals(field.type)) constraints = TextField.URL;
+            else if ("email".equals(field.type)) constraints = TextField.EMAILADDR;
+            TextField input = new TextField(field.label.length() == 0 ? field.name : field.label,
+                field.value, 512, constraints);
+            webForm.append(input);
+            activeFormFields.addElement(input);
+            activeFormNames.addElement(field.name);
+        }
+        if (activeFormFields.size() == 0) webForm.append(new StringItem("Info", "No editable fields were found in this form."));
+        webForm.addCommand(submitWebFormCommand);
+        webForm.addCommand(cancelCommand);
+        webForm.setCommandListener(this);
+        display.setCurrent(webForm);
+    }
+
+    private void submitWebForm() {
+        if (activeForm == null) return;
+        StringBuffer target = new StringBuffer(activeForm.action);
+        boolean first = target.toString().indexOf('?') < 0;
+        for (int i = 0; i < activeFormFields.size(); i++) {
+            TextField field = (TextField)activeFormFields.elementAt(i);
+            String name = (String)activeFormNames.elementAt(i);
+            try {
+                target.append(first ? '?' : '&');
+                first = false;
+                target.append(encodeURLComponent(name));
+                target.append('=');
+                target.append(encodeURLComponent(field.getString()));
+            } catch (IOException badEncoding) {
+                showError("Form error", "Could not encode form values.");
+                return;
+            }
+        }
+        String destination = target.toString();
+        activeForm = null;
+        webForm = null;
+        navigate(destination, true);
     }
 
     private String readTBOString(DataInputStream in) throws IOException {
@@ -1136,7 +1241,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     for (int i = 0; i < lastPageResult.blocks.size(); i++) {
                         RenderBlock b = (RenderBlock)lastPageResult.blocks.elementAt(i);
                         if (b.url != null && ++seen == selectedLink) {
-                            navigate(b.url, true);
+                            openTarget(b.url, true);
                             return;
                         }
                     }
@@ -1192,7 +1297,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             for (int i = 0; i < lastPageResult.blocks.size(); i++) {
                 RenderBlock b = (RenderBlock)lastPageResult.blocks.elementAt(i);
                 if (b.url != null && ++seen == selectedLink) {
-                    navigate(b.url, true);
+                    openTarget(b.url, true);
                     return;
                 }
             }
@@ -1212,6 +1317,18 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         ImageRef(String alt, String url) {
             this.alt = alt == null ? "" : alt;
             this.url = url;
+        }
+    }
+
+    private static final class FormRef {
+        String label; String action; String method; Vector fields = new Vector();
+        FormRef(String label, String action, String method) { this.label = label; this.action = action; this.method = method; }
+    }
+
+    private static final class FormField {
+        String label; String type; String name; String value;
+        FormField(String label, String type, String name, String value) {
+            this.label = label; this.type = type; this.name = name; this.value = value;
         }
     }
 
@@ -1236,6 +1353,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         Vector links;
         Vector images;
         Vector blocks;
+        Vector forms;
     }
 
     private Image scaleImage(Image src, int newW, int newH) {
