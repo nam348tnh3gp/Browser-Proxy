@@ -42,6 +42,21 @@ func TestBuildOBMLPageCoalescesInlineTextForMobileReflow(t *testing.T) {
 	}
 }
 
+func TestBuildOBMLPageEncodesSelectAndCheckedControls(t *testing.T) {
+	source := `<!doctype html><html><body><form aria-label="Search" action="/search"><input name="safe" type="checkbox" value="1" checked><select name="lang"><option value="en">English</option><option value="vi" selected>Vietnamese</option></select></form></body></html>`
+	packet, err := buildOBMLPage("https://example.test/", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded := string(packet)
+	if !strings.Contains(encoded, "checkbox_checked") {
+		t.Fatal("checked checkbox state was not encoded")
+	}
+	if !strings.Contains(encoded, "vi\\x1eEnglish\\x1den\\x1eVietnamese\\x1dvi") {
+		t.Fatalf("select options were not encoded with selected value: %q", packet)
+	}
+}
+
 func TestOBMLResponseOnlyTransformsOptedInHTML(t *testing.T) {
 	body := "<html><head><title>Example</title></head><body><p>Hello</p></body></html>"
 	req, _ := http.NewRequest("GET", "http://example.test/page", nil)
