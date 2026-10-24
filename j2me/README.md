@@ -14,7 +14,7 @@ Lightweight Java ME browser inspired by **Opera Mini** and open-source MIDP brow
 
 | Mode | Description |
 |------|-------------|
-| **MOB1** (default for J2ME) | Mobile viewport render using Chromium when available (240×500, mobile user-agent, responsive CSS/media queries, JPEG compression, and extracted links). Falls back to TBO1 when Chromium is unavailable or rendering fails. |
+| **MOB1** (default for J2ME) | Mobile viewport render using Chromium when available (240×500, mobile user-agent, responsive CSS/media queries, JPEG compression, edge-to-edge tiles, and inline link hitboxes/focus). Falls back to TBO1 when Chromium is unavailable or rendering fails. |
 | **TBO1** | Server-side semantic blocks: compact text, headings, lists, links, images, and native MIDP forms for common GET searches. No browser engine required. |
 | SSR | Structured text blocks |
 | FULL | HTML + gzip |
@@ -46,7 +46,7 @@ PROXY_LISTEN=0.0.0.0:8080 go run .
 ```
 
 In the app: Menu → Proxy → enable, then open a page.  
-Use **Menu → Links** to navigate.
+On MOB1 pages, use the directional keys to focus links in place and FIRE/5 to open; no duplicate page-link list is shown. TBO1 fallback pages retain **Menu → Page links**.
 
 ## Requirements for SSRIMG
 
