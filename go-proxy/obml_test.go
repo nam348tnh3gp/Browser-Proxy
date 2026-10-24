@@ -47,6 +47,26 @@ func TestBuildOBMLPageRendersInlineJavaScriptDocumentWrite(t *testing.T) {
 	}
 }
 
+func TestBuildOBMLPageKeepsCSSBannersAndLazyImages(t *testing.T) {
+	source := `<!doctype html><html><head><style>.hero { background-image: url('/banner.jpg'); }</style></head><body><div class="hero"><a href="/home"><img data-src="/logo.png" alt="Site logo"></a></div><p>After banner</p></body></html>`
+	packet, err := buildOBMLPage("https://example.test/page", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, imageURL := range []string{"https://example.test/banner.jpg", "https://example.test/logo.png"} {
+		want := imageCompressPath + "?url=" + url.QueryEscape(imageURL)
+		if !bytes.Contains(packet, []byte(want)) {
+			t.Errorf("compact page omitted image %q: %q", imageURL, packet)
+		}
+	}
+	if !bytes.Contains(packet, []byte("Site logo")) || !bytes.Contains(packet, []byte("https://example.test/home")) {
+		t.Fatalf("linked logo or its target was lost: %q", packet)
+	}
+	if bytes.Index(packet, []byte("banner.jpg")) > bytes.Index(packet, []byte("After banner")) {
+		t.Fatal("banner background should appear before the following page content")
+	}
+}
+
 func TestBuildOBMLPageCoalescesInlineTextForMobileReflow(t *testing.T) {
 	source := `<!doctype html><html><body><p>one <span>two</span> three</p></body></html>`
 	packet, err := buildOBMLPage("https://example.test/", source)
