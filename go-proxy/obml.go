@@ -123,6 +123,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 	// implemented with CSS are retained in the compact document flow.
 	cssBackgrounds := make(map[string]string)
 	cssTextStyles := make(map[string]byte)
+	cssColors := make(map[string]string)
 	cssRulePattern := regexp.MustCompile(`(?is)([^{}]+)\{([^{}]*)\}`)
 	cssURLPattern := regexp.MustCompile(`(?is)url\(\s*['"]?([^)'"]+)['"]?\s*\)`)
 	cssStyleKind := func(declarations string) byte {
@@ -179,6 +180,14 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 					if styleKind != 0 {
 						cssTextStyles[selector] = styleKind
 					}
+					// Capture text color for Opera Mini-like fidelity
+					if idx := strings.Index(strings.ToLower(declarations), "color:"); idx >= 0 {
+						rest := strings.TrimSpace(strings.Split(declarations[idx+6:], ";")[0])
+						rest = strings.TrimSpace(rest)
+						if strings.HasPrefix(rest, "#") && len(rest) >= 4 {
+							cssColors[selector] = rest
+						}
+					}
 				}
 			}
 		}
@@ -213,6 +222,23 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 		return ""
 	}
 	colorFor := func(node *xhtml.Node) string {
+		if node == nil {
+			return ""
+		}
+		// CSS class/id/tag color
+		if id := attr(node, "id"); id != "" {
+			if c := cssColors["#"+strings.ToLower(id)]; c != "" {
+				return c
+			}
+		}
+		for _, className := range strings.Fields(attr(node, "class")) {
+			if c := cssColors["."+strings.ToLower(className)]; c != "" {
+				return c
+			}
+		}
+		if c := cssColors[strings.ToLower(node.Data)]; c != "" {
+			return c
+		}
 		style := strings.ToLower(attr(node, "style"))
 		// color:#xxx or color:rgb
 		if idx := strings.Index(style, "color:"); idx >= 0 {
