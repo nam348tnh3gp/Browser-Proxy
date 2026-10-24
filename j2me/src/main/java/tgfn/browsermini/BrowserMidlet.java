@@ -73,6 +73,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private Form webForm;
     private Vector activeFormFields;
     private Vector activeFormNames;
+    private Vector activeFormValues;
     private Vector activeHiddenNames;
     private Vector activeHiddenValues;
     private FormRef activeForm;
@@ -812,7 +813,12 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                         if (field.name.length() == 0 || "hidden".equals(field.type)) continue;
                         String fieldLabel = field.label.length() == 0 ? field.name : field.label;
                         String fieldType = field.type == null || field.type.length() == 0 ? "text" : field.type;
+                        if (fieldType.endsWith("_checked")) fieldType = fieldType.substring(0, fieldType.length() - 8);
                         String shownValue = "password".equals(fieldType) ? "" : field.value;
+                        if ("select".equals(fieldType) && shownValue != null) {
+                            int optionSep = shownValue.indexOf((char)30);
+                            if (optionSep >= 0) shownValue = shownValue.substring(0, optionSep);
+                        }
                         String control = fieldLabel + "  [" + fieldType + "]";
                         if (shownValue != null && shownValue.length() > 0) control += " " + shownValue;
                         result.blocks.addElement(new RenderBlock(control, 4, formTarget));
@@ -906,6 +912,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         activeForm = formRef;
         activeFormFields = new Vector();
         activeFormNames = new Vector();
+        activeFormValues = new Vector();
         activeHiddenNames = new Vector();
         activeHiddenValues = new Vector();
         webForm = new Form(formRef.label.length() == 0 ? "Web form" : formRef.label);
@@ -917,16 +924,69 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 activeHiddenValues.addElement(field.value);
                 continue;
             }
+            String type = field.type == null ? "text" : field.type;
+            boolean checked = type.endsWith("_checked");
+            if (checked) type = type.substring(0, type.length() - 8);
+            String label = field.label.length() == 0 ? field.name : field.label;
+
+            if ("select".equals(type)) {
+                String encoded = field.value == null ? "" : field.value;
+                String sep = String.valueOf((char)30);
+                int firstSep = encoded.indexOf(sep);
+                String selectedValue = firstSep < 0 ? encoded : encoded.substring(0, firstSep);
+                String optionsText = firstSep < 0 ? "" : encoded.substring(firstSep + 1);
+                ChoiceGroup choices = new ChoiceGroup(label, ChoiceGroup.POPUP);
+                Vector values = new Vector();
+                int pos = 0;
+                while (pos <= optionsText.length() && optionsText.length() > 0) {
+                    int next = optionsText.indexOf(sep, pos);
+                    if (next < 0) next = optionsText.length();
+                    String option = optionsText.substring(pos, next);
+                    int split = option.indexOf((char)29);
+                    String optionLabel = split < 0 ? option : option.substring(0, split);
+                    String optionValue = split < 0 ? option : option.substring(split + 1);
+                    if (optionLabel.length() == 0) optionLabel = optionValue;
+                    choices.append(optionLabel, null);
+                    values.addElement(optionValue);
+                    if (optionValue.equals(selectedValue)) choices.setSelectedIndex(values.size() - 1, true);
+                    if (next == optionsText.length()) break;
+                    pos = next + 1;
+                }
+                if (choices.size() == 0) {
+                    choices.append(selectedValue, null);
+                    values.addElement(selectedValue);
+                }
+                webForm.append(choices);
+                activeFormFields.addElement(choices);
+                activeFormNames.addElement(field.name);
+                activeFormValues.addElement(values);
+                continue;
+            }
+
+            if ("checkbox".equals(type) || "radio".equals(type)) {
+                int choiceType = "checkbox".equals(type) ? ChoiceGroup.MULTIPLE : ChoiceGroup.EXCLUSIVE;
+                ChoiceGroup choice = new ChoiceGroup(label, choiceType);
+                choice.append("Yes", null);
+                choice.setSelectedIndex(0, checked);
+                Vector values = new Vector();
+                values.addElement(field.value == null || field.value.length() == 0 ? "on" : field.value);
+                webForm.append(choice);
+                activeFormFields.addElement(choice);
+                activeFormNames.addElement(field.name);
+                activeFormValues.addElement(values);
+                continue;
+            }
+
             int constraints = TextField.ANY;
-            if ("password".equals(field.type)) constraints = TextField.PASSWORD;
-            else if ("number".equals(field.type) || "tel".equals(field.type)) constraints = TextField.NUMERIC;
-            else if ("url".equals(field.type)) constraints = TextField.URL;
-            else if ("email".equals(field.type)) constraints = TextField.EMAILADDR;
-            TextField input = new TextField(field.label.length() == 0 ? field.name : field.label,
-                field.value, 512, constraints);
+            if ("password".equals(type)) constraints = TextField.PASSWORD;
+            else if ("number".equals(type) || "tel".equals(type)) constraints = TextField.NUMERIC;
+            else if ("url".equals(type)) constraints = TextField.URL;
+            else if ("email".equals(type)) constraints = TextField.EMAILADDR;
+            TextField input = new TextField(label, field.value, 512, constraints);
             webForm.append(input);
             activeFormFields.addElement(input);
             activeFormNames.addElement(field.name);
+            activeFormValues.addElement(new Vector());
         }
         if (activeFormFields.size() == 0) webForm.append(new StringItem("Info", "No editable fields were found in this form."));
         webForm.addCommand(submitWebFormCommand);
@@ -951,14 +1011,30 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
         }
         for (int i = 0; i < activeFormFields.size(); i++) {
-            TextField field = (TextField)activeFormFields.elementAt(i);
+            Object control = activeFormFields.elementAt(i);
+            String fieldValue = null;
+            if (control instanceof TextField) {
+                fieldValue = ((TextField)control).getString();
+            } else if (control instanceof ChoiceGroup) {
+                ChoiceGroup choices = (ChoiceGroup)control;
+                boolean[] selected = new boolean[choices.size()];
+                choices.getSelectedFlags(selected);
+                Vector values = (Vector)activeFormValues.elementAt(i);
+                for (int j = 0; j < selected.length; j++) {
+                    if (selected[j] && j < values.size()) {
+                        fieldValue = (String)values.elementAt(j);
+                        break;
+                    }
+                }
+                if (fieldValue == null) continue;
+            }
             String name = (String)activeFormNames.elementAt(i);
             try {
                 target.append(first ? '?' : '&');
                 first = false;
                 target.append(encodeURLComponent(name));
                 target.append('=');
-                target.append(encodeURLComponent(field.getString()));
+                target.append(encodeURLComponent(fieldValue == null ? "" : fieldValue));
             } catch (IOException badEncoding) {
                 showError("Form error", "Could not encode form values.");
                 return;
