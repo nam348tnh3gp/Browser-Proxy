@@ -12,12 +12,11 @@ PORT = 8090
 UA = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36"
 
 def compress_html(html: bytes) -> bytes:
+    """Light compression: keep full HTML/CSS/JS, only collapse whitespace."""
     text = html.decode("utf-8", errors="ignore")
-    text = re.sub(r"(?is)<script[^>]*>.*?</script>", "", text)
-    text = re.sub(r"(?is)<style[^>]*>.*?</style>", "", text)
-    text = re.sub(r"(?is)<noscript[^>]*>.*?</noscript>", "", text)
+    # Keep scripts, styles, and all content. Only reduce whitespace.
     text = re.sub(r">\s+<", "><", text)
-    text = re.sub(r"\s{2,}", " ", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
     return text.encode("utf-8")
 
 class Handler(BaseHTTPRequestHandler):
