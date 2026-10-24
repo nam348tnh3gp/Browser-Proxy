@@ -62,6 +62,7 @@ type proxyStatsSnapshot struct {
 	ConnectUpstreamToClient int64  `json:"connect_upstream_to_client_bytes"`
 	RegisteredClients       int    `json:"registered_clients"`
 	ClientID                string `json:"client_id,omitempty"`
+	ClientAttributionStatus string `json:"client_attribution_status,omitempty"`
 }
 
 func currentProxyStats() proxyStatsSnapshot {
@@ -157,6 +158,29 @@ func clientIDFromRemoteAddr(remoteAddr string) string {
 		}
 	}
 	return ""
+}
+
+func clientAttributionStatus(remoteAddr, id string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return "invalid_remote_address"
+	}
+	host = normalizeClientIP(host)
+	clientTracking.RLock()
+	defer clientTracking.RUnlock()
+	if clientTracking.ambiguousIPs[host] {
+		return "ambiguous_source_ip"
+	}
+	if mapped := clientTracking.idByIP[host]; mapped != "" {
+		if mapped == id {
+			return "matched_source_ip"
+		}
+		return "source_ip_mapped_to_other_client"
+	}
+	if _, registered := clientTracking.registeredIDs[id]; registered && len(clientTracking.registeredIDs) == 1 {
+		return "single_client_fallback"
+	}
+	return "source_ip_unmapped"
 }
 
 func registerClient(remoteAddr, id string) bool {
@@ -337,6 +361,7 @@ func proxyHandlerWithAuth(username, password string) http.Handler {
 					stats = snapshotCounters(&clientCounterSet{})
 				}
 				stats.ClientID = id
+				stats.ClientAttributionStatus = clientAttributionStatus(r.RemoteAddr, id)
 			}
 			if err := json.NewEncoder(w).Encode(stats); err != nil {
 				log.Printf("stats response failed: %v", err)
