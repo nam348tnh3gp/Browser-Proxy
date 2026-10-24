@@ -44,16 +44,7 @@ var (
 		idByIP map[string]string
 		stats  map[string]*clientCounterSet
 	}
-	proxyStats            struct {
-		httpRequests            atomic.Int64
-		httpResponseBytes       atomic.Int64
-		gzipResponses           atomic.Int64
-		gzipOriginalBytes       atomic.Int64
-		gzipCompressedBytes     atomic.Int64
-		connectTunnels          atomic.Int64
-		connectClientToUpstream atomic.Int64
-		connectUpstreamToClient atomic.Int64
-	}
+	proxyStats            clientCounterSet
 )
 
 type proxyStatsSnapshot struct {
@@ -70,16 +61,7 @@ type proxyStatsSnapshot struct {
 }
 
 func currentProxyStats() proxyStatsSnapshot {
-	return snapshotCounters(&clientCounterSet{
-		httpRequests:            proxyStats.httpRequests,
-		httpResponseBytes:       proxyStats.httpResponseBytes,
-		gzipResponses:           proxyStats.gzipResponses,
-		gzipOriginalBytes:       proxyStats.gzipOriginalBytes,
-		gzipCompressedBytes:     proxyStats.gzipCompressedBytes,
-		connectTunnels:          proxyStats.connectTunnels,
-		connectClientToUpstream: proxyStats.connectClientToUpstream,
-		connectUpstreamToClient: proxyStats.connectUpstreamToClient,
-	})
+	return snapshotCounters(&proxyStats)
 }
 
 func snapshotCounters(c *clientCounterSet) proxyStatsSnapshot {
