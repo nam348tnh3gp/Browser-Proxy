@@ -175,7 +175,7 @@ func TestStatsEndpointReturnsMeasuredCounters(t *testing.T) {
 		"connect_client_to_upstream_bytes",
 		"connect_upstream_to_client_bytes",
 	} {
-		if !strings.Contains(rec.Body.String(), `"`+key+`"`) {
+		if !strings.Contains(rec.Body.String(), `"` + key + `"`) {
 			t.Errorf("stats response missing key %q: %s", key, rec.Body.String())
 		}
 	}
