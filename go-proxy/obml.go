@@ -48,132 +48,146 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	title := pageURL
 	var blocks []obmlBlock
 	add := func(kind byte, text, link string) {
 		text = strings.TrimSpace(strings.Join(strings.Fields(text), " "))
-		if len(blocks) >= maxOBMLBlocks || (text == "" && kind != 6 && kind != 5) {
+		if len(blocks) >= maxOBMLBlocks || (text == "" && kind != 6 && kind != 5 && kind != 7) {
 			return
 		}
 		if len(text) > maxOBMLString {
 			text = text[:maxOBMLString]
+			for !utf8.ValidString(text) { text = text[:len(text)-1] }
 		}
-		// For images, rewrite URL through the compression proxy
-		if kind == 5 && link != "" {
-			link = rewriteImageURL(link)
-		}
+		if kind == 5 && link != "" { link = rewriteImageURL(link) }
 		blocks = append(blocks, obmlBlock{kind: kind, text: text, url: link})
 	}
-
-	var walk func(*xhtml.Node, byte, bool, string)
-	walk = func(n *xhtml.Node, kind byte, inLink bool, linkURL string) {
+	attr := func(n *xhtml.Node, key string) string {
+		for _, a := range n.Attr { if strings.EqualFold(a.Key, key) { return strings.TrimSpace(a.Val) } }
+		return ""
+	}
+	hidden := func(n *xhtml.Node) bool {
+		if attr(n, "hidden") != "" { return true }
+		style := strings.ToLower(strings.ReplaceAll(attr(n, "style"), " ", ""))
+		return strings.Contains(style, "display:none") || strings.Contains(style, "visibility:hidden")
+	}
+	textContent := func(root *xhtml.Node) string {
+		var b strings.Builder
+		var visit func(*xhtml.Node)
+		visit = func(n *xhtml.Node) {
+			if n.Type == xhtml.TextNode { b.WriteString(htmlpkg.UnescapeString(n.Data)); b.WriteByte(' ') }
+			for c := n.FirstChild; c != nil; c = c.NextSibling { visit(c) }
+		}
+		visit(root)
+		return strings.TrimSpace(strings.Join(strings.Fields(b.String()), " "))
+	}
+	var walk func(*xhtml.Node, byte, bool)
+	walk = func(n *xhtml.Node, kind byte, inLink bool) {
 		if n.Type == xhtml.TextNode {
-			txt := htmlpkg.UnescapeString(n.Data)
-			if !inLink {
-				add(kind, txt, "")
-			}
+			if !inLink { add(kind, htmlpkg.UnescapeString(n.Data), "") }
 			return
 		}
 		if n.Type != xhtml.ElementNode {
-			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				walk(c, kind, inLink, linkURL)
-			}
+			for c := n.FirstChild; c != nil; c = c.NextSibling { walk(c, kind, inLink) }
 			return
 		}
-
 		tag := strings.ToLower(n.Data)
-		if tag == "script" || tag == "style" || tag == "noscript" || tag == "iframe" || tag == "svg" || tag == "canvas" || tag == "video" || tag == "audio" || tag == "nav" || tag == "footer" || tag == "header" || tag == "form" {
-			return
-		}
+		if hidden(n) || tag == "script" || tag == "style" || tag == "noscript" || tag == "iframe" ||
+			tag == "svg" || tag == "canvas" || tag == "video" || tag == "audio" || tag == "nav" ||
+			tag == "footer" || tag == "header" || tag == "template" { return }
 
-		newKind := kind
-		switch tag {
-		case "h1":
-			newKind = 1
-		case "h2", "h3", "h4", "h5", "h6", "strong", "b":
-			newKind = 2
-		case "li":
-			add(3, "•", "")
-		case "p", "div", "br", "hr", "tr", "section", "article":
-			if !inLink {
-				add(6, "", "")
-			}
-		}
-
-		if tag == "img" {
-			var src, alt string
-			for _, a := range n.Attr {
-				if strings.EqualFold(a.Key, "src") {
-					src = a.Val
-				}
-				if strings.EqualFold(a.Key, "alt") {
-					alt = a.Val
-				}
-			}
-			imageURL := obmlAbsolute(pageURL, src)
-			if imageURL != "" {
-				add(5, alt, imageURL)
-			}
-			return
-		}
-
-		if tag == "a" {
-			var href string
-			for _, a := range n.Attr {
-				if strings.EqualFold(a.Key, "href") {
-					href = a.Val
-				}
-			}
-			linkURL = obmlAbsolute(pageURL, href)
-			inLink = linkURL != ""
-			var linkText strings.Builder
+		if tag == "title" && title == pageURL { title = textContent(n); return }
+		if tag == "form" {
+			action := obmlAbsolute(pageURL, attr(n, "action"))
+			if action == "" { action = pageURL }
+			method := strings.ToLower(attr(n, "method"))
+			if method == "" { method = "get" }
+			if method != "get" { method = "get" } // MIDP form submission currently supports GET safely.
+			formLabel := attr(n, "aria-label")
+			if formLabel == "" { formLabel = attr(n, "name") }
+			if formLabel == "" { formLabel = "Form" }
+			var payload strings.Builder
+			payload.WriteString(formLabel); payload.WriteByte('\x1f')
+			payload.WriteString(action); payload.WriteByte('\x1f')
+			payload.WriteString(method)
 			var collect func(*xhtml.Node)
-			collect = func(nn *xhtml.Node) {
-				if nn.Type == xhtml.TextNode {
-					linkText.WriteString(htmlpkg.UnescapeString(nn.Data))
+			collect = func(c *xhtml.Node) {
+				if c.Type == xhtml.ElementNode {
+					ct := strings.ToLower(c.Data)
+					if ct == "input" || ct == "textarea" || ct == "select" {
+						typ := strings.ToLower(attr(c, "type")); if typ == "" { typ = ct }
+						name := attr(c, "name")
+						if name != "" && typ != "submit" && typ != "button" && typ != "reset" && typ != "file" && typ != "image" {
+							value := attr(c, "value")
+							if ct == "textarea" { value = textContent(c) }
+							if ct == "select" {
+								for o := c.FirstChild; o != nil; o = o.NextSibling {
+									if o.Type == xhtml.ElementNode && strings.EqualFold(o.Data, "option") {
+										value = attr(o, "value"); if value == "" { value = textContent(o) }
+										if attr(o, "selected") != "" { break }
+									}
+								}
+							}
+							label := attr(c, "aria-label"); if label == "" { label = attr(c, "placeholder") }; if label == "" { label = name }
+							for _, v := range []string{label, typ, name, value} { payload.WriteByte('\x1f'); payload.WriteString(strings.ReplaceAll(strings.ReplaceAll(v, "\x1f", " "), "\x00", "")) }
+						}
+					}
 				}
-				for c := nn.FirstChild; c != nil; c = c.NextSibling {
-					collect(c)
-				}
+				for child := c.FirstChild; child != nil; child = child.NextSibling { collect(child) }
 			}
 			collect(n)
-			if inLink {
-				add(4, linkText.String(), linkURL)
-			}
+			add(7, payload.String(), action)
 			return
 		}
-
-		if tag == "title" && title == pageURL {
-			var tb strings.Builder
-			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				if c.Type == xhtml.TextNode {
-					tb.WriteString(c.Data)
-				}
-			}
-			title = strings.TrimSpace(htmlpkg.UnescapeString(tb.String()))
+		newKind := kind
+		switch tag {
+		case "h1": newKind = 1
+		case "h2", "h3", "h4", "h5", "h6", "strong", "b": newKind = 2
+		case "li": add(3, "•", "")
+		case "p", "div", "br", "hr", "tr", "section", "article", "table", "ul", "ol", "fieldset":
+			if !inLink { add(6, "", "") }
+		case "td", "th":
+			if !inLink { add(6, "", "") }
+		}
+		if tag == "img" {
+			src, alt := attr(n, "src"), attr(n, "alt")
+			if src == "" { src = attr(n, "data-src") }
+			if imageURL := obmlAbsolute(pageURL, src); imageURL != "" { add(5, alt, imageURL) }
 			return
 		}
-
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c, newKind, inLink, linkURL)
+		if tag == "input" {
+			typ := strings.ToLower(attr(n, "type"))
+			if typ == "" { typ = "text" }
+			if typ == "hidden" || typ == "submit" || typ == "button" || typ == "reset" || typ == "file" { return }
+			name := attr(n, "name"); label := attr(n, "aria-label")
+			if label == "" { label = attr(n, "placeholder") }; if label == "" { label = attr(n, "value") }; if label == "" { label = name }; if label == "" { label = typ }
+			add(8, "["+label+"] ("+typ+")", "")
+			return
 		}
+		if tag == "textarea" || tag == "select" {
+			label := attr(n, "aria-label"); if label == "" { label = attr(n, "name") }; if label == "" { label = tag }
+			add(8, "["+label+"] ("+tag+")", "")
+			return
+		}
+		if tag == "button" {
+			label := textContent(n); if label == "" { label = attr(n, "value") }; if label == "" { label = "Submit" }
+			add(8, "["+label+"]", "")
+			return
+		}
+		if tag == "a" {
+			linkURL := obmlAbsolute(pageURL, attr(n, "href"))
+			label := textContent(n)
+			if linkURL != "" { add(4, label, linkURL) } else if label != "" { add(kind, label, "") }
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling { walk(c, newKind, inLink) }
 	}
-
-	walk(doc, 0, false, "")
-
+	walk(doc, 0, false)
 	var out bytes.Buffer
 	out.WriteString(obmlMagic)
 	writeOBMLString(&out, title)
-	if len(blocks) > 65535 {
-		blocks = blocks[:65535]
-	}
 	_ = binary.Write(&out, binary.BigEndian, uint16(len(blocks)))
-	for _, b := range blocks {
-		out.WriteByte(b.kind)
-		writeOBMLString(&out, b.text)
-		writeOBMLString(&out, b.url)
-	}
+	for _, b := range blocks { out.WriteByte(b.kind); writeOBMLString(&out, b.text); writeOBMLString(&out, b.url) }
 	return out.Bytes(), nil
 }
 
