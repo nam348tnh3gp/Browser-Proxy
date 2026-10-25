@@ -117,3 +117,6 @@ Client requests TBO1 by default. Test showed TBO1 renders more completely than F
 
 ## TBO1 = HTML minify
 TBO1 path now returns lightly minified HTML (structure, CSS, links kept) instead of binary blocks.
+
+## Full CSS via SSRIMG
+Client requests SSRIMG so the proxy renders the page with Chrome (full CSS) and returns a JPEG, matching the visual of test.py.
