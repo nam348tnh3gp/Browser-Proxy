@@ -327,6 +327,10 @@ func TestBuildOBMLPagePreservesTextAlignment(t *testing.T) {
 		}
 		label := read()
 		_ = read()
+		if pos+8 > len(packet) {
+			t.Fatal("truncated block geometry")
+		}
+		pos += 8 // four big-endian int16 geometry values
 		seen[kind] += label + "|"
 	}
 	if !strings.Contains(seen[20], "Centered title") || !strings.Contains(seen[20], "Legacy center") {
