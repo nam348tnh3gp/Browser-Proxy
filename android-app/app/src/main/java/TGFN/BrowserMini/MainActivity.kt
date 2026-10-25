@@ -14,6 +14,7 @@ import android.view.inputmethod.EditorInfo
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
@@ -31,6 +32,30 @@ import java.util.concurrent.Executor
 
 class MainActivity : Activity() {
     private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "")
+
+
+    private val adDomains = setOf(
+        "doubleclick.net", "googlesyndication.com", "googleadservices.com",
+        "adservice.google.com", "pagead2.googlesyndication.com",
+        "adnxs.com", "adsrvr.org", "advertising.com", "adform.net",
+        "taboola.com", "outbrain.com", "criteo.com", "rubiconproject.com",
+        "pubmatic.com", "openx.net", "moatads.com", "scorecardresearch.com",
+        "facebook.com/tr", "analytics.google.com", "google-analytics.com",
+        "hotjar.com", "mixpanel.com", "segment.io", "quantserve.com",
+        "adsafeprotected.com", "amazon-adsystem.com", "media.net",
+        "popads.net", "popcash.net", "propellerads.com", "adsterra.com"
+    )
+
+    private fun isAdUrl(url: String?): Boolean {
+        if (url.isNullOrBlank()) return false
+        if (!prefs.getBoolean("adblock_enabled", true)) return false
+        val lower = url.lowercase()
+        if (adDomains.any { lower.contains(it) }) return true
+        // Common ad path patterns
+        return lower.contains("/ads/") || lower.contains("/adserver") ||
+               lower.contains("banner") && lower.contains("ad") ||
+               lower.contains("tracking") && lower.contains("pixel")
+    }
 
     private val tabs = mutableListOf<BrowserTab>()
     private var selectedTab = 0
@@ -227,6 +252,14 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ))
         web.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                val url = request?.url?.toString()
+                if (isAdUrl(url)) {
+                    return WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
+                }
+                return super.shouldInterceptRequest(view, request)
+            }
+
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 tab.url = url ?: tab.url
                 tab.title = "Đang tải…"
@@ -848,6 +881,11 @@ class MainActivity : Activity() {
             isChecked = isDesktopModeEnabled()
         }
         content.addView(desktop)
+        val adblock = android.widget.CheckBox(this).apply {
+            text = "Chặn quảng cáo (AdBlock)"
+            isChecked = prefs.getBoolean("adblock_enabled", true)
+        }
+        content.addView(adblock)
         val proxyUrl = EditText(this).apply {
             hint = "Proxy URL: http://host:port"
             setSingleLine(true)
@@ -887,6 +925,7 @@ class MainActivity : Activity() {
                 }
                 prefs.edit().putBoolean("proxy_enabled", enabled.isChecked)
                     .putBoolean("desktop_mode", desktop.isChecked)
+                    .putBoolean("adblock_enabled", adblock.isChecked)
                     .putString("proxy_url", rawProxy).putString("home_url", normalizedHome).apply()
                 tabs.forEach { tab ->
                     tab.webView.settings.userAgentString = if (desktop.isChecked) DESKTOP_USER_AGENT else null

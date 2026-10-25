@@ -45,3 +45,5 @@ By default it listens on `127.0.0.1:8080`. To allow a phone to connect over a tr
 - The J2ME client uses MOB1 mobile screenshots when Chromium is available and falls back to TBO1 semantic blocks.
 - This is not Opera Mini's proprietary cloud rendering/OBML system.
 - Use only trusted proxies.
+## AdBlock
+Android app blocks common ad/tracker domains via shouldInterceptRequest. Toggle in Settings.
