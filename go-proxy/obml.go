@@ -23,9 +23,9 @@ const maxOBMLBlocks = 4000
 const maxOBMLString = 65535
 
 type obmlBlock struct {
-	kind byte
-	text string
-	url  string
+	kind       byte
+	text       string
+	url        string
 	x, y, w, h int // optional layout (OBML-style); 0 = flow layout
 }
 
@@ -271,7 +271,7 @@ func buildOBMLPage(pageURL, source string) ([]byte, error) {
 				return rest
 			}
 			// named colors
-			named := map[string]string{"red":"#c00","blue":"#06c","green":"#060","black":"#000","white":"#fff","gray":"#666","grey":"#666","orange":"#f60","purple":"#60c"}
+			named := map[string]string{"red": "#c00", "blue": "#06c", "green": "#060", "black": "#000", "white": "#fff", "gray": "#666", "grey": "#666", "orange": "#f60", "purple": "#60c"}
 			if hex, ok := named[rest]; ok {
 				return hex
 			}
