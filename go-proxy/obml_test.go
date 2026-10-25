@@ -111,6 +111,12 @@ func TestBuildOBMLPagePreservesTypographyStyles(t *testing.T) {
 		}
 		label := readString()
 		_ = readString()
+		var geometry [4]int16
+		for j := range geometry {
+			if err := binary.Read(reader, binary.BigEndian, &geometry[j]); err != nil {
+				t.Fatalf("read block %d geometry: %v", i, err)
+			}
+		}
 		found[kind] = true
 		kindByText[label] = kind
 	}
@@ -202,11 +208,14 @@ func TestOBMLResponseOnlyTransformsOptedInHTML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Header.Get("Content-Type") != "application/x-tgfn-obml; version=1" {
+	if resp.Header.Get("Content-Type") != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content type: %s", resp.Header.Get("Content-Type"))
 	}
-	if len(packet) < 4 || string(packet[:4]) != obmlMagic {
-		t.Fatalf("unexpected packet: %q", packet[:4])
+	if len(packet) == 0 || strings.Contains(string(packet), ">\n<") {
+		t.Fatalf("expected minified HTML, got %q", packet)
+	}
+	if !strings.Contains(string(packet), "<p>Hello</p>") {
+		t.Fatalf("HTML structure was not preserved: %q", packet)
 	}
 	if resp.ContentLength != int64(len(packet)) {
 		t.Fatalf("content length mismatch: %d != %d", resp.ContentLength, len(packet))
@@ -268,6 +277,13 @@ func TestBuildOBMLPagePreservesSemanticTextStyles(t *testing.T) {
 		}
 		label := read()
 		_ = read()
+		var geometry [4]int16
+		for j := range geometry {
+			if err := binary.Read(bytes.NewReader(packet[pos:]), binary.BigEndian, &geometry); err != nil {
+				t.Fatalf("read block geometry: %v", err)
+			}
+		}
+		pos += 8
 		seen[kind] += label + "|"
 	}
 	for kind, want := range map[byte]string{
