@@ -320,6 +320,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
 
     private Vector parseRenderBlocks(String baseUrl, String html, Vector pageLinks) {
         Vector blocks = new Vector();
+        Vector cssRules = extractCssRules(html);
         String lower = html.toLowerCase();
         int pos = 0;
         int style = 0;
@@ -366,14 +367,26 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     continue;
                 }
             }
-            if (t.startsWith("h1")) style = 1;
-            else if (t.startsWith("h2") || t.startsWith("strong") || t.startsWith("b")) style = 2;
+            if (t.startsWith("/")) {
+                style = 0;
+            } else {
+                int cssType = cssTypeForElement(t, tag, cssRules);
+                if (cssType == -2) {
+                    String endTag = "</" + t.substring(0, t.indexOf(' ') >= 0 ? t.indexOf(' ') : t.length()) + ">";
+                    int hiddenEnd = lower.indexOf(endTag, close + 1);
+                    pos = hiddenEnd < 0 ? html.length() : hiddenEnd + endTag.length();
+                    continue;
+                }
+                if (cssType >= 0) style = cssType;
+                else if (t.startsWith("h1")) style = 1;
+                else if (t.startsWith("h2") || t.startsWith("strong") || t.startsWith("b")) style = 2;
             else if (t.startsWith("h3") || t.startsWith("h4") || t.startsWith("h5") || t.startsWith("h6")) style = 14;
-            else if (t.startsWith("em") || t.startsWith("i") || t.startsWith("cite")) style = 10;
-            else if (t.startsWith("code") || t.startsWith("pre") || t.startsWith("kbd") || t.startsWith("samp")) style = 11;
-            else if (t.startsWith("blockquote")) style = 12;
-            else if (t.startsWith("del") || t.startsWith("strike") || t.startsWith("s ")) style = 15;
-            else if (t.startsWith("hr")) {
+                else if (t.startsWith("em") || t.startsWith("i") || t.startsWith("cite")) style = 10;
+                else if (t.startsWith("code") || t.startsWith("pre") || t.startsWith("kbd") || t.startsWith("samp")) style = 11;
+                else if (t.startsWith("blockquote")) style = 12;
+                else if (t.startsWith("del") || t.startsWith("strike") || t.startsWith("s ")) style = 15;
+            }
+            if (t.startsWith("hr")) {
                 blocks.addElement(new RenderBlock("────────", 13, null));
                 style = 0;
             } else if (t.startsWith("li")) { blocks.addElement(new RenderBlock("• ", 3, null)); style = 3; }
@@ -394,6 +407,78 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             pos = close + 1;
         }
         return blocks;
+    }
+
+    // Small on-device CSS translator for common mobile-site rules. It deliberately
+    // supports simple tag, .class and #id selectors rather than a full browser cascade.
+    private Vector extractCssRules(String html) {
+        Vector rules = new Vector();
+        String lower = html.toLowerCase();
+        int pos = 0;
+        while (rules.size() < 120) {
+            int open = lower.indexOf("<style", pos);
+            if (open < 0) break;
+            int headEnd = lower.indexOf('>', open);
+            if (headEnd < 0) break;
+            int end = lower.indexOf("</style>", headEnd + 1);
+            if (end < 0) break;
+            String css = html.substring(headEnd + 1, end);
+            int p = 0;
+            while (p < css.length() && rules.size() < 120) {
+                int brace = css.indexOf('{', p);
+                if (brace < 0) break;
+                int close = css.indexOf('}', brace + 1);
+                if (close < 0) break;
+                String selectors = css.substring(p, brace).trim().toLowerCase();
+                String declarations = css.substring(brace + 1, close).trim().toLowerCase();
+                int s = 0;
+                while (s < selectors.length() && rules.size() < 120) {
+                    int comma = selectors.indexOf(',', s);
+                    if (comma < 0) comma = selectors.length();
+                    String selector = selectors.substring(s, comma).trim();
+                    if (selector.length() > 0 && selector.indexOf(" ") < 0 &&
+                        selector.indexOf(":") < 0 && selector.indexOf("[") < 0) {
+                        rules.addElement(selector + "|" + declarations);
+                    }
+                    s = comma + 1;
+                }
+                p = close + 1;
+            }
+            pos = end + 8;
+        }
+        return rules;
+    }
+
+    private int cssTypeForElement(String lowerTag, String tag, Vector rules) {
+        String name = lowerTag;
+        int space = name.indexOf(' ');
+        if (space >= 0) name = name.substring(0, space);
+        if (name.endsWith("/")) name = name.substring(0, name.length() - 1);
+        String classes = " " + attribute(tag, "class").toLowerCase().replace('.', ' ').trim() + " ";
+        String id = attribute(tag, "id").toLowerCase();
+        String declarations = "";
+        for (int i = 0; i < rules.size(); i++) {
+            String rule = (String)rules.elementAt(i);
+            int bar = rule.indexOf('|');
+            String selector = rule.substring(0, bar);
+            boolean match = selector.equals(name) ||
+                (selector.startsWith(".") && classes.indexOf(" " + selector.substring(1) + " ") >= 0) ||
+                (selector.startsWith("#") && selector.substring(1).equals(id));
+            if (match) declarations += ";" + rule.substring(bar + 1);
+        }
+        String inline = attribute(tag, "style").toLowerCase();
+        if (inline.length() > 0) declarations += ";" + inline;
+        if (declarations.indexOf("display:none") >= 0 || declarations.indexOf("display: none") >= 0) return -2;
+        if (declarations.indexOf("text-align:center") >= 0 || declarations.indexOf("text-align: center") >= 0) return 20;
+        if (declarations.indexOf("text-align:right") >= 0 || declarations.indexOf("text-align: right") >= 0) return 21;
+        if (declarations.indexOf("font-family:monospace") >= 0 || declarations.indexOf("font-family: monospace") >= 0) return 11;
+        if (declarations.indexOf("font-style:italic") >= 0 || declarations.indexOf("font-style: italic") >= 0) return 10;
+        if (declarations.indexOf("text-decoration:underline") >= 0 || declarations.indexOf("text-decoration: underline") >= 0) return 17;
+        if (declarations.indexOf("font-weight:bold") >= 0 || declarations.indexOf("font-weight: bold") >= 0) return 2;
+        if (declarations.indexOf("font-size:small") >= 0 || declarations.indexOf("font-size: small") >= 0) return 18;
+        if (declarations.indexOf("font-size:large") >= 0 || declarations.indexOf("font-size: large") >= 0) return 19;
+        if (declarations.indexOf("font-size:xx-large") >= 0 || declarations.indexOf("font-size: xx-large") >= 0) return 1;
+        return -1;
     }
 
     private String attribute(String tag, String name) {
