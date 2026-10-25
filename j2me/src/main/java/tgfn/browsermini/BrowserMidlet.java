@@ -821,6 +821,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         if (count > 4000) throw new IOException("Too many compact page blocks");
         StringBuffer text = new StringBuffer();
         boolean joinNextTableCell = false;
+        int previousLayoutX = 0;
+        int previousLayoutY = 0;
         for (int i = 0; i < count; i++) {
             int kind = in.readUnsignedByte();
             String label = readTBOString(in);
@@ -832,9 +834,11 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 int dy = in.readShort();
                 bw = in.readShort();
                 bh = in.readShort();
-                // Reconstruct absolute (simple running position)
-                // Note: for flow layout most values stay 0
-                bx = dx; by = dy;
+                // TBO1 positions are deltas from the previous block, not absolute values.
+                previousLayoutX += dx;
+                previousLayoutY += dy;
+                bx = previousLayoutX;
+                by = previousLayoutY;
             } catch (Exception ignored) {}
             if (kind == 7) {
                 FormRef formRef = parseFormPayload(label);
@@ -1396,7 +1400,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     g.setFont(f);
                     if (blk.type == 22 && blk.url != null && blk.url.length() >= 4 && blk.url.charAt(0) == '#') {
                         try {
-                            int rgb = Integer.parseInt(blk.url.substring(1), 16);
+                            int rgb = parseCssColor(blk.url, 0x1E2832);
                             g.setColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
                         } catch (Exception e) { g.setColor(0); }
                     } else if (blk.url != null) {
@@ -1519,8 +1523,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     g.setColor(255, 244, 170); g.fillRect(5, y, w - 10, lineHeight);
                 }
                 if (line.type == 22 && line.url != null && line.url.length() >= 4 && line.url.charAt(0) == '#') {
-                    int rgb = 0;
-                    try { rgb = Integer.parseInt(line.url.substring(1), 16); } catch (Exception ignored) {}
+                    int rgb = parseCssColor(line.url, 0x1E2832);
                     g.setColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
                 } else {
                 g.setColor(line.url != null ? 0 : (line.type == 1 ? 20 : (line.type == 2 || line.type == 14 ? 30 : (line.type == 12 ? 65 : 35))),
@@ -1571,15 +1574,32 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         }
 
         private Font fontForType(int type) {
-            if (type == 1) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM);
-            if (type == 2) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM);
+            if (type == 1 || type == 2) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_MEDIUM);
             if (type == 10) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_ITALIC, Font.SIZE_MEDIUM);
             if (type == 11) return Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_PLAIN, Font.SIZE_SMALL);
             if (type == 14) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL);
             if (type == 17) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_UNDERLINED, Font.SIZE_SMALL);
             if (type == 18) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL);
-            if (type == 19) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_MEDIUM);
+            if (type == 19) return Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_LARGE);
             return Font.getDefaultFont();
+        }
+
+        /** Parse CSS #RGB or #RRGGBB into a MIDP-compatible RGB integer. */
+        private int parseCssColor(String value, int fallback) {
+            if (value == null) return fallback;
+            String hex = value.trim();
+            if (hex.startsWith("#")) hex = hex.substring(1);
+            if (hex.length() == 3) {
+                hex = "" + hex.charAt(0) + hex.charAt(0)
+                          + hex.charAt(1) + hex.charAt(1)
+                          + hex.charAt(2) + hex.charAt(2);
+            }
+            if (hex.length() != 6) return fallback;
+            try {
+                return Integer.parseInt(hex, 16);
+            } catch (NumberFormatException ignored) {
+                return fallback;
+            }
         }
 
         private Vector wrap(String value, Font font, int maxWidth) {
