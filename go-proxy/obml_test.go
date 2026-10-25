@@ -278,10 +278,8 @@ func TestBuildOBMLPagePreservesSemanticTextStyles(t *testing.T) {
 		label := read()
 		_ = read()
 		var geometry [4]int16
-		for j := range geometry {
-			if err := binary.Read(bytes.NewReader(packet[pos:]), binary.BigEndian, &geometry); err != nil {
-				t.Fatalf("read block geometry: %v", err)
-			}
+		if err := binary.Read(bytes.NewReader(packet[pos:]), binary.BigEndian, &geometry); err != nil {
+			t.Fatalf("read block geometry: %v", err)
 		}
 		pos += 8
 		seen[kind] += label + "|"
