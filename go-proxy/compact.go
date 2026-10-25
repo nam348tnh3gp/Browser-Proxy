@@ -132,8 +132,8 @@ func minifyHTMLResponse(resp *http.Response) error {
 	// Match proxy.py's minify_html(): remove whitespace between adjacent tags,
 	// then collapse repeated spaces/tabs. Unlike the old semantic compactor,
 	// this does not remove script/style/form/input/link tags or their attributes.
-	interTagWhitespace := regexp.MustCompile(`>\\s+<`)
-	repeatedHorizontalWhitespace := regexp.MustCompile(`[ \\t]{2,}`)
+	interTagWhitespace := regexp.MustCompile(`>\s+<`)
+	repeatedHorizontalWhitespace := regexp.MustCompile(`[ \t]{2,}`)
 	out := interTagWhitespace.ReplaceAll(data, []byte("><"))
 	out = repeatedHorizontalWhitespace.ReplaceAll(out, []byte(" "))
 	resp.Body = io.NopCloser(bytes.NewReader(out))
