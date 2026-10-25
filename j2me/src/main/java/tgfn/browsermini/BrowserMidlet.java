@@ -346,8 +346,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             if (close < 0) break;
             String tag = html.substring(open + 1, close);
             String t = tag.toLowerCase();
-            if (t.startsWith("script") || t.startsWith("noscript")) {
-                String endTag = t.startsWith("script") ? "</script>" : "</noscript>";
+            if (t.startsWith("script") || t.startsWith("style") || t.startsWith("noscript")) {
+                String endTag = t.startsWith("script") ? "</script>" : (t.startsWith("style") ? "</style>" : "</noscript>");
                 int skip = lower.indexOf(endTag, close + 1);
                 pos = skip < 0 ? html.length() : skip + endTag.length();
                 continue;
@@ -431,6 +431,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     }
 
     private String cleanText(String input) {
+        if (input == null) return "";
+        // Drop obvious CSS/JS leftovers
+        if (input.indexOf('{') >= 0 && input.indexOf('}') >= 0 && input.indexOf(':') >= 0 && input.length() > 40) return "";
         StringBuffer out = new StringBuffer();
         boolean space = false;
         boolean newline = false;
