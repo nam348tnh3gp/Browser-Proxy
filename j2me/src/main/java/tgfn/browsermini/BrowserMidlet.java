@@ -1408,7 +1408,34 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     } else {
                         g.setColor(30, 40, 50);
                     }
-                    g.drawString(shorten(blk.text, w - px - 4, f), px, py, Graphics.TOP | Graphics.LEFT);
+                    String absText = shorten(blk.text, Math.max(1, w - px - 4), f);
+                    int absTextWidth = f.stringWidth(absText);
+                    int absX = px;
+                    int absAnchor = Graphics.LEFT;
+                    if (blk.type == 20) {
+                        absX = px + Math.max(0, (blk.layoutW > 0 ? (int)(blk.layoutW * scale) : w - px) / 2);
+                        absAnchor = Graphics.HCENTER;
+                    } else if (blk.type == 21) {
+                        absX = px + (blk.layoutW > 0 ? (int)(blk.layoutW * scale) : w - px);
+                        absAnchor = Graphics.RIGHT;
+                    }
+                    int absLeft = absAnchor == Graphics.HCENTER ? absX - absTextWidth / 2 :
+                                  (absAnchor == Graphics.RIGHT ? absX - absTextWidth : absX);
+                    int absBoxWidth = blk.layoutW > 0 ? (int)(blk.layoutW * scale) : absTextWidth;
+                    int absBoxHeight = blk.layoutH > 0 ? (int)(blk.layoutH * scale) : f.getHeight();
+                    if (blk.type == 16) {
+                        g.setColor(255, 244, 170);
+                        g.fillRect(Math.max(0, absLeft), py, Math.min(w - Math.max(0, absLeft), Math.max(absBoxWidth, absTextWidth)), absBoxHeight);
+                    }
+                    g.drawString(absText, absX, py, Graphics.TOP | absAnchor);
+                    if (blk.type == 17 || blk.type == 4) {
+                        g.setColor(blk.type == 4 ? 0 : 65, blk.type == 4 ? 72 : 95, blk.type == 4 ? 160 : 125);
+                        g.drawLine(absLeft, py + f.getHeight() - 1, absLeft + absTextWidth, py + f.getHeight() - 1);
+                    }
+                    if (blk.type == 15) {
+                        g.setColor(120, 120, 120);
+                        g.drawLine(absLeft, py + f.getHeight() / 2, absLeft + absTextWidth, py + f.getHeight() / 2);
+                    }
                     // OBML-style: link is a separate hit rectangle
                     if (blk.type == 4 && blk.layoutW > 0 && blk.layoutH > 0) {
                         int lw = (int)(blk.layoutW * scale);
