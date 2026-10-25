@@ -63,3 +63,45 @@ func TestCompactHTMLResponseTransformsOptInHTML(t *testing.T) {
 		t.Fatalf("content length = %d, body = %d", resp.ContentLength, len(got))
 	}
 }
+
+func TestTBO1MinifyPreservesHTMLStructureAndContent(t *testing.T) {
+	body := "<!doctype html>\\n<html>\\n<head><title>Example</title><style>body {  color: red; }</style></head>\\n<body>\\n<form action='/search' method='get'><input name='q' value='hello'><button>Go</button></form>\\n<p>Read <a href='/next' class='link'>next page</a></p><script>window.x =  1;</script></body></html>"
+	req, _ := http.NewRequest("GET", "http://example.test/", nil)
+	req.Header.Set("X-TGFN-Format", "TBO1")
+	resp := &http.Response{
+		StatusCode: 200,
+		Header: http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
+		Body: io.NopCloser(strings.NewReader(body)),
+		Request: req,
+		ContentLength: int64(len(body)),
+	}
+	if err := compactHTMLResponse(resp); err != nil {
+		t.Fatal(err)
+	}
+	gotBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(gotBytes)
+	for _, want := range []string{
+		"<style>body { color: red; }</style>",
+		"<form action='/search' method='get'>",
+		"<input name='q' value='hello'>",
+		"<button>Go</button>",
+		"<a href='/next' class='link'>next page</a>",
+		"<script>window.x = 1;</script>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("TBO1 minifier removed or changed %q: %s", want, got)
+		}
+	}
+	if strings.Contains(got, ">\\n<") || strings.Contains(got, "> <") {
+		t.Errorf("inter-tag whitespace was not removed: %q", got)
+	}
+	if resp.Header.Get("X-TGFN-Format") != "TBO1" {
+		t.Errorf("format header = %q, want TBO1", resp.Header.Get("X-TGFN-Format"))
+	}
+	if resp.ContentLength != int64(len(gotBytes)) {
+		t.Errorf("content length = %d, body = %d", resp.ContentLength, len(gotBytes))
+	}
+}
