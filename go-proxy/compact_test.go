@@ -69,10 +69,10 @@ func TestTBO1MinifyPreservesHTMLStructureAndContent(t *testing.T) {
 	req, _ := http.NewRequest("GET", "http://example.test/", nil)
 	req.Header.Set("X-TGFN-Format", "TBO1")
 	resp := &http.Response{
-		StatusCode: 200,
-		Header: http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
-		Body: io.NopCloser(strings.NewReader(body)),
-		Request: req,
+		StatusCode:    200,
+		Header:        http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
+		Body:          io.NopCloser(strings.NewReader(body)),
+		Request:       req,
 		ContentLength: int64(len(body)),
 	}
 	if err := compactHTMLResponse(resp); err != nil {
