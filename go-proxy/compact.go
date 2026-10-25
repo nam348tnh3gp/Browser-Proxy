@@ -105,58 +105,14 @@ func mobileResponseWithChrome(resp *http.Response, chromePath string) error {
 	return nil
 }
 
-// minifyHTMLResponse mirrors the Python proxy.py test: collapse inter-tag
-// whitespace and repeated horizontal spaces without stripping HTML elements,
-// attributes, styles, scripts, forms, or links.
-func minifyHTMLResponse(resp *http.Response) error {
-	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Format") != "TBO1" {
-		return nil
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 || resp.Body == nil {
-		return nil
-	}
-	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
-	if err != nil || (!strings.EqualFold(mediaType, "text/html") && !strings.EqualFold(mediaType, "application/xhtml+xml")) {
-		return nil
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCompactHTMLBytes+1))
-	if err != nil {
-		return err
-	}
-	if len(data) > maxCompactHTMLBytes {
-		resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(data), resp.Body))
-		return nil
-	}
-	_ = resp.Body.Close()
-
-	// Match proxy.py's minify_html(): remove whitespace between adjacent tags,
-	// then collapse repeated spaces/tabs. Unlike the old semantic compactor,
-	// this does not remove script/style/form/input/link tags or their attributes.
-	interTagWhitespace := regexp.MustCompile(`>\s+<`)
-	repeatedHorizontalWhitespace := regexp.MustCompile(`[ \t]{2,}`)
-	out := interTagWhitespace.ReplaceAll(data, []byte("><"))
-	out = repeatedHorizontalWhitespace.ReplaceAll(out, []byte(" "))
-	resp.Body = io.NopCloser(bytes.NewReader(out))
-	resp.ContentLength = int64(len(out))
-	resp.Header.Set("Content-Type", "text/html; charset=utf-8")
-	resp.Header.Set("Content-Length", strconv.Itoa(len(out)))
-	resp.Header.Del("Content-Encoding")
-	resp.Header.Del("Content-MD5")
-	resp.Header.Del("ETag")
-	resp.Header.Set("X-TGFN-Format", "TBO1")
-	resp.Header.Set("X-Original-Size", strconv.Itoa(len(data)))
-	resp.Header.Set("X-Compressed-Size", strconv.Itoa(len(out)))
-	return nil
-}
-
 // compactHTMLResponse transforms only requests explicitly made by the J2ME client.
 func compactHTMLResponse(resp *http.Response) error {
 	if resp != nil && resp.Request != nil {
 		switch resp.Request.Header.Get("X-TGFN-Format") {
 		case "TBO1":
-			// TBO1 is now plain, lightly minified HTML; preserve tags, attributes,
-			// CSS, scripts, forms, and document structure for the J2ME HTML parser.
-			return minifyHTMLResponse(resp)
+			// TBO1 is the compact binary protocol decoded by the MIDP client.
+			// Do not send minified HTML under the TBO1 format header.
+			return obmlResponse(resp)
 		case "FULL":
 			return fullCompressResponse(resp)
 		case "SSR":
