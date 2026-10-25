@@ -65,7 +65,7 @@ func TestCompactHTMLResponseTransformsOptInHTML(t *testing.T) {
 }
 
 func TestTBO1MinifyPreservesHTMLStructureAndContent(t *testing.T) {
-	body := "<!doctype html>\\n<html>\\n<head><title>Example</title><style>body {  color: red; }</style></head>\\n<body>\\n<form action='/search' method='get'><input name='q' value='hello'><button>Go</button></form>\\n<p>Read <a href='/next' class='link'>next page</a></p><script>window.x =  1;</script></body></html>"
+	body := "<!doctype html>\n<html>\n<head><title>Example</title><style>body {  color: red; }</style></head>\n<body>\n<form action='/search' method='get'><input name='q' value='hello'><button>Go</button></form>\n<p>Read <a href='/next' class='link'>next page</a></p><script>window.x =  1;</script></body></html>"
 	req, _ := http.NewRequest("GET", "http://example.test/", nil)
 	req.Header.Set("X-TGFN-Format", "TBO1")
 	resp := &http.Response{
@@ -95,7 +95,7 @@ func TestTBO1MinifyPreservesHTMLStructureAndContent(t *testing.T) {
 			t.Errorf("TBO1 minifier removed or changed %q: %s", want, got)
 		}
 	}
-	if strings.Contains(got, ">\\n<") || strings.Contains(got, "> <") {
+	if strings.Contains(got, ">\n<") || strings.Contains(got, "> <") {
 		t.Errorf("inter-tag whitespace was not removed: %q", got)
 	}
 	if resp.Header.Get("X-TGFN-Format") != "TBO1" {
