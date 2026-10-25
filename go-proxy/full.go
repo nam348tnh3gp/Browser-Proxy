@@ -14,8 +14,8 @@ const fullModeValue = "FULL"
 var (
 	fullDropScript = regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script\s*>`)
 	// styles kept for fuller web
-	fullDropStyle  = regexp.MustCompile(`(?is)<!--style-kept-->`)
-	fullDropHeavy  = []*regexp.Regexp{
+	fullDropStyle = regexp.MustCompile(`(?is)<!--style-kept-->`)
+	fullDropHeavy = []*regexp.Regexp{
 		regexp.MustCompile(`(?is)<iframe\b[^>]*>.*?</iframe\s*>`),
 		regexp.MustCompile(`(?is)<svg\b[^>]*>.*?</svg\s*>`),
 		regexp.MustCompile(`(?is)<canvas\b[^>]*>.*?</canvas\s*>`),
