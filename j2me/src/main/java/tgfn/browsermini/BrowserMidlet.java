@@ -423,6 +423,17 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             int end = lower.indexOf("</style>", headEnd + 1);
             if (end < 0) break;
             String css = html.substring(headEnd + 1, end);
+            // CSS comments must not leak into selector/declaration parsing.
+            while (true) {
+                int comment = css.indexOf("/*");
+                if (comment < 0) break;
+                int commentEnd = css.indexOf("*/", comment + 2);
+                if (commentEnd < 0) {
+                    css = css.substring(0, comment);
+                    break;
+                }
+                css = css.substring(0, comment) + css.substring(commentEnd + 2);
+            }
             int p = 0;
             while (p < css.length() && rules.size() < 120) {
                 int brace = css.indexOf('{', p);
@@ -497,13 +508,42 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         if (declarations.indexOf("display:none") >= 0 || declarations.indexOf("display: none") >= 0) return -2;
         if (declarations.indexOf("text-align:center") >= 0 || declarations.indexOf("text-align: center") >= 0) return 20;
         if (declarations.indexOf("text-align:right") >= 0 || declarations.indexOf("text-align: right") >= 0) return 21;
-        if (declarations.indexOf("font-family:monospace") >= 0 || declarations.indexOf("font-family: monospace") >= 0) return 11;
+        if (declarations.indexOf("font-family:monospace") >= 0 || declarations.indexOf("font-family: monospace") >= 0 ||
+            declarations.indexOf("font-family:courier") >= 0 || declarations.indexOf("font-family: courier") >= 0) return 11;
         if (declarations.indexOf("font-style:italic") >= 0 || declarations.indexOf("font-style: italic") >= 0) return 10;
+        if (declarations.indexOf("text-decoration:line-through") >= 0 || declarations.indexOf("text-decoration: line-through") >= 0) return 15;
         if (declarations.indexOf("text-decoration:underline") >= 0 || declarations.indexOf("text-decoration: underline") >= 0) return 17;
-        if (declarations.indexOf("font-weight:bold") >= 0 || declarations.indexOf("font-weight: bold") >= 0) return 2;
-        if (declarations.indexOf("font-size:small") >= 0 || declarations.indexOf("font-size: small") >= 0) return 18;
-        if (declarations.indexOf("font-size:large") >= 0 || declarations.indexOf("font-size: large") >= 0) return 19;
-        if (declarations.indexOf("font-size:xx-large") >= 0 || declarations.indexOf("font-size: xx-large") >= 0) return 1;
+        if (declarations.indexOf("font-weight:bold") >= 0 || declarations.indexOf("font-weight: bold") >= 0 ||
+            declarations.indexOf("font-weight:600") >= 0 || declarations.indexOf("font-weight: 600") >= 0 ||
+            declarations.indexOf("font-weight:700") >= 0 || declarations.indexOf("font-weight: 700") >= 0 ||
+            declarations.indexOf("font-weight:800") >= 0 || declarations.indexOf("font-weight: 800") >= 0) return 2;
+        if (declarations.indexOf("font-size:xx-small") >= 0 || declarations.indexOf("font-size: xx-small") >= 0 ||
+            declarations.indexOf("font-size:x-small") >= 0 || declarations.indexOf("font-size: x-small") >= 0 ||
+            declarations.indexOf("font-size:small") >= 0 || declarations.indexOf("font-size: small") >= 0 ||
+            declarations.indexOf("font-size:smaller") >= 0 || declarations.indexOf("font-size: smaller") >= 0) return 18;
+        if (declarations.indexOf("font-size:xx-large") >= 0 || declarations.indexOf("font-size: xx-large") >= 0 ||
+            declarations.indexOf("font-size:x-large") >= 0 || declarations.indexOf("font-size: x-large") >= 0 ||
+            declarations.indexOf("font-size:large") >= 0 || declarations.indexOf("font-size: large") >= 0 ||
+            declarations.indexOf("font-size:larger") >= 0 || declarations.indexOf("font-size: larger") >= 0) return 19;
+        // Map explicit CSS sizes to the nearest size the MIDP font API can draw.
+        int sizeStart = declarations.indexOf("font-size:");
+        if (sizeStart < 0) sizeStart = declarations.indexOf("font-size: ");
+        if (sizeStart >= 0) {
+            int colon = declarations.indexOf(':', sizeStart);
+            int end = declarations.indexOf(';', colon + 1);
+            if (end < 0) end = declarations.length();
+            String value = declarations.substring(colon + 1, end).trim();
+            int unit = value.indexOf("px");
+            if (unit < 0) unit = value.indexOf("pt");
+            if (unit > 0) {
+                try {
+                    int pixels = Integer.parseInt(value.substring(0, unit).trim());
+                    if (pixels <= 12) return 18;
+                    if (pixels >= 28) return 1;
+                    if (pixels >= 18) return 19;
+                } catch (Exception ignoredSize) {}
+            }
+        }
         return -1;
     }
 
