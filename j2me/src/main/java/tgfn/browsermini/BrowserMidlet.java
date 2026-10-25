@@ -449,6 +449,34 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         return rules;
     }
 
+    // Match the selector subset that the MIDP renderer can represent.
+    // Compound selectors such as p.notice, .notice.important and #header.title
+    // are supported; combinators, attribute selectors and pseudo-classes are
+    // deliberately rejected by extractCssRules because they need a full CSS engine.
+    private boolean cssSelectorMatches(String selector, String tagName, String classes, String id) {
+        String remaining = selector;
+        int hash = remaining.indexOf('#');
+        String wantedId = "";
+        if (hash >= 0) {
+            int end = remaining.indexOf('.', hash);
+            if (end < 0) end = remaining.length();
+            wantedId = remaining.substring(hash + 1, end);
+            remaining = remaining.substring(0, hash) + remaining.substring(end);
+            if (wantedId.length() == 0 || !wantedId.equals(id)) return false;
+        }
+        int dot = remaining.indexOf('.');
+        String wantedTag = dot < 0 ? remaining : remaining.substring(0, dot);
+        if (wantedTag.length() > 0 && !wantedTag.equals(tagName)) return false;
+        while (dot >= 0) {
+            int next = remaining.indexOf('.', dot + 1);
+            if (next < 0) next = remaining.length();
+            String wantedClass = remaining.substring(dot + 1, next);
+            if (wantedClass.length() == 0 || classes.indexOf(" " + wantedClass + " ") < 0) return false;
+            dot = next < remaining.length() ? next : -1;
+        }
+        return wantedTag.length() > 0 || wantedId.length() > 0 || selector.startsWith(".");
+    }
+
     private int cssTypeForElement(String lowerTag, String tag, Vector rules) {
         String name = lowerTag;
         int space = name.indexOf(' ');
@@ -461,9 +489,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             String rule = (String)rules.elementAt(i);
             int bar = rule.indexOf('|');
             String selector = rule.substring(0, bar);
-            boolean match = selector.equals(name) ||
-                (selector.startsWith(".") && classes.indexOf(" " + selector.substring(1) + " ") >= 0) ||
-                (selector.startsWith("#") && selector.substring(1).equals(id));
+            boolean match = cssSelectorMatches(selector, name, classes, id);
             if (match) declarations += ";" + rule.substring(bar + 1);
         }
         String inline = attribute(tag, "style").toLowerCase();
