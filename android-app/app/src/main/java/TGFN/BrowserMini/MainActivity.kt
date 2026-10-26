@@ -314,7 +314,7 @@ class MainActivity : Activity() {
         }
         bottomBar.addView(bottomAction("‹", tr("Quay lại", "Back")) { currentWebView()?.let { if (it.canGoBack()) it.goBack() } })
         bottomBar.addView(bottomAction("›", tr("Tiến", "Forward")) { currentWebView()?.let { if (it.canGoForward()) it.goForward() } })
-        bottomBar.addView(bottomAction("⌂", tr("Trang chủ", "Home")) { loadHome() })
+        bottomBar.addView(bottomAction("⌂", tr("Trang chủ", "Home")) { currentWebView()?.let { loadNewTabPage(it) } })
         bottomBar.addView(bottomAction("☆", tr("Dấu trang", "Bookmarks")) { showBookmarks() })
         bottomBar.addView(bottomAction("▢", tr("Tab", "Tabs")) { showTabs() })
         root.addView(bottomBar)
@@ -667,7 +667,7 @@ class MainActivity : Activity() {
             text = symbol
             textSize = 25f
             gravity = Gravity.CENTER
-            setTextColor(if (label == tr("Tab mới", "New tab") || label == tr("Trang chủ", "Home")) accent else ink)
+            setTextColor(if (label == tr("Tab mới", "New tab")) accent else ink)
             typeface = Typeface.DEFAULT
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(31)))
         item.addView(TextView(this).apply {
