@@ -1328,6 +1328,41 @@ class MainActivity : Activity() {
             .show()
     }
 
+
+    private fun showPrivacyPolicy() {
+        val message = tr(
+            """TGFN BrowserMini không thu thập, không lưu trên server và không bán dữ liệu người dùng.
+
+Dữ liệu chỉ nằm trên máy của bạn:
+• Lịch sử, dấu trang, tab, cài đặt
+• Log crash (chỉ khi bạn mở trong Cài đặt)
+
+Tính năng tùy chọn:
+• Dịch trang: đoạn chữ được gửi tới Google Dịch
+• Proxy: lưu lượng đi qua proxy bạn tự nhập
+• AdBlock: tải danh sách hosts công khai (StevenBlack)
+
+Không có tài khoản, không analytics, không quảng cáo.""",
+            """TGFN BrowserMini does not collect, store on a server, or sell user data.
+
+Data stays on your device:
+• History, bookmarks, tabs, settings
+• Crash log (only if you open it in Settings)
+
+Optional features:
+• Translate: text is sent to Google Translate
+• Proxy: traffic goes through the proxy you enter
+• AdBlock: downloads a public hosts list (StevenBlack)
+
+No account, no analytics, no ads."""
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Chính sách quyền riêng tư", "Privacy policy"))
+            .setMessage(message)
+            .setPositiveButton(tr("Đóng", "Close"), null)
+            .show()
+    }
+
     private fun showSettings() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1408,7 +1443,13 @@ class MainActivity : Activity() {
                     .show()
             }
         }
+        
         content.addView(crashLog)
+        val privacy = android.widget.Button(this).apply {
+            text = tr("Chính sách quyền riêng tư", "Privacy policy")
+            setOnClickListener { showPrivacyPolicy() }
+        }
+        content.addView(privacy)
         val proxyUrl = EditText(this).apply {
             hint = tr("Proxy URL: http://host:port", "Proxy URL: http://host:port")
             setSingleLine(true)
