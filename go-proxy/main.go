@@ -433,9 +433,9 @@ func main() {
 		IdleTimeout:       90 * time.Second,
 	}
 	startStatsPersistence()
-	log.Printf("TGFN.BrowserMini Go proxy listening on %s (stats file %s)", addr, statsFilePath())
+	log.Printf("TGFN.BrowserMini Go proxy listening on %s (stats file %s, tls=%v)", addr, statsFilePath(), tlsEnabled() || os.Getenv("PROXY_TLS_CERT") != "")
 	defer savePersistedStats()
-	log.Fatal(server.ListenAndServe())
+	log.Fatal(listenAndServe(server))
 }
 
 type requestTrackingTransport struct {
