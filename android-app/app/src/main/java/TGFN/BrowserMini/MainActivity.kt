@@ -903,7 +903,7 @@ class MainActivity : Activity() {
                     .replace("\"", "&quot;").replace("'", "&#39;")
                 val paragraphs = text.split(Regex("\\n\\s*\\n+"))
                     .map { it.trim() }.filter { it.isNotEmpty() }
-                    .joinToString("\\n") { "<p>" + escapeHtml(it).replace("\\n", "<br>") + "</p>" }
+                    .joinToString("\n") { "<p>" + escapeHtml(it).replace("\n", "<br>") + "</p>" }
                 val html = """
                     <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
                     <title>${escapeHtml(title)}</title><style>
