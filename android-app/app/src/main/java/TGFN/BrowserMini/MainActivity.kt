@@ -1363,6 +1363,43 @@ No account, no analytics, no ads."""
             .show()
     }
 
+
+    private fun showProxyGuide() {
+        val repo = "https://github.com/nam348tnh3gp/Browser-Proxy/tree/main/go-proxy"
+        val message = tr(
+            """Bạn có thể tự chạy proxy Go của TGFN.
+
+1. Cài Go: https://go.dev/dl/
+2. Tải mã: $repo
+3. Trong thư mục go-proxy chạy:
+   PROXY_LISTEN=0.0.0.0:8080 go run .
+4. Trên điện thoại nhập proxy:
+   IP-máy-tính:8080
+   (cùng Wi-Fi; không dùng 127.0.0.1)
+
+Máy tính và điện thoại phải cùng mạng. Mở cổng 8080 nếu có tường lửa.""",
+            """You can run the TGFN Go proxy yourself.
+
+1. Install Go: https://go.dev/dl/
+2. Get the code: $repo
+3. In the go-proxy folder run:
+   PROXY_LISTEN=0.0.0.0:8080 go run .
+4. On the phone enter:
+   your-computer-ip:8080
+   (same Wi-Fi; do not use 127.0.0.1)
+
+Phone and computer must be on the same network. Open port 8080 if a firewall is on."""
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Tự chạy proxy", "Run your own proxy"))
+            .setMessage(message)
+            .setPositiveButton(tr("Mở mã nguồn", "Open source")) { _, _ ->
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(repo)))
+            }
+            .setNegativeButton(tr("Đóng", "Close"), null)
+            .show()
+    }
+
     private fun showSettings() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1469,6 +1506,11 @@ No account, no analytics, no ads."""
             setTextColor(muted)
             setPadding(0, dp(8), 0, dp(8))
         })
+        val proxyGuide = android.widget.Button(this).apply {
+            text = tr("Tự chạy proxy (hướng dẫn)", "Run your own proxy")
+            setOnClickListener { showProxyGuide() }
+        }
+        content.addView(proxyGuide)
         val dialog = android.app.AlertDialog.Builder(this)
             .setView(ScrollView(this).apply { addView(content) })
             .setNegativeButton(tr("Hủy", "Cancel"), null)
