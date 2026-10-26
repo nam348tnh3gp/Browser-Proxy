@@ -34,7 +34,7 @@ import java.net.URI
 import java.util.concurrent.Executor
 
 class MainActivity : Activity() {
-    private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false)
+    private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false, var group: String = "Default")
 
 
     private val adDomains = java.util.Collections.synchronizedSet(mutableSetOf<String>())
@@ -87,6 +87,8 @@ class MainActivity : Activity() {
     }
 
     private val tabs = mutableListOf<BrowserTab>()
+    private val tabGroups = linkedSetOf("Default")
+    private val readerOriginalUrls = mutableMapOf<WebView, String>()
     private var selectedTab = 0
     private lateinit var address: EditText
     private lateinit var status: TextView
@@ -134,7 +136,15 @@ class MainActivity : Activity() {
                 status.text = tr("WebView không hỗ trợ cấu hình proxy", "This WebView does not support proxy configuration")
             }
             if (!savedUrls.isNullOrEmpty()) {
-                savedUrls.forEachIndexed { index, url -> createTab(url, index == restoreIndex) }
+                val savedGroups = try { org.json.JSONArray(prefs.getString("session_tab_groups", "[]")) } catch (_: Exception) { org.json.JSONArray() }
+                val knownGroups = try { org.json.JSONArray(prefs.getString("tab_group_names", org.json.JSONArray().put("Default").toString())) } catch (_: Exception) { org.json.JSONArray() }
+                for (i in 0 until knownGroups.length()) knownGroups.optString(i).takeIf { it.isNotBlank() }?.let { tabGroups.add(it) }
+                savedUrls.forEachIndexed { index, url ->
+                    createTab(url, index == restoreIndex)
+                    val group = savedGroups.optString(index, "Default").ifBlank { "Default" }
+                    tabs.lastOrNull()?.group = group
+                    tabGroups.add(group)
+                }
                 selectedTab = restoreIndex.coerceIn(0, tabs.lastIndex)
                 selectTab(selectedTab)
                 persistSession()
@@ -384,6 +394,7 @@ class MainActivity : Activity() {
             isNewTab = shouldShowNewTab
         )
         tabs.add(tab)
+        tabGroups.add(tab.group)
         // Update the visible tab counter immediately, before WebView callbacks run.
         updateTabButton()
         webContainer.addView(web, FrameLayout.LayoutParams(
@@ -399,6 +410,7 @@ class MainActivity : Activity() {
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                if (url?.startsWith(READER_BASE_URL) == true) return
                 if (!url.isNullOrBlank() && !url.equals("about:blank", ignoreCase = true)) {
                     tab.isNewTab = url == "https://tgfn.browser/"
                 }
@@ -413,6 +425,7 @@ class MainActivity : Activity() {
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
+                if (url?.startsWith(READER_BASE_URL) == true) return
                 if (!url.isNullOrBlank() && !url.equals("about:blank", ignoreCase = true)) {
                     tab.isNewTab = url == "https://tgfn.browser/"
                 }
@@ -783,7 +796,8 @@ class MainActivity : Activity() {
             desktopLabel, tr("Lưu/Bỏ dấu trang", "Add/remove bookmark"), tr("Dấu trang", "Bookmarks"), tr("Lịch sử", "History"),
             tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel,
             tr("Phân tích Data Saver", "Data Saver analytics"), tr("Tải xuống", "Downloads"),
-            tr("Quản lý quyền riêng tư", "Privacy and site data")
+            tr("Quản lý quyền riêng tư", "Privacy and site data"), tr("Chế độ đọc", "Reader mode"),
+            tr("Nhóm tab", "Tab groups")
         )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("TGFN Browser · Tiện ích", "TGFN Browser · Tools"))
@@ -805,6 +819,8 @@ class MainActivity : Activity() {
                     13 -> showDataSaverAnalytics()
                     14 -> openDownloads()
                     15 -> showPrivacyManagement()
+                    16 -> toggleReaderMode()
+                    17 -> manageTabGroups()
                 }
             }
             .show()
@@ -853,6 +869,137 @@ class MainActivity : Activity() {
                     .show()
             }
             .setNegativeButton(tr("Đóng", "Close"), null)
+            .show()
+    }
+
+    private fun toggleReaderMode() {
+        val web = currentWebView() ?: return
+        val original = readerOriginalUrls[web]
+        if (original != null) {
+            readerOriginalUrls.remove(web)
+            web.loadUrl(original)
+            status.text = tr("Đang khôi phục trang gốc…", "Restoring original page…")
+            return
+        }
+        val url = web.url.orEmpty()
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            Toast.makeText(this, tr("Hãy mở một bài viết trước", "Open an article first"), Toast.LENGTH_SHORT).show()
+            return
+        }
+        status.text = tr("Đang tạo chế độ đọc…", "Preparing reader mode…")
+        val script = """
+            (function() {
+              var root = document.querySelector('article') ||
+                         document.querySelector('[role="main"]') ||
+                         document.querySelector('main') || document.body;
+              var title = document.querySelector('h1') || document.querySelector('title');
+              return JSON.stringify({
+                title: title ? (title.innerText || title.textContent || '') : document.title,
+                text: root ? (root.innerText || root.textContent || '') : ''
+              });
+            })();
+        """.trimIndent()
+        web.evaluateJavascript(script) { raw ->
+            try {
+                val decoded = org.json.JSONTokener(raw ?: "null").nextValue() as? String ?: "{}"
+                val article = org.json.JSONObject(decoded)
+                val title = article.optString("title", tr("Bài viết", "Article"))
+                val text = article.optString("text", "").trim()
+                if (text.length < 80) {
+                    status.text = tr("Không tìm thấy đủ nội dung để đọc", "Not enough article text found")
+                    Toast.makeText(this, status.text, Toast.LENGTH_SHORT).show()
+                    return@evaluateJavascript
+                }
+                fun escapeHtml(value: String): String = value
+                    .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    .replace("\"", "&quot;").replace("'", "&#39;")
+                val paragraphs = text.split(Regex("\\n\\s*\\n+"))
+                    .map { it.trim() }.filter { it.isNotEmpty() }
+                    .joinToString("\n") { "<p>" + escapeHtml(it).replace("\n", "<br>") + "</p>" }
+                val html = """
+                    <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+                    <title>${escapeHtml(title)}</title><style>
+                    body{max-width:720px;margin:0 auto;padding:24px 20px 48px;background:${if (darkMode) "#202124" else "#fff"};color:${if (darkMode) "#e8eaed" else "#202124"};font:18px/1.8 Georgia,serif}
+                    h1{font:700 30px/1.25 Arial,sans-serif;letter-spacing:-.4px;margin:10px 0 28px}
+                    p{margin:0 0 1.25em;overflow-wrap:anywhere} .tag{font:12px Arial,sans-serif;color:${if (darkMode) "#9aa0a6" else "#5f6368"};margin-bottom:22px}
+                    </style></head><body><div class="tag">TGFN Browser · Reader Mode</div><h1>${escapeHtml(title)}</h1>$paragraphs</body></html>
+                """.trimIndent()
+                readerOriginalUrls[web] = url
+                web.loadDataWithBaseURL(READER_BASE_URL, html, "text/html", "UTF-8", null)
+                status.text = tr("Chế độ đọc · Menu để trở về trang gốc", "Reader mode · Use Menu to restore the original")
+            } catch (_: Exception) {
+                status.text = tr("Không thể tạo chế độ đọc", "Could not create reader mode")
+                Toast.makeText(this, status.text, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun manageTabGroups() {
+        val options = mutableListOf(tr("Tạo nhóm mới", "Create a group"), tr("Chuyển tab hiện tại vào nhóm…", "Move current tab to a group…"))
+        val groups = tabGroups.toList().ifEmpty { listOf("Default") }
+        groups.forEach { group -> options.add("${group} (${tabs.count { it.group == group }})") }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Nhóm tab", "Tab groups"))
+            .setItems(options.toTypedArray()) { _, which ->
+                when (which) {
+                    0 -> {
+                        val input = EditText(this).apply {
+                            hint = tr("Tên nhóm", "Group name")
+                            setSingleLine(true)
+                        }
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle(tr("Tạo nhóm tab", "Create tab group"))
+                            .setView(input)
+                            .setNegativeButton(tr("Hủy", "Cancel"), null)
+                            .setPositiveButton(tr("Tạo và chuyển tab", "Create and move tab")) { _, _ ->
+                                val name = input.text.toString().trim().take(40)
+                                if (name.isBlank()) {
+                                    Toast.makeText(this, tr("Tên nhóm không được để trống", "Group name cannot be empty"), Toast.LENGTH_SHORT).show()
+                                } else {
+                                    tabGroups.add(name)
+                                    currentTab()?.group = name
+                                    persistSession()
+                                    Toast.makeText(this, tr("Đã chuyển tab vào nhóm: ", "Moved tab to group: ") + name, Toast.LENGTH_SHORT).show()
+                                }
+                            }.show()
+                    }
+                    1 -> chooseTabGroup(currentTab())
+                    else -> {
+                        val group = groups[which - 2]
+                        val members = tabs.indices.filter { tabs[it].group == group }
+                        if (members.isEmpty()) {
+                            Toast.makeText(this, tr("Nhóm này chưa có tab", "This group has no tabs"), Toast.LENGTH_SHORT).show()
+                        } else {
+                            val labels = members.map { index ->
+                                (if (index == selectedTab) "● " else "○ ") +
+                                    (tabs[index].title.takeIf { it.isNotBlank() } ?: tr("Tab mới", "New tab"))
+                            }.toTypedArray()
+                            android.app.AlertDialog.Builder(this)
+                                .setTitle(group)
+                                .setItems(labels) { _, selected -> selectTab(members[selected]) }
+                                .setPositiveButton(tr("Đóng", "Close"), null)
+                                .show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(tr("Đóng", "Close"), null)
+            .show()
+    }
+
+    private fun currentTab(): BrowserTab? = tabs.getOrNull(selectedTab)
+
+    private fun chooseTabGroup(tab: BrowserTab?) {
+        if (tab == null) return
+        val groups = tabGroups.toList().ifEmpty { listOf("Default") }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Chuyển tab vào nhóm", "Move tab to group"))
+            .setItems(groups.toTypedArray()) { _, which ->
+                tab.group = groups[which]
+                persistSession()
+                Toast.makeText(this, tr("Đã chuyển vào nhóm: ", "Moved to group: ") + tab.group, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(tr("Hủy", "Cancel"), null)
             .show()
     }
 
@@ -1823,6 +1970,8 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         }
         prefs.edit()
             .putString("session_tab_urls", urls.toString())
+            .putString("session_tab_groups", org.json.JSONArray().apply { tabs.forEach { put(it.group) } }.toString())
+            .putString("tab_group_names", org.json.JSONArray().apply { tabGroups.forEach { put(it) } }.toString())
             .putInt("session_selected_tab", if (tabs.isEmpty()) 0 else selectedTab.coerceIn(0, tabs.lastIndex))
             .apply()
     }
@@ -1984,6 +2133,7 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
 
     companion object {
         private const val NEW_TAB_SESSION_URL = "tgfn-internal://newtab"
+        private const val READER_BASE_URL = "https://tgfn-reader.local/"
         private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     }
 
