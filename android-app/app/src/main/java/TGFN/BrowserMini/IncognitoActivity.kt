@@ -41,6 +41,7 @@ class IncognitoActivity : Activity() {
   if (Build.VERSION.SDK_INT >= 28) {
    try { WebView.setDataDirectorySuffix("tgfn_incognito") } catch (_: Throwable) { }
   }
+  CrashLogger.install(this)
   super.onCreate(savedInstanceState)
   window.statusBarColor = pageBackground
   @Suppress("DEPRECATION")

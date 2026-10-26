@@ -151,6 +151,7 @@ class MainActivity : Activity() {
                 android.R.style.Theme_Material_NoActionBar
             else android.R.style.Theme_Material_Light_NoActionBar
         )
+        CrashLogger.install(this)
         super.onCreate(savedInstanceState)
         if (!prefs.contains("language")) {
             var selectedLanguage = "vi"
@@ -1394,7 +1395,20 @@ class MainActivity : Activity() {
             text = tr("Chặn quảng cáo (AdBlock)", "Block ads (AdBlock)")
             isChecked = prefs.getBoolean("adblock_enabled", true)
         }
+        
         content.addView(adblock)
+        val crashLog = android.widget.Button(this).apply {
+            text = tr("Xem log crash", "View crash log")
+            setOnClickListener {
+                val log = CrashLogger.lastCrash(this@MainActivity)
+                android.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle(tr("Log crash", "Crash log"))
+                    .setMessage(log ?: tr("Chưa có crash", "No crash logged"))
+                    .setPositiveButton(tr("Đóng", "Close"), null)
+                    .show()
+            }
+        }
+        content.addView(crashLog)
         val proxyUrl = EditText(this).apply {
             hint = tr("Proxy URL: http://host:port", "Proxy URL: http://host:port")
             setSingleLine(true)
