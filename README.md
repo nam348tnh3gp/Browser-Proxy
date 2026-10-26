@@ -1,5 +1,14 @@
 # TGFN.BrowserMini
 
+[![Build and Release](https://github.com/nam348tnh3gp/Browser-Proxy/actions/workflows/build.yml/badge.svg)](https://github.com/nam348tnh3gp/Browser-Proxy/actions/workflows/build.yml)
+[![Go Proxy Tests](https://github.com/nam348tnh3gp/Browser-Proxy/actions/workflows/proxy-test.yml/badge.svg)](https://github.com/nam348tnh3gp/Browser-Proxy/actions/workflows/proxy-test.yml)
+[![Latest Release](https://img.shields.io/github/v/release/nam348tnh3gp/Browser-Proxy?display_name=tag&label=latest%20release)](https://github.com/nam348tnh3gp/Browser-Proxy/releases/latest)
+[![Release Downloads](https://img.shields.io/github/downloads/nam348tnh3gp/Browser-Proxy/total?label=downloads)](https://github.com/nam348tnh3gp/Browser-Proxy/releases)
+[![Repo Size](https://img.shields.io/github/repo-size/nam348tnh3gp/Browser-Proxy?label=repo%20size)](https://github.com/nam348tnh3gp/Browser-Proxy)
+[![Last Commit](https://img.shields.io/github/last-commit/nam348tnh3gp/Browser-Proxy?label=last%20commit)](https://github.com/nam348tnh3gp/Browser-Proxy/commits/main)
+[![Open Issues](https://img.shields.io/github/issues/nam348tnh3gp/Browser-Proxy?label=issues)](https://github.com/nam348tnh3gp/Browser-Proxy/issues)
+
+
 A lightweight Android browser prototype with a Kotlin/WebView client and a standalone Go HTTP forward proxy.
 
 > This is a standards-based proxy browser, not an implementation of Opera Mini's proprietary OBML protocol. The Go proxy must be reachable from the Android device. WebView proxy override support depends on the installed Android System WebView.
@@ -8,7 +17,7 @@ A lightweight Android browser prototype with a Kotlin/WebView client and a stand
 
 - `android-app/` — Android application (Kotlin, WebView, AndroidX WebKit).
 - `go-proxy/` — standalone HTTP forward proxy with timeouts and HTTPS CONNECT tunneling.
-- `.github/workflows/build.yml` — builds the Android debug APK and Go proxy on Android/proxy changes.
+- `.github/workflows/build.yml` — manually triggered signed Android APK release workflow; publishes a GitHub Release and then prepares the next version.
 - [J2ME branch](https://github.com/nam348tnh3gp/Browser-Proxy/tree/J2ME) — separate Java ME/MIDP 2.0 feature-phone browser and compact-page proxy integration.
 
 ## Browser features
@@ -22,14 +31,22 @@ A lightweight Android browser prototype with a Kotlin/WebView client and a stand
 - Desktop-site mode using a desktop browser user agent and wide viewport settings; websites may still adapt their layout independently.
 - In-page translation to Vietnamese, English, Japanese, Korean, French, or Spanish without navigating away; the user can restore the original text. Translation uses Google's online translation endpoint and is not offline.
 - Optional HTTP proxy configuration; direct browsing remains available when the proxy is disabled.
-- Optional Data Saver toggle that keeps images and network access enabled, uses WebView cache validation, and persists across launches. The Go proxy can gzip eligible small text responses when the client advertises gzip. The **Menu → Data Saver analytics** screen shows this installation's measured counters and whole-proxy totals for response bytes, HTTPS tunnel bytes, gzip savings, and registered client IDs; counters reset when the proxy process restarts. The client ID is generated once and persisted, not generated per request. Per-device attribution now normalizes IP formats and handles a single registered client across address changes; if multiple clients share one source IP, the UI reports that attribution is ambiguous rather than silently assigning traffic to the wrong device.
+- Optional Data Saver toggle that keeps images and network access enabled, uses WebView cache validation, and persists across launches. The Go proxy can gzip eligible small text responses when the client advertises gzip. The **Menu → Data Saver analytics** screen shows this installation's measured counters and whole-proxy totals for response bytes, HTTPS tunnel bytes, gzip savings, and registered client IDs. The Go proxy periodically persists counters to `proxy-stats.json` by default (or `PROXY_STATS_FILE` if set), so counters can survive a restart when that file remains available and writable. The client ID is generated once and persisted, not generated per request. Per-device attribution now normalizes IP formats and handles a single registered client across address changes; if multiple clients share one source IP, the UI reports that attribution is ambiguous rather than silently assigning traffic to the wrong device.
 - Settings for the home page, proxy endpoint, and desktop-site preference.
 
 The browser uses Android System WebView; it is not the full Chromium desktop/mobile browser and does not provide Chrome account sync or extensions.
 
-## Build Android APK
+## Build and release Android APK
 
-GitHub Actions builds `android-app` automatically. Open [Actions](https://github.com/nam348tnh3gp/Browser-Proxy/actions), select the latest successful **Build TGFN.BrowserMini** run, then download the `TGFN-BrowserMini-debug-apk` artifact from the **Artifacts** section. Extract the ZIP to get the debug APK. Failed runs do not upload an APK.
+Release builds are **manual only**; pushes and pull requests do not start these workflows. To publish a signed release:
+
+1. Configure all four signing secrets described below.
+2. Open [Actions → Build and Release TGFN.BrowserMini](https://github.com/nam348tnh3gp/Browser-Proxy/actions/workflows/build.yml).
+3. Select **Run workflow** on `main`.
+4. Wait for the build, APK signature verification, and GitHub Release publication to finish.
+5. Download the APK from [GitHub Releases](https://github.com/nam348tnh3gp/Browser-Proxy/releases) or from the run's **Artifacts** section.
+
+The workflow reads `versioncode.txt` and `versionname.txt` as the source of truth and checks that `android-app/app/build.gradle.kts` matches them. The Release tag is `v<versionName>`. Only after publishing the Release successfully does the workflow increment the version code and patch version, update all three version files, and commit the next development version to `main`. A failed build or failed Release does not run the version-bump step. Start a new workflow run rather than rerunning a completed run.
 
 To build locally with Gradle 8.9 and JDK 17:
 
@@ -39,7 +56,7 @@ gradle -p android-app assembleDebug
 
 ### Signed APK and automatic versioning
 
-The workflow increments Android `versionCode` and the patch part of `versionName` for each workflow build. On builds of `main`, it commits the bump back to `main` using a `[skip ci]` commit so the version-only commit does not start another build. Pushes and pull requests that change only documentation, J2ME files, or unrelated repository files are ignored by this workflow.
+The release workflow increments Android `versionCode` and the patch part of `versionName` only after a successful GitHub Release. It commits the updated `versioncode.txt`, `versionname.txt`, and `android-app/app/build.gradle.kts` to `main` together. The current version files must already match before a release can begin.
 
 To create the signing key in Termux (OpenJDK 21 is fine for generating the key; CI builds with JDK 17):
 
@@ -63,7 +80,7 @@ In GitHub, open **Settings → Secrets and variables → Actions → New reposit
 - `ANDROID_KEY_ALIAS`: `tgfn-browser`
 - `ANDROID_KEY_PASSWORD`: the key password chosen in `keytool` (it can match the keystore password)
 
-After all four secrets are set, the workflow builds and uploads a signed release APK. Without signing secrets it builds a debug APK instead. If only some signing secrets are set, the workflow fails rather than silently producing an unsigned release. Use the same keystore and alias for every update of this app.
+After all four secrets are set, the workflow builds and publishes a signed release APK. If any signing secret is missing or the keystore cannot be validated, the release workflow fails; it does not fall back to an unsigned APK. Use the same keystore and alias for every update of this app.
 
 ## J2ME feature-phone version
 
