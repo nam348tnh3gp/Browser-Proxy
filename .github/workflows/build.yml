@@ -117,8 +117,18 @@ jobs:
           set -euo pipefail
           APK="$(find android-app/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
           test -n "$APK" && test -s "$APK"
-          apksigner verify "$APK"
+          APKSIGNER="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -type f -name apksigner -print -quit)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify "$APK"
           echo "path=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TGFN-BrowserMini-release-v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.version_code }}
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Publish GitHub Release
         env:
@@ -128,7 +138,7 @@ jobs:
           set -euo pipefail
           gh release create "${{ steps.version.outputs.tag }}" "${{ steps.apk.outputs.path }}" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            --target "$(git rev-parse HEAD)" \
             --title "TGFN.BrowserMini ${{ steps.version.outputs.tag }}" \
             --generate-notes
 
@@ -183,11 +193,3 @@ jobs:
           git add versionname.txt versioncode.txt android-app/app/build.gradle.kts
           git commit -m "chore(version): prepare next version [skip ci]"
           git push origin HEAD:main
-
-      - name: Upload APK as workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: TGFN-BrowserMini-release-v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.version_code }}
-          path: ${{ steps.apk.outputs.path }}
-          if-no-files-found: error
-          retention-days: 30
