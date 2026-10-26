@@ -94,6 +94,10 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var tabButton: TextView
     private lateinit var progress: ProgressBar
+    private lateinit var refreshButton: TextView
+    private lateinit var securityIndicator: TextView
+    private var pageLoading = false
+    private var lastClosedTabUrl: String? = null
     private lateinit var webContainer: FrameLayout
     private lateinit var proxySummary: TextView
     private var browserRoot: View? = null
@@ -256,14 +260,14 @@ class MainActivity : Activity() {
             setPadding(dp(10), 0, dp(5), 0)
             background = rounded(pale, dp(28))
         }
-        val security = TextView(this).apply {
+        securityIndicator = TextView(this).apply {
             text = "⌕"
-            textSize = 22f
+            textSize = 18f
             setTextColor(muted)
             gravity = Gravity.CENTER
             contentDescription = tr("Địa chỉ trang", "Page address")
         }
-        addressCard.addView(security, LinearLayout.LayoutParams(dp(25), dp(42)))
+        addressCard.addView(securityIndicator, LinearLayout.LayoutParams(dp(25), dp(42)))
 
         address = EditText(this).apply {
             hint = tr("Tìm kiếm hoặc nhập URL", "Search or enter URL")
@@ -275,7 +279,8 @@ class MainActivity : Activity() {
             setPadding(dp(3), 0, dp(3), 0)
             background = null
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
-            setSelectAllOnFocus(false)
+            setSelectAllOnFocus(true)
+            contentDescription = tr("Địa chỉ trang web", "Website address")
             setOnEditorActionListener { _, action, _ ->
                 if (action == EditorInfo.IME_ACTION_GO || action == EditorInfo.IME_ACTION_DONE) {
                     navigate()
@@ -284,8 +289,16 @@ class MainActivity : Activity() {
             }
         }
         addressCard.addView(address, LinearLayout.LayoutParams(0, dp(44), 1f))
-        val refresh = smallAction("↻", tr("Tải lại", "Reload")) { currentWebView()?.reload() }
-        addressCard.addView(refresh, LinearLayout.LayoutParams(dp(38), dp(42)))
+        val clearAddress = smallAction("×", tr("Xóa địa chỉ", "Clear address")) {
+            address.text.clear()
+            address.requestFocus()
+        }.apply { textSize = 22f }
+        addressCard.addView(clearAddress, LinearLayout.LayoutParams(dp(28), dp(42)))
+        refreshButton = smallAction("↻", tr("Tải lại", "Reload")) {
+            val web = currentWebView() ?: return@smallAction
+            if (pageLoading) web.stopLoading() else web.reload()
+        }
+        addressCard.addView(refreshButton, LinearLayout.LayoutParams(dp(34), dp(42)))
         topBar.addView(addressCard, LinearLayout.LayoutParams(0, dp(46), 1f))
 
         tabButton = TextView(this).apply {
@@ -417,8 +430,13 @@ class MainActivity : Activity() {
                 tab.url = if (tab.isNewTab) NEW_TAB_SESSION_URL else (url ?: tab.url)
                 tab.title = "Đang tải…"
                 if (isSelected(tab)) {
+                    pageLoading = true
                     status.text = tr("Đang tải trang…", "Loading page…")
+                    refreshButton.text = "×"
+                    refreshButton.contentDescription = tr("Dừng tải", "Stop loading")
                     if (!url.isNullOrBlank()) setAddress(url)
+                    updateAddressSecurity(url)
+                    progress.progress = 0
                     progress.visibility = View.VISIBLE
                 }
                 updateTabButton()
@@ -432,8 +450,16 @@ class MainActivity : Activity() {
                 tab.url = if (tab.isNewTab) NEW_TAB_SESSION_URL else (url ?: tab.url)
                 tab.title = view?.title?.takeIf { it.isNotBlank() } ?: hostLabel(url)
                 if (isSelected(tab)) {
+                    pageLoading = false
                     status.text = tr("Sẵn sàng", "Ready")
-                    if (!url.isNullOrBlank()) setAddress(if (tab.isNewTab) "" else url)
+                    refreshButton.text = "↻"
+                    refreshButton.contentDescription = tr("Tải lại", "Reload")
+                    if (!url.isNullOrBlank()) {
+                        setAddress(if (tab.isNewTab) "" else url)
+                        updateAddressSecurity(url)
+                    }
+                    progress.progress = 100
+                    progress.visibility = View.GONE
                 }
                 rememberHistory(tab)
                 persistSession()
@@ -442,6 +468,10 @@ class MainActivity : Activity() {
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                 if (request?.isForMainFrame == true && isSelected(tab)) {
+                    pageLoading = false
+                    refreshButton.text = "↻"
+                    refreshButton.contentDescription = tr("Tải lại", "Reload")
+                    progress.visibility = View.GONE
                     status.text = tr("Không tải được trang: ${error?.description ?: "lỗi không xác định"}", "Could not load page: ${error?.description ?: "unknown error"}")
                 }
             }
@@ -450,7 +480,10 @@ class MainActivity : Activity() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 if (isSelected(tab)) {
                     progress.progress = newProgress
-                    progress.visibility = if (newProgress in 1..99) View.VISIBLE else View.GONE
+                    if (newProgress in 1..99) pageLoading = true else if (newProgress >= 100) pageLoading = false
+                    refreshButton.text = if (pageLoading) "×" else "↻"
+                    refreshButton.contentDescription = if (pageLoading) tr("Dừng tải", "Stop loading") else tr("Tải lại", "Reload")
+                    progress.visibility = if (pageLoading) View.VISIBLE else View.GONE
                 }
             }
 
@@ -601,8 +634,13 @@ class MainActivity : Activity() {
         }
         val tab = tabs[index]
         setAddress(tab.webView.url ?: tab.url)
-        status.text = tab.title
-        progress.visibility = View.GONE
+        updateAddressSecurity(tab.webView.url ?: tab.url)
+        pageLoading = tab.webView.progress in 1..99
+        refreshButton.text = if (pageLoading) "×" else "↻"
+        refreshButton.contentDescription = if (pageLoading) tr("Dừng tải", "Stop loading") else tr("Tải lại", "Reload")
+        progress.progress = tab.webView.progress
+        progress.visibility = if (pageLoading) View.VISIBLE else View.GONE
+        status.text = if (pageLoading) tr("Đang tải trang…", "Loading page…") else tab.title
         updateTabButton()
         persistSession()
     }
@@ -617,6 +655,18 @@ class MainActivity : Activity() {
         if (!::address.isInitialized) return
         val text = value.orEmpty()
         if (address.text.toString() != text) address.setText(text)
+    }
+
+    private fun updateAddressSecurity(url: String?) {
+        if (!::securityIndicator.isInitialized) return
+        val secure = url?.startsWith("https://", ignoreCase = true) == true
+        securityIndicator.text = if (secure) "🔒" else if (url?.startsWith("http://", ignoreCase = true) == true) "ⓘ" else "⌕"
+        securityIndicator.setTextColor(if (secure) Color.rgb(24, 128, 56) else muted)
+        securityIndicator.contentDescription = when {
+            secure -> tr("Kết nối HTTPS", "HTTPS connection")
+            url?.startsWith("http://", ignoreCase = true) == true -> tr("Kết nối HTTP không mã hóa", "Unencrypted HTTP connection")
+            else -> tr("Tìm kiếm hoặc địa chỉ", "Search or address")
+        }
     }
 
     private fun smallAction(symbol: String, label: String, action: () -> Unit): TextView =
@@ -706,6 +756,15 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 1024) return "$bytes B"
+        val units = arrayOf("KB", "MB", "GB", "TB")
+        var value = bytes.toDouble()
+        var unit = -1
+        while (value >= 1024 && unit < units.lastIndex) { value /= 1024.0; unit++ }
+        return String.format(java.util.Locale.ROOT, "%.1f %s", value, units[unit])
+    }
+
     private fun openDownloads() {
         val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
         val rows = mutableListOf<Pair<Long, String>>()
@@ -734,7 +793,8 @@ class MainActivity : Activity() {
                     val downloaded = cursor.getLong(downloadedCol).coerceAtLeast(0L)
                     val total = cursor.getLong(totalCol)
                     val percent = if (total > 0) " · " + (downloaded * 100 / total).coerceIn(0, 100) + "%" else ""
-                    rows.add(id to "$title\n$state$percent")
+                    val size = if (total > 0) " · " + formatBytes(downloaded) + "/" + formatBytes(total) else if (downloaded > 0) " · " + formatBytes(downloaded) else ""
+                    rows.add(id to "$title\n$state$percent$size")
                 }
             }
         } catch (e: Exception) {
@@ -773,10 +833,19 @@ class MainActivity : Activity() {
                             Toast.makeText(this, tr("Không tìm thấy ứng dụng mở tệp", "No app can open this file"), Toast.LENGTH_SHORT).show()
                         }
                     } else {
-                        val message = if (it.getInt(statusCol) == DownloadManager.STATUS_FAILED)
-                            tr("Tải xuống thất bại. Hãy kiểm tra kết nối và thử lại.", "Download failed. Check your connection and retry.")
-                        else tr("Tệp vẫn đang tải. Mở mục này lại sau khi hoàn tất.", "This download is still in progress. Open it after it completes.")
-                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                        if (it.getInt(statusCol) == DownloadManager.STATUS_FAILED) {
+                            val uriCol = it.getColumnIndex(DownloadManager.COLUMN_URI)
+                            val failedUrl = if (uriCol >= 0) it.getString(uriCol) else null
+                            val titleCol = it.getColumnIndex(DownloadManager.COLUMN_TITLE)
+                            val failedTitle = if (titleCol >= 0) it.getString(titleCol) else "download"
+                            android.app.AlertDialog.Builder(this)
+                                .setTitle(tr("Tải xuống thất bại", "Download failed"))
+                                .setMessage(tr("Kiểm tra kết nối rồi thử tải lại.", "Check your connection, then retry the download."))
+                                .setPositiveButton(tr("Thử lại", "Retry")) { _, _ -> enqueueDownload(failedUrl, null, failedTitle, null) }
+                                .setNegativeButton(tr("Đóng", "Close"), null).show()
+                        } else {
+                            Toast.makeText(this, tr("Tệp vẫn đang tải. Mở mục này lại sau khi hoàn tất.", "This download is still in progress. Open it after completion."), Toast.LENGTH_LONG).show()
+                        }
                     }
                 }
             }
@@ -797,7 +866,7 @@ class MainActivity : Activity() {
             tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel,
             tr("Phân tích Data Saver", "Data Saver analytics"), tr("Tải xuống", "Downloads"),
             tr("Quản lý quyền riêng tư", "Privacy and site data"), tr("Chế độ đọc", "Reader mode"),
-            tr("Nhóm tab", "Tab groups")
+            tr("Nhóm tab", "Tab groups"), tr("Thao tác nhanh", "Quick actions")
         )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("TGFN Browser · Tiện ích", "TGFN Browser · Tools"))
@@ -821,9 +890,59 @@ class MainActivity : Activity() {
                     15 -> showPrivacyManagement()
                     16 -> toggleReaderMode()
                     17 -> manageTabGroups()
+                    18 -> showQuickActions()
                 }
             }
             .show()
+    }
+
+    private fun showQuickActions() {
+        val items = arrayOf(
+            tr("Chế độ đọc", "Reader mode"), tr("Tải xuống", "Downloads"),
+            tr("Dịch trang", "Translate page"),
+            if (isDesktopModeEnabled()) tr("Tắt chế độ máy tính", "Turn desktop site off") else tr("Bật chế độ máy tính", "Turn desktop site on"),
+            tr("Quản lý quyền riêng tư", "Privacy and site data"), tr("Nhóm tab", "Tab groups"),
+            tr("Chia sẻ trang", "Share page"), tr("Khôi phục tab vừa đóng", "Restore recently closed tab")
+        )
+        android.app.AlertDialog.Builder(this).setTitle(tr("Thao tác nhanh", "Quick actions"))
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> toggleReaderMode()
+                    1 -> openDownloads()
+                    2 -> translateCurrentPage()
+                    3 -> toggleDesktopMode()
+                    4 -> showPrivacyManagement()
+                    5 -> manageTabGroups()
+                    6 -> shareCurrentPage()
+                    7 -> restoreLastClosedTab()
+                }
+            }
+            .setNegativeButton(tr("Đóng", "Close"), null).show()
+    }
+
+    private fun restoreLastClosedTab() {
+        val url = lastClosedTabUrl ?: prefs.getString("last_closed_tab_url", null)
+        if (url.isNullOrBlank()) {
+            Toast.makeText(this, tr("Không có tab nào để khôi phục", "No recently closed tab to restore"), Toast.LENGTH_SHORT).show()
+            return
+        }
+        lastClosedTabUrl = null
+        prefs.edit().remove("last_closed_tab_url").apply()
+        createTab(url, true)
+    }
+
+    private fun closeOtherTabs(keep: BrowserTab) {
+        tabs.toList().filter { it !== keep }.forEach { tab ->
+            (tab.webView.parent as? ViewGroup)?.removeView(tab.webView)
+            tab.webView.stopLoading()
+            tab.webView.onPause()
+            tab.webView.destroy()
+            tabs.remove(tab)
+        }
+        selectedTab = 0
+        selectTab(0)
+        persistSession()
+        Toast.makeText(this, tr("Đã đóng các tab khác", "Closed other tabs"), Toast.LENGTH_SHORT).show()
     }
 
     private fun showPrivacyManagement() {
@@ -1128,6 +1247,20 @@ class MainActivity : Activity() {
                             maxLines = 2
                             ellipsize = android.text.TextUtils.TruncateAt.END
                         })
+                        card.setOnLongClickListener {
+                            val actions = arrayOf(tr("Chuyển đến tab", "Switch to tab"), tr("Đóng tab này", "Close this tab"), tr("Đóng các tab khác", "Close other tabs"))
+                            android.app.AlertDialog.Builder(this)
+                                .setTitle(tab.title.takeIf { it.isNotBlank() } ?: tr("Tab mới", "New tab"))
+                                .setItems(actions) { _, action ->
+                                    when (action) {
+                                        0 -> selectTab(tabs.indexOf(tab).takeIf { it >= 0 } ?: selectedTab)
+                                        1 -> closeTabAt(tabs.indexOf(tab))
+                                        2 -> closeOtherTabs(tab)
+                                    }
+                                    (dialogContent.tag as? android.app.AlertDialog)?.dismiss()
+                                }.show()
+                            true
+                        }
                         val params = LinearLayout.LayoutParams(0, dp(132), 1f)
                         if (column == 0) params.marginEnd = dp(6) else params.marginStart = dp(6)
                         params.bottomMargin = dp(12)
@@ -1201,8 +1334,14 @@ class MainActivity : Activity() {
     private fun closeTabAt(index: Int) {
         if (index !in tabs.indices) return
         val removed = tabs.removeAt(index)
+        val removedUrl = removed.webView.url ?: removed.url
+        if (removedUrl.isNotBlank() && !removedUrl.equals("about:blank", ignoreCase = true) && !removed.isNewTab) {
+            lastClosedTabUrl = removedUrl
+            prefs.edit().putString("last_closed_tab_url", removedUrl).apply()
+        }
         (removed.webView.parent as? ViewGroup)?.removeView(removed.webView)
         removed.webView.stopLoading()
+        removed.webView.onPause()
         removed.webView.destroy()
         if (tabs.isEmpty()) {
             selectedTab = 0
