@@ -985,7 +985,7 @@ class MainActivity : Activity() {
                     var connection: java.net.HttpURLConnection? = null
                     try {
                         val query = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8")
-                        val url = java.net.URI("http", null, endpoint.first, endpoint.second, "/__tgfn/register", query, null).toURL()
+                        val url = java.net.URI(if (endpoint.scheme == "https") "https" else "http", null, endpoint.host, endpoint.port, "/__tgfn/register", query, null).toURL()
                         connection = (url.openConnection() as java.net.HttpURLConnection).apply {
                             connectTimeout = 3500
                             readTimeout = 3500
@@ -1001,7 +1001,7 @@ class MainActivity : Activity() {
                 }
                 fun fetchStats(forClient: Boolean): org.json.JSONObject {
                     val query = if (forClient) "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8") else null
-                    val url = java.net.URI("http", null, endpoint.first, endpoint.second, "/__tgfn/stats", query, null).toURL()
+                    val url = java.net.URI(if (endpoint.scheme == "https") "https" else "http", null, endpoint.host, endpoint.port, "/__tgfn/stats", query, null).toURL()
                     val connection = (url.openConnection() as java.net.HttpURLConnection).apply {
                         connectTimeout = 3500
                         readTimeout = 3500
@@ -1451,7 +1451,7 @@ No account, no analytics, no ads."""
         }
         content.addView(privacy)
         val proxyUrl = EditText(this).apply {
-            hint = tr("Proxy URL: http://host:port", "Proxy URL: http://host:port")
+            hint = tr("Proxy: host:port, http(s)://host:port, socks://host:port", "Proxy: host:port, http(s)://host:port, socks://host:port")
             setSingleLine(true)
             setText(prefs.getString("proxy_url", "") ?: "")
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
@@ -1484,7 +1484,7 @@ No account, no analytics, no ads."""
                 }
                 val rawProxy = proxyUrl.text.toString().trim()
                 if (enabled.isChecked && parseProxyUrl(rawProxy) == null) {
-                    proxyUrl.error = tr("Dùng dạng http://host:port", "Use format http://host:port")
+                    proxyUrl.error = tr("Dạng: host:port, http://, https:// hoặc socks://", "Use host:port, http://, https:// or socks://")
                     return@setOnClickListener
                 }
                 val previousDarkMode = darkMode
@@ -1623,14 +1623,32 @@ No account, no analytics, no ads."""
         startActivity(Intent.createChooser(send, tr("Chia sẻ trang bằng", "Share page using")))
     }
 
-    private fun parseProxyUrl(raw: String): Pair<String, Int>? {
+    private data class ProxyEndpoint(val scheme: String, val host: String, val port: Int) {
+        fun rule(): String = "$scheme://$host:$port"
+        fun registerBase(): String = if (scheme == "https") "https://$host:$port" else "http://$host:$port"
+    }
+
+    private fun parseProxyUrl(raw: String): ProxyEndpoint? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+        val withScheme = if (trimmed.contains("://")) trimmed else "http://$trimmed"
         return try {
-            val uri = URI(raw)
-            if (!uri.scheme.equals("http", true) || uri.host.isNullOrBlank()) return null
-            if (uri.rawUserInfo != null || (uri.rawPath != null && uri.rawPath.isNotEmpty() && uri.rawPath != "/") ||
-                uri.rawQuery != null || uri.rawFragment != null) return null
-            val port = if (uri.port == -1) 8080 else uri.port
-            if (port !in 1..65535) null else uri.host to port
+            val uri = URI(withScheme)
+            val scheme = (uri.scheme ?: "http").lowercase()
+            if (scheme !in setOf("http", "https", "socks", "socks5")) return null
+            val host = uri.host ?: return null
+            if (host.isBlank()) return null
+            if (uri.rawPath != null && uri.rawPath.isNotEmpty() && uri.rawPath != "/") return null
+            if (uri.rawQuery != null || uri.rawFragment != null) return null
+            val defaultPort = when (scheme) {
+                "https" -> 443
+                "socks", "socks5" -> 1080
+                else -> 8080
+            }
+            val port = if (uri.port == -1) defaultPort else uri.port
+            if (port !in 1..65535) return null
+            val normalized = if (scheme == "socks5") "socks" else scheme
+            ProxyEndpoint(normalized, host, port)
         } catch (_: Exception) {
             null
         }
@@ -1650,22 +1668,22 @@ No account, no analytics, no ads."""
             callback(false)
             return
         }
-        val config = ProxyConfig.Builder().addProxyRule("${endpoint.first}:${endpoint.second}").build()
+        val config = ProxyConfig.Builder().addProxyRule(endpoint.rule()).build()
         ProxyController.getInstance().setProxyOverride(config, mainExecutor, Runnable {
-            registerClient(endpoint) {
+            registerClient(endpoint.host, endpoint.port, endpoint.scheme) {
                 // Registration is best-effort: browsing still works with older proxy versions.
                 callback(true)
             }
         })
     }
 
-    private fun registerClient(endpoint: Pair<String, Int>, callback: (Boolean) -> Unit) {
+    private fun registerClient(host: String, port: Int, scheme: String, callback: (Boolean) -> Unit) {
         Thread {
             var registered = false
             var connection: java.net.HttpURLConnection? = null
             try {
                 val query = "client_id=" + java.net.URLEncoder.encode(clientId, "UTF-8")
-                val url = java.net.URI("http", null, endpoint.first, endpoint.second, "/__tgfn/register", query, null).toURL()
+                val url = java.net.URI(if (scheme == "https") "https" else "http", null, host, port, "/__tgfn/register", query, null).toURL()
                 connection = (url.openConnection() as java.net.HttpURLConnection).apply {
                     connectTimeout = 3500
                     readTimeout = 3500
