@@ -404,14 +404,19 @@ func startStatsPersistence() {
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			if statsDirty.Swap(false) {
-				if err := savePersistedStats(); err != nil {
-					log.Printf("stats save failed: %v; will retry", err)
-					statsDirty.Store(true)
-				}
-			}
+			persistStatsIfDirty()
 		}
 	}()
+}
+
+func persistStatsIfDirty() {
+	if !statsDirty.Swap(false) {
+		return
+	}
+	if err := savePersistedStats(); err != nil {
+		log.Printf("stats save failed: %v; will retry", err)
+		statsDirty.Store(true)
+	}
 }
 
 func maxInt64(a, b int64) int64 {
