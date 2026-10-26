@@ -1082,8 +1082,16 @@ class MainActivity : Activity() {
             Toast.makeText(this, tr("Mở một trang web trước khi dịch", "Open a website before translating"), Toast.LENGTH_SHORT).show()
             return
         }
-        val languages = arrayOf("Tiếng Việt", "English", "日本語", "한국어", "Français", "Español")
-        val codes = arrayOf("vi", "en", "ja", "ko", "fr", "es")
+        val languages = arrayOf(
+            "Tiếng Việt", "English", "日本語", "한국어", "中文", "Français",
+            "Español", "Deutsch", "Português", "Русский", "ไทย", "Indonesia",
+            "Italiano", "العربية", "हिन्दी"
+        )
+        val codes = arrayOf(
+            "vi", "en", "ja", "ko", "zh", "fr",
+            "es", "de", "pt", "ru", "th", "id",
+            "it", "ar", "hi"
+        )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("Dịch ngay trên trang", "Translate page"))
             .setItems(languages) { _, which -> translatePageInPlace(web, codes[which], languages[which]) }
@@ -1103,13 +1111,13 @@ class MainActivity : Activity() {
                 }
                 var walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
                 var nodes = [], node;
-                var excluded = /^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA|INPUT|SELECT|OPTION|CODE|PRE|SVG|BUTTON)$/;
-                while ((node = walker.nextNode()) && nodes.length < 36) {
+                var excluded = /^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA|SELECT|OPTION|CODE|PRE|SVG)$/;
+                while ((node = walker.nextNode()) && nodes.length < 250) {
                   var parent = node.parentElement;
                   if (!parent || excluded.test(parent.tagName) ||
                       parent.closest('[contenteditable="true"],[translate="no"],[aria-hidden="true"]')) continue;
                   var text = node.nodeValue || '';
-                  if (text.trim().length < 2 || text.trim().length > 350) continue;
+                  if (text.trim().length < 2 || text.trim().length > 1200) continue;
                   if (!parent.getClientRects().length) continue;
                   nodes.push({node: node, original: text});
                 }
