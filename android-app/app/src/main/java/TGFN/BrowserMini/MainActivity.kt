@@ -36,25 +36,53 @@ class MainActivity : Activity() {
     private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false)
 
 
-    private val adDomains = setOf(
-        "doubleclick.net", "googlesyndication.com", "googleadservices.com",
-        "adservice.google.com", "pagead2.googlesyndication.com",
-        "adnxs.com", "adsrvr.org", "advertising.com", "adform.net",
-        "taboola.com", "outbrain.com", "criteo.com", "rubiconproject.com",
-        "pubmatic.com", "openx.net", "moatads.com", "scorecardresearch.com",
-        "google-analytics.com", "hotjar.com", "mixpanel.com", "segment.io",
-        "quantserve.com", "adsafeprotected.com", "amazon-adsystem.com",
-        "media.net", "popads.net", "popcash.net", "propellerads.com", "adsterra.com"
-    )
+    private val adDomains = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val hostsUrl = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+
+    private fun loadAdHosts() {
+        if (!prefs.getBoolean("adblock_enabled", true)) return
+        Thread {
+            try {
+                val cache = java.io.File(cacheDir, "stevenblack-hosts.txt")
+                val fresh = !cache.exists() || System.currentTimeMillis() - cache.lastModified() > 24L * 60 * 60 * 1000
+                val text = if (fresh) {
+                    val conn = java.net.URL(hostsUrl).openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 15000
+                    conn.readTimeout = 30000
+                    conn.setRequestProperty("User-Agent", "TGFN-BrowserMini")
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    conn.disconnect()
+                    cache.writeText(body)
+                    body
+                } else cache.readText()
+                val parsed = mutableSetOf<String>()
+                text.lineSequence().forEach { line ->
+                    val t = line.trim()
+                    if (t.isEmpty() || t.startsWith("#")) return@forEach
+                    val parts = t.split(Regex("\\s+"))
+                    if (parts.size >= 2 && (parts[0] == "0.0.0.0" || parts[0] == "127.0.0.1")) {
+                        val host = parts[1].lowercase()
+                        if (host != "localhost" && host.contains(".")) parsed.add(host)
+                    }
+                }
+                adDomains.clear()
+                adDomains.addAll(parsed)
+                runOnUiThread { status.text = tr("AdBlock: ", "AdBlock: ") + parsed.size + tr(" domain", " domains") }
+            } catch (_: Exception) { }
+        }.start()
+    }
 
     private fun isAdUrl(url: String?): Boolean {
         if (url.isNullOrBlank()) return false
         if (!prefs.getBoolean("adblock_enabled", true)) return false
-        val lower = url.lowercase()
-        if (adDomains.any { lower.contains(it) }) return true
-        return lower.contains("/ads/") || lower.contains("/adserver") ||
-               (lower.contains("banner") && lower.contains("ad")) ||
-               (lower.contains("tracking") && lower.contains("pixel"))
+        val host = try { java.net.URI(url).host?.lowercase() } catch (_: Exception) { null } ?: return false
+        if (adDomains.contains(host)) return true
+        // parent domain match
+        val parts = host.split(".")
+        for (i in 0 until parts.size - 1) {
+            if (adDomains.contains(parts.subList(i, parts.size).joinToString("."))) return true
+        }
+        return false
     }
 
     private val tabs = mutableListOf<BrowserTab>()
@@ -318,6 +346,7 @@ class MainActivity : Activity() {
         root.addView(statusRow)
         browserRoot = root
         setContentView(root)
+        loadAdHosts()
     }
 
     private fun createTab(url: String?, select: Boolean, popupTransport: Message? = null) {
