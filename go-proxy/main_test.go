@@ -3,9 +3,12 @@ package main
 import (
 	"compress/gzip"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -342,5 +345,51 @@ func TestReRegisteringClientRemovesStaleIPMapping(t *testing.T) {
 	}
 	if got := clientIDFromRemoteAddr("192.0.2.23:5000"); got != "moving-device-1111" {
 		t.Fatalf("new IP maps to %q; want moving-device-1111", got)
+	}
+}
+
+
+func TestSavePersistedStatsWritesJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "proxy-stats.json")
+	t.Setenv("PROXY_STATS_FILE", path)
+
+	if err := savePersistedStats(); err != nil {
+		t.Fatalf("savePersistedStats() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read saved stats: %v", err)
+	}
+	var saved persistedStatsFile
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatalf("saved stats is not valid JSON: %v", err)
+	}
+	if saved.SavedAt == "" || saved.Clients == nil || saved.IDByIP == nil {
+		t.Fatalf("saved stats missing required fields: %+v", saved)
+	}
+}
+
+func TestPersistStatsRetriesAfterWriteFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing-directory", "proxy-stats.json")
+	t.Setenv("PROXY_STATS_FILE", path)
+	statsDirty.Store(true)
+	t.Cleanup(func() { statsDirty.Store(false) })
+
+	persistStatsIfDirty()
+	if !statsDirty.Load() {
+		t.Fatal("statsDirty was cleared after a failed save; next retry would be skipped")
+	}
+}
+
+func TestSavePersistedStatsReportsRenameFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "stats-target")
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PROXY_STATS_FILE", path)
+
+	if err := savePersistedStats(); err == nil {
+		t.Fatal("savePersistedStats() succeeded despite rename target being a directory")
 	}
 }
