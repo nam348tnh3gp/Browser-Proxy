@@ -656,7 +656,8 @@ class MainActivity : Activity() {
             tr("Tab mới", "New tab"), tr("Tab ẩn danh mới", "New incognito tab"), tr("Dịch trang", "Translate page"), tr("Tìm trong trang", "Find in page"), tr("Thu phóng", "Zoom"),
             desktopLabel, tr("Lưu/Bỏ dấu trang", "Add/remove bookmark"), tr("Dấu trang", "Bookmarks"), tr("Lịch sử", "History"),
             tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel,
-            tr("Phân tích Data Saver", "Data Saver analytics")
+            tr("Phân tích Data Saver", "Data Saver analytics"),
+            tr("Quản lý quyền riêng tư", "Privacy and site data")
         )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("TGFN Browser · Tiện ích", "TGFN Browser · Tools"))
@@ -676,8 +677,55 @@ class MainActivity : Activity() {
                     11 -> closeCurrentTab()
                     12 -> toggleDataSaver()
                     13 -> showDataSaverAnalytics()
+                    14 -> showPrivacyManagement()
                 }
             }
+            .show()
+    }
+
+    private fun showPrivacyManagement() {
+        val choices = arrayOf(
+            tr("Xóa cache WebView", "Clear WebView cache"),
+            tr("Xóa cookie và phiên đăng nhập", "Clear cookies and sign-in sessions"),
+            tr("Xóa dữ liệu website (local storage)", "Clear website data (local storage)"),
+            tr("Xóa lịch sử duyệt web", "Clear browsing history"),
+            tr("Xóa toàn bộ dữ liệu duyệt web", "Clear all browsing data")
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Quyền riêng tư và dữ liệu website", "Privacy and site data"))
+            .setItems(choices) { _, which ->
+                android.app.AlertDialog.Builder(this)
+                    .setTitle(tr("Xác nhận xóa dữ liệu?", "Confirm data deletion?"))
+                    .setMessage(tr(
+                        "Thao tác này không thể hoàn tác. Xóa cookie sẽ đăng xuất khỏi các website; cài đặt, dấu trang và các tab đang mở được giữ lại.",
+                        "This cannot be undone. Clearing cookies signs you out of websites; settings, bookmarks, and open tabs are preserved."
+                    ))
+                    .setNegativeButton(tr("Hủy", "Cancel"), null)
+                    .setPositiveButton(tr("Xóa", "Clear")) { _, _ ->
+                        val clearCache = which == 0 || which == 4
+                        val clearCookies = which == 1 || which == 4
+                        val clearStorage = which == 2 || which == 4
+                        val clearHistory = which == 3 || which == 4
+                        if (clearCache) tabs.forEach { it.webView.clearCache(true) }
+                        if (clearHistory) {
+                            prefs.edit().remove("history").apply()
+                            tabs.forEach { it.webView.clearHistory() }
+                        }
+                        if (clearStorage) android.webkit.WebStorage.getInstance().deleteAllData()
+                        if (clearCookies) {
+                            android.webkit.CookieManager.getInstance().removeAllCookies {
+                                android.webkit.CookieManager.getInstance().flush()
+                                runOnUiThread {
+                                    Toast.makeText(this, tr("Đã xóa cookie và phiên đăng nhập", "Cookies and sign-in sessions cleared"), Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        } else {
+                            Toast.makeText(this, tr("Đã xóa dữ liệu đã chọn", "Selected browsing data cleared"), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .show()
+            }
+            .setNegativeButton(tr("Đóng", "Close"), null)
             .show()
     }
 
