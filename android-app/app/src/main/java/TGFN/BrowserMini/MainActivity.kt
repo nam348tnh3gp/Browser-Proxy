@@ -86,6 +86,7 @@ class MainActivity : Activity() {
     }
 
     private val tabs = mutableListOf<BrowserTab>()
+    private val readerOriginalUrls = mutableMapOf<WebView, String>()
     private var selectedTab = 0
     private lateinit var address: EditText
     private lateinit var status: TextView
@@ -398,6 +399,7 @@ class MainActivity : Activity() {
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                if (url?.startsWith(READER_BASE_URL) == true) return
                 if (!url.isNullOrBlank() && !url.equals("about:blank", ignoreCase = true)) {
                     tab.isNewTab = url == "https://tgfn.browser/"
                 }
@@ -412,6 +414,7 @@ class MainActivity : Activity() {
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
+                if (url?.startsWith(READER_BASE_URL) == true) return
                 if (!url.isNullOrBlank() && !url.equals("about:blank", ignoreCase = true)) {
                     tab.isNewTab = url == "https://tgfn.browser/"
                 }
@@ -656,7 +659,8 @@ class MainActivity : Activity() {
             tr("Tab mới", "New tab"), tr("Tab ẩn danh mới", "New incognito tab"), tr("Dịch trang", "Translate page"), tr("Tìm trong trang", "Find in page"), tr("Thu phóng", "Zoom"),
             desktopLabel, tr("Lưu/Bỏ dấu trang", "Add/remove bookmark"), tr("Dấu trang", "Bookmarks"), tr("Lịch sử", "History"),
             tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel,
-            tr("Phân tích Data Saver", "Data Saver analytics")
+            tr("Phân tích Data Saver", "Data Saver analytics"),
+            tr("Chế độ đọc", "Reader mode")
         )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("TGFN Browser · Tiện ích", "TGFN Browser · Tools"))
@@ -676,9 +680,72 @@ class MainActivity : Activity() {
                     11 -> closeCurrentTab()
                     12 -> toggleDataSaver()
                     13 -> showDataSaverAnalytics()
+                    14 -> toggleReaderMode()
                 }
             }
             .show()
+    }
+
+    private fun toggleReaderMode() {
+        val web = currentWebView() ?: return
+        val original = readerOriginalUrls[web]
+        if (original != null) {
+            readerOriginalUrls.remove(web)
+            web.loadUrl(original)
+            status.text = tr("Đang khôi phục trang gốc…", "Restoring original page…")
+            return
+        }
+        val url = web.url.orEmpty()
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            Toast.makeText(this, tr("Hãy mở một bài viết trước", "Open an article first"), Toast.LENGTH_SHORT).show()
+            return
+        }
+        status.text = tr("Đang tạo chế độ đọc…", "Preparing reader mode…")
+        val script = """
+            (function() {
+              var root = document.querySelector('article') ||
+                         document.querySelector('[role="main"]') ||
+                         document.querySelector('main') || document.body;
+              var title = (document.querySelector('h1') || document.querySelector('title'));
+              return JSON.stringify({
+                title: title ? (title.innerText || title.textContent || '') : document.title,
+                text: root ? (root.innerText || root.textContent || '') : ''
+              });
+            })();
+        """.trimIndent()
+        web.evaluateJavascript(script) { raw ->
+            try {
+                val decoded = org.json.JSONTokener(raw ?: "null").nextValue() as? String ?: "{}"
+                val article = org.json.JSONObject(decoded)
+                val title = article.optString("title", tr("Bài viết", "Article"))
+                val text = article.optString("text", "").trim()
+                if (text.length < 80) {
+                    status.text = tr("Không tìm thấy đủ nội dung để đọc", "Not enough article text found")
+                    Toast.makeText(this, status.text, Toast.LENGTH_SHORT).show()
+                    return@evaluateJavascript
+                }
+                fun escapeHtml(value: String): String = value
+                    .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    .replace("\"", "&quot;").replace("'", "&#39;")
+                val paragraphs = text.split(Regex("\\n\\s*\\n+"))
+                    .map { it.trim() }.filter { it.isNotEmpty() }
+                    .joinToString("\\n") { "<p>" + escapeHtml(it).replace("\\n", "<br>") + "</p>" }
+                val html = """
+                    <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+                    <title>${escapeHtml(title)}</title><style>
+                    body{max-width:720px;margin:0 auto;padding:24px 20px 48px;background:${if (darkMode) "#202124" else "#fff"};color:${if (darkMode) "#e8eaed" else "#202124"};font:18px/1.8 Georgia,serif}
+                    h1{font:700 30px/1.25 Arial,sans-serif;letter-spacing:-.4px;margin:10px 0 28px}
+                    p{margin:0 0 1.25em;overflow-wrap:anywhere} .tag{font:12px Arial,sans-serif;color:${if (darkMode) "#9aa0a6" else "#5f6368"};margin-bottom:22px}
+                    </style></head><body><div class="tag">TGFN Browser · Reader Mode</div><h1>${escapeHtml(title)}</h1>$paragraphs</body></html>
+                """.trimIndent()
+                readerOriginalUrls[web] = url
+                web.loadDataWithBaseURL(READER_BASE_URL, html, "text/html", "UTF-8", null)
+                status.text = tr("Chế độ đọc · Menu để trở về trang gốc", "Reader mode · Use Menu to restore the original")
+            } catch (_: Exception) {
+                status.text = tr("Không thể tạo chế độ đọc", "Could not create reader mode")
+                Toast.makeText(this, status.text, Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun showTabs() {
@@ -1809,6 +1876,7 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
 
     companion object {
         private const val NEW_TAB_SESSION_URL = "tgfn-internal://newtab"
+        private const val READER_BASE_URL = "https://tgfn-reader.local/"
         private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     }
 
