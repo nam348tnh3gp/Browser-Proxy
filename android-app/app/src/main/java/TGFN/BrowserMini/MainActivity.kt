@@ -667,7 +667,7 @@ class MainActivity : Activity() {
 
         try {
             val filename = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
-                .replace(Regex("[\\\\/:*?\\"<>|\\\\p{Cntrl}]"), "_")
+                .replace(Regex("[/\\\\:*?\"<>|]"), "_")
                 .trim()
                 .take(180)
                 .ifBlank { "download" }
