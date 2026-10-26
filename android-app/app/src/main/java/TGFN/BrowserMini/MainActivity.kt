@@ -919,12 +919,13 @@ class MainActivity : Activity() {
     }
 
     private fun restoreLastClosedTab() {
-        val url = lastClosedTabUrl
+        val url = lastClosedTabUrl ?: prefs.getString("last_closed_tab_url", null)
         if (url.isNullOrBlank()) {
             Toast.makeText(this, tr("Không có tab nào để khôi phục", "No recently closed tab to restore"), Toast.LENGTH_SHORT).show()
             return
         }
         lastClosedTabUrl = null
+        prefs.edit().remove("last_closed_tab_url").apply()
         createTab(url, true)
     }
 
@@ -1334,9 +1335,11 @@ class MainActivity : Activity() {
         val removedUrl = removed.webView.url ?: removed.url
         if (removedUrl.isNotBlank() && !removedUrl.equals("about:blank", ignoreCase = true) && !removed.isNewTab) {
             lastClosedTabUrl = removedUrl
+            prefs.edit().putString("last_closed_tab_url", removedUrl).apply()
         }
         (removed.webView.parent as? ViewGroup)?.removeView(removed.webView)
         removed.webView.stopLoading()
+        removed.webView.onPause()
         removed.webView.destroy()
         if (tabs.isEmpty()) {
             selectedTab = 0
