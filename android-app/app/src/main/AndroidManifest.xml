@@ -11,7 +11,8 @@
             android:name=".IncognitoActivity"
             android:process=":incognito"
             android:exported="false"
-            android:excludeFromRecents="true" />
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize" />
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
