@@ -222,38 +222,11 @@ class MainActivity : Activity() {
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(8), dp(10), dp(8))
+            setPadding(dp(8), dp(6), dp(6), dp(6))
             setBackgroundColor(canvas)
         }
 
-        val logo = TextView(this).apply {
-            text = "◉"
-            textSize = 26f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(accent)
-            gravity = Gravity.CENTER
-            contentDescription = "TGFN Browser"
-        }
-        lateinit var adblockBtn: TextView
-        adblockBtn = smallAction("Ad", tr("AdBlock", "AdBlock")) {
-            val on = !prefs.getBoolean("adblock_enabled", true)
-            prefs.edit().putBoolean("adblock_enabled", on).apply()
-            Toast.makeText(this, if (on) tr("Đã bật AdBlock", "AdBlock on") else tr("Đã tắt AdBlock", "AdBlock off"), Toast.LENGTH_SHORT).show()
-            currentWebView()?.reload()
-            adblockBtn.paintFlags = if (on) adblockBtn.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG else adblockBtn.paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
-            adblockBtn.setTextColor(if (on) accent else muted)
-        }
-        // Ad with slash when enabled
-        if (prefs.getBoolean("adblock_enabled", true)) {
-            adblockBtn.paintFlags = adblockBtn.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
-        }
-        adblockBtn.setTextColor(if (prefs.getBoolean("adblock_enabled", true)) accent else muted)
-        adblockBtn.textSize = 12f
-        adblockBtn.typeface = Typeface.DEFAULT_BOLD
-        topBar.addView(adblockBtn, LinearLayout.LayoutParams(dp(36), dp(42)))
-
-        topBar.addView(logo, LinearLayout.LayoutParams(dp(36), dp(42)))
-
+        // Keep the address field wide on phones; secondary controls live in the menu.
         val addressCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -280,7 +253,7 @@ class MainActivity : Activity() {
             background = null
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
             setSelectAllOnFocus(true)
-            contentDescription = tr("Địa chỉ trang web", "Website address")
+            contentDescription = tr("Địa chỉ hoặc tìm kiếm", "Address or search")
             setOnEditorActionListener { _, action, _ ->
                 if (action == EditorInfo.IME_ACTION_GO || action == EditorInfo.IME_ACTION_DONE) {
                     navigate()
@@ -343,8 +316,7 @@ class MainActivity : Activity() {
         bottomBar.addView(bottomAction("›", tr("Tiến", "Forward")) { currentWebView()?.let { if (it.canGoForward()) it.goForward() } })
         bottomBar.addView(bottomAction("⌂", tr("Trang chủ", "Home")) { loadHome() })
         bottomBar.addView(bottomAction("☆", tr("Dấu trang", "Bookmarks")) { showBookmarks() })
-        bottomBar.addView(bottomAction("+", tr("Tab mới", "New tab")) { createTab(null, true) })
-        bottomBar.addView(bottomAction("↗", tr("Chia sẻ", "Share")) { shareCurrentPage() })
+        bottomBar.addView(bottomAction("▢", tr("Tab", "Tabs")) { showTabs() })
         root.addView(bottomBar)
 
         val statusRow = LinearLayout(this).apply {
@@ -685,7 +657,7 @@ class MainActivity : Activity() {
         val item = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(2), dp(3), dp(2), dp(2))
+            setPadding(dp(2), dp(4), dp(2), dp(4))
             isClickable = true
             isFocusable = true
             contentDescription = label
@@ -700,7 +672,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(31)))
         item.addView(TextView(this).apply {
             text = label
-            textSize = 9f
+            textSize = 10f
             gravity = Gravity.CENTER
             setTextColor(muted)
             maxLines = 1
@@ -857,7 +829,20 @@ class MainActivity : Activity() {
             .show()
     }
 
+    private fun toggleAdBlock() {
+        val enabled = !prefs.getBoolean("adblock_enabled", true)
+        prefs.edit().putBoolean("adblock_enabled", enabled).apply()
+        if (enabled) loadAdHosts()
+        currentWebView()?.reload()
+        Toast.makeText(
+            this,
+            if (enabled) tr("Đã bật AdBlock", "AdBlock enabled") else tr("Đã tắt AdBlock", "AdBlock disabled"),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
     private fun showBrowserMenu() {
+        val adBlockLabel = if (prefs.getBoolean("adblock_enabled", true)) tr("AdBlock: đang bật", "AdBlock: on") else tr("AdBlock: đang tắt", "AdBlock: off")
         val desktopLabel = if (isDesktopModeEnabled()) tr("Phiên bản máy tính: đang bật", "Desktop site: on") else tr("Phiên bản máy tính", "Desktop site")
         val dataSaverLabel = if (isDataSaverEnabled()) "Data Saver: " + tr("bật", "on") else "Data Saver: " + tr("tắt", "off")
         val items = arrayOf(
@@ -866,7 +851,7 @@ class MainActivity : Activity() {
             tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel,
             tr("Phân tích Data Saver", "Data Saver analytics"), tr("Tải xuống", "Downloads"),
             tr("Quản lý quyền riêng tư", "Privacy and site data"), tr("Chế độ đọc", "Reader mode"),
-            tr("Nhóm tab", "Tab groups"), tr("Thao tác nhanh", "Quick actions")
+            tr("Nhóm tab", "Tab groups"), tr("Thao tác nhanh", "Quick actions"), adBlockLabel
         )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("TGFN Browser · Tiện ích", "TGFN Browser · Tools"))
@@ -891,6 +876,7 @@ class MainActivity : Activity() {
                     16 -> toggleReaderMode()
                     17 -> manageTabGroups()
                     18 -> showQuickActions()
+                    19 -> toggleAdBlock()
                 }
             }
             .show()
