@@ -480,7 +480,9 @@ class MainActivity : Activity() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 if (isSelected(tab)) {
                     progress.progress = newProgress
-                    pageLoading = newProgress in 1..99
+                    if (newProgress in 1..99) pageLoading = true else if (newProgress >= 100) pageLoading = false
+                    refreshButton.text = if (pageLoading) "×" else "↻"
+                    refreshButton.contentDescription = if (pageLoading) tr("Dừng tải", "Stop loading") else tr("Tải lại", "Reload")
                     progress.visibility = if (pageLoading) View.VISIBLE else View.GONE
                 }
             }
