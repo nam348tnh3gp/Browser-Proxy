@@ -190,6 +190,15 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             contentDescription = "TGFN Browser"
         }
+        val adblockBtn = smallAction("🛡", tr("AdBlock", "AdBlock")) {
+            val on = !prefs.getBoolean("adblock_enabled", true)
+            prefs.edit().putBoolean("adblock_enabled", on).apply()
+            Toast.makeText(this, if (on) tr("Đã bật AdBlock", "AdBlock on") else tr("Đã tắt AdBlock", "AdBlock off"), Toast.LENGTH_SHORT).show()
+            currentWebView()?.reload()
+        }
+        adblockBtn.setTextColor(if (prefs.getBoolean("adblock_enabled", true)) accent else muted)
+        topBar.addView(adblockBtn, LinearLayout.LayoutParams(dp(36), dp(42)))
+
         topBar.addView(logo, LinearLayout.LayoutParams(dp(36), dp(42)))
 
         val addressCard = LinearLayout(this).apply {
