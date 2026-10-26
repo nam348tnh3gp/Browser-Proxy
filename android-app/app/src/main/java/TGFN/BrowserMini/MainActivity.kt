@@ -190,7 +190,8 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             contentDescription = "TGFN Browser"
         }
-        val adblockBtn = smallAction("Ad", tr("AdBlock", "AdBlock")) {
+        lateinit var adblockBtn: TextView
+        adblockBtn = smallAction("Ad", tr("AdBlock", "AdBlock")) {
             val on = !prefs.getBoolean("adblock_enabled", true)
             prefs.edit().putBoolean("adblock_enabled", on).apply()
             Toast.makeText(this, if (on) tr("Đã bật AdBlock", "AdBlock on") else tr("Đã tắt AdBlock", "AdBlock off"), Toast.LENGTH_SHORT).show()
