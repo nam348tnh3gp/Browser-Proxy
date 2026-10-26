@@ -266,7 +266,6 @@ func addClientCounter(id string, update func(*clientCounterSet)) {
 	}
 }
 
-
 type persistedCounters struct {
 	HTTPRequests            int64 `json:"http_requests"`
 	HTTPResponseBytes       int64 `json:"http_response_bytes"`
@@ -528,7 +527,8 @@ func proxyHandlerWithAuth(username, password string) http.Handler {
 			return
 		}
 
-		proxyStats.httpRequests.Add(1); markStatsDirty()
+		proxyStats.httpRequests.Add(1)
+		markStatsDirty()
 		addClientCounter(clientID, func(c *clientCounterSet) { c.httpRequests.Add(1) })
 		target := ""
 		if r.URL != nil {
