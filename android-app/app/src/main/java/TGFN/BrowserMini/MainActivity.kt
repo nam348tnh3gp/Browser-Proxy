@@ -667,7 +667,7 @@ class MainActivity : Activity() {
             text = symbol
             textSize = 25f
             gravity = Gravity.CENTER
-            setTextColor(if (label == tr("Tab mới", "New tab")) accent else ink)
+            setTextColor(if (label == tr("Tab mới", "New tab") || label == tr("Trang chủ", "Home")) accent else ink)
             typeface = Typeface.DEFAULT
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(31)))
         item.addView(TextView(this).apply {
