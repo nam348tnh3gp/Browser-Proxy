@@ -352,6 +352,8 @@ class MainActivity : Activity() {
 
     private fun createTab(url: String?, select: Boolean, popupTransport: Message? = null) {
         val web = WebView(this).apply {
+            // A newly created background tab must not cover the currently selected page.
+            visibility = if (select) View.VISIBLE else View.GONE
             setBackgroundColor(canvas)
             settings.javaScriptEnabled = true
             configureWebViewTheme(settings)
@@ -573,7 +575,13 @@ class MainActivity : Activity() {
     private fun selectTab(index: Int) {
         if (index !in tabs.indices) return
         selectedTab = index
-        tabs.forEachIndexed { i, tab -> tab.webView.visibility = if (i == index) View.VISIBLE else View.GONE }
+        tabs.forEachIndexed { i, tab ->
+            val selected = i == index
+            tab.webView.visibility = if (selected) View.VISIBLE else View.GONE
+            // Pause inactive tabs to reduce background WebView work without globally
+            // pausing timers used by the active tab.
+            if (selected) tab.webView.onResume() else tab.webView.onPause()
+        }
         val tab = tabs[index]
         setAddress(tab.webView.url ?: tab.url)
         status.text = tab.title
@@ -1835,6 +1843,20 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         }
         val web = currentWebView()
         if (web != null && web.canGoBack()) web.goBack() else if (tabs.size > 1) closeCurrentTab() else super.onBackPressed()
+    }
+
+    override fun onPause() {
+        // Suspend WebView rendering/processing while the browser Activity is backgrounded.
+        tabs.forEach { it.webView.onPause() }
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Resume only the selected tab; keep other tabs suspended.
+        tabs.forEachIndexed { index, tab ->
+            if (index == selectedTab) tab.webView.onResume() else tab.webView.onPause()
+        }
     }
 
     override fun onDestroy() {
