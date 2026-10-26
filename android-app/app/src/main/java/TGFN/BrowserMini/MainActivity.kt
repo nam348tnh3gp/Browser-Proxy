@@ -1367,7 +1367,9 @@ No account, no analytics, no ads."""
     private fun showProxyGuide() {
         val repo = "https://github.com/nam348tnh3gp/Browser-Proxy/tree/main/go-proxy"
         val message = tr(
-            """Máy tính
+            """Bạn có thể tự chạy proxy Go của TGFN.
+
+Máy tính
 1. Cài Go: https://go.dev/dl/
 2. Tải mã: $repo
 3. Trong go-proxy:
@@ -1383,7 +1385,9 @@ Termux (chạy ngay trên Android)
    (cùng máy) hoặc IP điện thoại:8080 nếu máy khác cùng Wi-Fi
 
 Không dùng 127.0.0.1 khi proxy chạy trên máy khác.""",
-            """Computer
+            """You can run the TGFN Go proxy yourself.
+
+Computer
 1. Install Go: https://go.dev/dl/
 2. Get the code: $repo
 3. In go-proxy:
