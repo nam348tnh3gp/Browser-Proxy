@@ -1367,28 +1367,38 @@ No account, no analytics, no ads."""
     private fun showProxyGuide() {
         val repo = "https://github.com/nam348tnh3gp/Browser-Proxy/tree/main/go-proxy"
         val message = tr(
-            """Bạn có thể tự chạy proxy Go của TGFN.
-
+            """Máy tính
 1. Cài Go: https://go.dev/dl/
 2. Tải mã: $repo
-3. Trong thư mục go-proxy chạy:
+3. Trong go-proxy:
    PROXY_LISTEN=0.0.0.0:8080 go run .
-4. Trên điện thoại nhập proxy:
-   IP-máy-tính:8080
-   (cùng Wi-Fi; không dùng 127.0.0.1)
+4. Trên điện thoại nhập: IP-máy-tính:8080
 
-Máy tính và điện thoại phải cùng mạng. Mở cổng 8080 nếu có tường lửa.""",
-            """You can run the TGFN Go proxy yourself.
+Termux (chạy ngay trên Android)
+1. pkg update && pkg install golang git
+2. git clone https://github.com/nam348tnh3gp/Browser-Proxy.git
+3. cd Browser-Proxy/go-proxy
+4. PROXY_LISTEN=0.0.0.0:8080 go run .
+5. Trong app nhập: 127.0.0.1:8080
+   (cùng máy) hoặc IP điện thoại:8080 nếu máy khác cùng Wi-Fi
 
+Không dùng 127.0.0.1 khi proxy chạy trên máy khác.""",
+            """Computer
 1. Install Go: https://go.dev/dl/
 2. Get the code: $repo
-3. In the go-proxy folder run:
+3. In go-proxy:
    PROXY_LISTEN=0.0.0.0:8080 go run .
-4. On the phone enter:
-   your-computer-ip:8080
-   (same Wi-Fi; do not use 127.0.0.1)
+4. On the phone enter: computer-ip:8080
 
-Phone and computer must be on the same network. Open port 8080 if a firewall is on."""
+Termux (run on Android)
+1. pkg update && pkg install golang git
+2. git clone https://github.com/nam348tnh3gp/Browser-Proxy.git
+3. cd Browser-Proxy/go-proxy
+4. PROXY_LISTEN=0.0.0.0:8080 go run .
+5. In the app enter: 127.0.0.1:8080
+   (same phone) or the phone IP:8080 for another device on the same Wi-Fi
+
+Do not use 127.0.0.1 when the proxy runs on another device."""
         )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("Tự chạy proxy", "Run your own proxy"))
