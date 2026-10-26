@@ -348,7 +348,6 @@ func TestReRegisteringClientRemovesStaleIPMapping(t *testing.T) {
 	}
 }
 
-
 func TestSavePersistedStatsWritesJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "proxy-stats.json")
 	t.Setenv("PROXY_STATS_FILE", path)
