@@ -190,13 +190,21 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             contentDescription = "TGFN Browser"
         }
-        val adblockBtn = smallAction("🛡", tr("AdBlock", "AdBlock")) {
+        val adblockBtn = smallAction("Ad", tr("AdBlock", "AdBlock")) {
             val on = !prefs.getBoolean("adblock_enabled", true)
             prefs.edit().putBoolean("adblock_enabled", on).apply()
             Toast.makeText(this, if (on) tr("Đã bật AdBlock", "AdBlock on") else tr("Đã tắt AdBlock", "AdBlock off"), Toast.LENGTH_SHORT).show()
             currentWebView()?.reload()
+            adblockBtn.paintFlags = if (on) adblockBtn.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG else adblockBtn.paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
+            adblockBtn.setTextColor(if (on) accent else muted)
+        }
+        // Ad with slash when enabled
+        if (prefs.getBoolean("adblock_enabled", true)) {
+            adblockBtn.paintFlags = adblockBtn.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
         }
         adblockBtn.setTextColor(if (prefs.getBoolean("adblock_enabled", true)) accent else muted)
+        adblockBtn.textSize = 12f
+        adblockBtn.typeface = Typeface.DEFAULT_BOLD
         topBar.addView(adblockBtn, LinearLayout.LayoutParams(dp(36), dp(42)))
 
         topBar.addView(logo, LinearLayout.LayoutParams(dp(36), dp(42)))
