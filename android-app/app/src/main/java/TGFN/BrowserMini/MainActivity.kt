@@ -67,7 +67,7 @@ class MainActivity : Activity() {
                 }
                 adDomains.clear()
                 adDomains.addAll(parsed)
-                runOnUiThread { status.text = tr("AdBlock: ", "AdBlock: ") + parsed.size + tr(" domain", " domains") }
+                runOnUiThread { if (!isFinishing) status.text = tr("AdBlock: ", "AdBlock: ") + parsed.size + tr(" domain", " domains") }
             } catch (_: Exception) { }
         }.start()
     }
@@ -875,6 +875,7 @@ class MainActivity : Activity() {
         removed.webView.destroy()
         if (tabs.isEmpty()) {
             selectedTab = 0
+            createTab(null, true)
         } else {
             if (index < selectedTab) selectedTab--
             else if (index == selectedTab) selectedTab = (index - 1).coerceAtLeast(0)
@@ -1176,8 +1177,10 @@ class MainActivity : Activity() {
         status.text = tr("Đang chuẩn bị dịch…", "Preparing translation…")
         web.evaluateJavascript(collectScript) { raw ->
             try {
-                val decoded = org.json.JSONTokener(raw ?: "null").nextValue() as? String ?: "[]"
-                val originals = org.json.JSONArray(decoded)
+                val decoded = try {
+                    org.json.JSONTokener(raw ?: "null").nextValue() as? String
+                } catch (_: Exception) { null } ?: "[]"
+                val originals = try { org.json.JSONArray(decoded) } catch (_: Exception) { org.json.JSONArray() }
                 if (originals.length() == 0) {
                     status.text = tr("Không tìm thấy văn bản để dịch", "No text found to translate")
                     Toast.makeText(this, tr("Không tìm thấy văn bản phù hợp trên trang", "No suitable text found on this page"), Toast.LENGTH_LONG).show()

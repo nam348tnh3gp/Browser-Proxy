@@ -117,7 +117,7 @@ class IncognitoActivity : Activity() {
  }
  private fun showTabs(){if(tabs.isEmpty())return;android.app.AlertDialog.Builder(this).setTitle(tr("Tab ẩn danh (","Incognito tabs (")+tabs.size+")").setItems(tabs.mapIndexed{i,t->(i+1).toString()+". "+t.title+" · "+host(t.web.url?:t.url)}.toTypedArray()){_,i->selectTab(i)}.setPositiveButton(tr("Tab mới","New tab")){_,_->addTab(null)}.setNegativeButton(tr("Đóng","Close"),null).show()}
  private fun selectTab(i:Int){if(i !in tabs.indices)return;selected=i;tabs.forEachIndexed{n,t->t.web.visibility=if(n==i)View.VISIBLE else View.GONE};setAddress(tabs[i].web.url?:tabs[i].url);status.text=tabs[i].title;updateCount()}
- private fun closeTab(i:Int){if(i !in tabs.indices){if(tabs.isEmpty())finish();return};val t=tabs.removeAt(i);(t.web.parent as? ViewGroup)?.removeView(t.web);t.web.stopLoading();t.web.clearHistory();t.web.clearCache(true);t.web.clearFormData();t.web.destroy();if(tabs.isEmpty()){selected=-1;addTab(null)}else{if(i<selected)selected-- else if(i==selected)selected=(i-1).coerceAtLeast(0);selectTab(selected.coerceIn(0,tabs.lastIndex))};updateCount()}
+ private fun closeTab(i:Int){if(i !in tabs.indices){if(tabs.isEmpty())finish();return};val t=tabs.removeAt(i);(t.web.parent as? ViewGroup)?.removeView(t.web);t.web.stopLoading();t.web.clearHistory();t.web.clearCache(true);t.web.clearFormData();t.web.destroy();if(tabs.isEmpty()){selected=-1;finish();return}else{if(i<selected)selected-- else if(i==selected)selected=(i-1).coerceAtLeast(0);selectTab(selected.coerceIn(0,tabs.lastIndex))};updateCount()}
  private fun navigate(){val raw=address.text.toString().trim();if(raw.isBlank())return;val u=if(raw.contains("://"))raw else if(raw.contains(" ")||!raw.contains("."))"https://www.google.com/search?q="+java.net.URLEncoder.encode(raw,"UTF-8") else "https://"+raw;try{val p=URI(u);if((p.scheme.equals("http",true)||p.scheme.equals("https",true))&&!p.host.isNullOrBlank())current()?.loadUrl(u)else Toast.makeText(this,tr("Chỉ hỗ trợ HTTP/HTTPS","Only HTTP/HTTPS is supported"),Toast.LENGTH_SHORT).show()}catch(_:Exception){Toast.makeText(this,tr("URL không hợp lệ","Invalid URL"),Toast.LENGTH_SHORT).show()}}
  private fun current()=tabs.getOrNull(selected)?.web
  private fun isSelected(t:Tab)=tabs.getOrNull(selected)===t
@@ -138,7 +138,13 @@ class IncognitoActivity : Activity() {
   callback?.onCustomViewHidden()
  }
  @Suppress("DEPRECATION")
- override fun onBackPressed(){if(fullscreenView!=null)hideFullscreenView() else super.onBackPressed()}
+ override fun onBackPressed(){
+  if(fullscreenView!=null){hideFullscreenView();return}
+  val web=current()
+  if(web!=null && web.canGoBack()){web.goBack();return}
+  if(tabs.size>1){closeTab(selected);return}
+  super.onBackPressed()
+ }
  private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
  private fun clearPrivateData(){try{CookieManager.getInstance().removeAllCookies(null);CookieManager.getInstance().flush();WebStorage.getInstance().deleteAllData()}catch(_:Exception){}}
  override fun onDestroy(){hideFullscreenView();tabs.forEach{t->(t.web.parent as? ViewGroup)?.removeView(t.web);t.web.stopLoading();t.web.clearHistory();t.web.clearCache(true);t.web.clearFormData();t.web.destroy()};tabs.clear();clearPrivateData();super.onDestroy()}
