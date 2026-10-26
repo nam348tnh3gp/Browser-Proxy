@@ -694,11 +694,85 @@ class MainActivity : Activity() {
     }
 
     private fun openDownloads() {
+        val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+        val rows = mutableListOf<Pair<Long, String>>()
         try {
-            startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
-        } catch (_: Exception) {
-            Toast.makeText(this, tr("Không tìm thấy trình quản lý tải xuống", "No downloads app is available"), Toast.LENGTH_SHORT).show()
+            manager.query(DownloadManager.Query().setFilterByStatus(
+                DownloadManager.STATUS_PENDING or DownloadManager.STATUS_RUNNING or
+                    DownloadManager.STATUS_PAUSED or DownloadManager.STATUS_SUCCESSFUL or
+                    DownloadManager.STATUS_FAILED
+            )).use { cursor ->
+                val idCol = cursor.getColumnIndex(DownloadManager.COLUMN_ID)
+                val titleCol = cursor.getColumnIndex(DownloadManager.COLUMN_TITLE)
+                val statusCol = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                val downloadedCol = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                val totalCol = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                while (cursor.moveToNext() && rows.size < 30) {
+                    val id = cursor.getLong(idCol)
+                    val title = cursor.getString(titleCol) ?: ("Download #" + id)
+                    val state = when (cursor.getInt(statusCol)) {
+                        DownloadManager.STATUS_PENDING -> tr("Đang chờ", "Pending")
+                        DownloadManager.STATUS_RUNNING -> tr("Đang tải", "Downloading")
+                        DownloadManager.STATUS_PAUSED -> tr("Tạm dừng", "Paused")
+                        DownloadManager.STATUS_SUCCESSFUL -> tr("Hoàn tất", "Complete")
+                        DownloadManager.STATUS_FAILED -> tr("Thất bại", "Failed")
+                        else -> tr("Không rõ", "Unknown")
+                    }
+                    val downloaded = cursor.getLong(downloadedCol).coerceAtLeast(0L)
+                    val total = cursor.getLong(totalCol)
+                    val percent = if (total > 0) " · " + (downloaded * 100 / total).coerceIn(0, 100) + "%" else ""
+                    rows.add(id to "$title\n$state$percent")
+                }
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, tr("Không đọc được danh sách tải xuống", "Could not read downloads"), Toast.LENGTH_SHORT).show()
+            return
         }
+        if (rows.isEmpty()) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle(tr("Tải xuống", "Downloads"))
+                .setMessage(tr("Chưa có tệp tải xuống.", "No downloads yet."))
+                .setPositiveButton(tr("Đóng", "Close"), null)
+                .show()
+            return
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Tải xuống gần đây", "Recent downloads"))
+            .setItems(rows.map { it.second }.toTypedArray()) { _, which ->
+                val id = rows[which].first
+                val cursor = manager.query(DownloadManager.Query().setFilterById(id))
+                cursor.use {
+                    if (!it.moveToFirst()) return@use
+                    val statusCol = it.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    if (it.getInt(statusCol) == DownloadManager.STATUS_SUCCESSFUL) {
+                        try {
+                            val uriCol = it.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+                            val localUri = it.getString(uriCol)
+                            if (!localUri.isNullOrBlank()) {
+                                val mimeCol = it.getColumnIndex(DownloadManager.COLUMN_MEDIA_TYPE)
+                                val mime = it.getString(mimeCol) ?: "*/*"
+                                startActivity(Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(android.net.Uri.parse(localUri), mime)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                })
+                            }
+                        } catch (_: Exception) {
+                            Toast.makeText(this, tr("Không tìm thấy ứng dụng mở tệp", "No app can open this file"), Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        val message = if (it.getInt(statusCol) == DownloadManager.STATUS_FAILED)
+                            tr("Tải xuống thất bại. Hãy kiểm tra kết nối và thử lại.", "Download failed. Check your connection and retry.")
+                        else tr("Tệp vẫn đang tải. Mở mục này lại sau khi hoàn tất.", "This download is still in progress. Open it after it completes.")
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNeutralButton(tr("Mở trình quản lý hệ thống", "System download manager")) { _, _ ->
+                try { startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)) }
+                catch (_: Exception) { Toast.makeText(this, tr("Không có trình quản lý tải xuống", "No downloads app is available"), Toast.LENGTH_SHORT).show() }
+            }
+            .setNegativeButton(tr("Đóng", "Close"), null)
+            .show()
     }
 
     private fun showBrowserMenu() {
