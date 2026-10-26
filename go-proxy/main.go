@@ -420,7 +420,11 @@ func main() {
 	}
 	addr := os.Getenv("PROXY_LISTEN")
 	if addr == "" {
-		addr = "127.0.0.1:8080"
+		if port := os.Getenv("PORT"); port != "" {
+			addr = "0.0.0.0:" + port
+		} else {
+			addr = "127.0.0.1:8080"
+		}
 	}
 	server := &http.Server{
 		Addr:              addr,
@@ -478,6 +482,13 @@ func proxyHandlerWithAuth(username, password string) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
+		if r.Method == http.MethodGet && r.URL != nil && !r.URL.IsAbs() && (r.URL.Path == "/health" || r.URL.Path == "/__tgfn/health") {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+			return
+		}
 		if username != "" && !validProxyAuthorization(r.Header.Get("Proxy-Authorization"), username, password) {
 			w.Header().Set("Proxy-Authenticate", `Basic realm="TGFN.BrowserMini"`)
 			http.Error(w, "Proxy authentication required", http.StatusProxyAuthRequired)

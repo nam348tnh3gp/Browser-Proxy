@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: tgfn-go-proxy
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PROXY_STATS_FILE
+        value: /tmp/proxy-stats.json
