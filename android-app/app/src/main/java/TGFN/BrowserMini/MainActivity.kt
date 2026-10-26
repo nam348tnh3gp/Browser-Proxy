@@ -34,7 +34,7 @@ import java.net.URI
 import java.util.concurrent.Executor
 
 class MainActivity : Activity() {
-    private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false)
+    private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false, var group: String = "Default")
 
 
     private val adDomains = java.util.Collections.synchronizedSet(mutableSetOf<String>())
@@ -87,6 +87,7 @@ class MainActivity : Activity() {
     }
 
     private val tabs = mutableListOf<BrowserTab>()
+    private val tabGroups = linkedSetOf("Default")
     private val readerOriginalUrls = mutableMapOf<WebView, String>()
     private var selectedTab = 0
     private lateinit var address: EditText
@@ -135,7 +136,15 @@ class MainActivity : Activity() {
                 status.text = tr("WebView không hỗ trợ cấu hình proxy", "This WebView does not support proxy configuration")
             }
             if (!savedUrls.isNullOrEmpty()) {
-                savedUrls.forEachIndexed { index, url -> createTab(url, index == restoreIndex) }
+                val savedGroups = try { org.json.JSONArray(prefs.getString("session_tab_groups", "[]")) } catch (_: Exception) { org.json.JSONArray() }
+                val knownGroups = try { org.json.JSONArray(prefs.getString("tab_group_names", org.json.JSONArray().put("Default").toString())) } catch (_: Exception) { org.json.JSONArray() }
+                for (i in 0 until knownGroups.length()) knownGroups.optString(i).takeIf { it.isNotBlank() }?.let { tabGroups.add(it) }
+                savedUrls.forEachIndexed { index, url ->
+                    createTab(url, index == restoreIndex)
+                    val group = savedGroups.optString(index, "Default").ifBlank { "Default" }
+                    tabs.lastOrNull()?.group = group
+                    tabGroups.add(group)
+                }
                 selectedTab = restoreIndex.coerceIn(0, tabs.lastIndex)
                 selectTab(selectedTab)
                 persistSession()
@@ -385,6 +394,7 @@ class MainActivity : Activity() {
             isNewTab = shouldShowNewTab
         )
         tabs.add(tab)
+        tabGroups.add(tab.group)
         // Update the visible tab counter immediately, before WebView callbacks run.
         updateTabButton()
         webContainer.addView(web, FrameLayout.LayoutParams(
@@ -786,7 +796,8 @@ class MainActivity : Activity() {
             desktopLabel, tr("Lưu/Bỏ dấu trang", "Add/remove bookmark"), tr("Dấu trang", "Bookmarks"), tr("Lịch sử", "History"),
             tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel,
             tr("Phân tích Data Saver", "Data Saver analytics"), tr("Tải xuống", "Downloads"),
-            tr("Quản lý quyền riêng tư", "Privacy and site data"), tr("Chế độ đọc", "Reader mode")
+            tr("Quản lý quyền riêng tư", "Privacy and site data"), tr("Chế độ đọc", "Reader mode"),
+            tr("Nhóm tab", "Tab groups")
         )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("TGFN Browser · Tiện ích", "TGFN Browser · Tools"))
@@ -809,6 +820,7 @@ class MainActivity : Activity() {
                     14 -> openDownloads()
                     15 -> showPrivacyManagement()
                     16 -> toggleReaderMode()
+                    17 -> manageTabGroups()
                 }
             }
             .show()
@@ -920,6 +932,75 @@ class MainActivity : Activity() {
                 Toast.makeText(this, status.text, Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun manageTabGroups() {
+        val options = mutableListOf(tr("Tạo nhóm mới", "Create a group"), tr("Chuyển tab hiện tại vào nhóm…", "Move current tab to a group…"))
+        val groups = tabGroups.toList().ifEmpty { listOf("Default") }
+        groups.forEach { group -> options.add("${group} (${tabs.count { it.group == group }})") }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Nhóm tab", "Tab groups"))
+            .setItems(options.toTypedArray()) { _, which ->
+                when (which) {
+                    0 -> {
+                        val input = EditText(this).apply {
+                            hint = tr("Tên nhóm", "Group name")
+                            setSingleLine(true)
+                        }
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle(tr("Tạo nhóm tab", "Create tab group"))
+                            .setView(input)
+                            .setNegativeButton(tr("Hủy", "Cancel"), null)
+                            .setPositiveButton(tr("Tạo và chuyển tab", "Create and move tab")) { _, _ ->
+                                val name = input.text.toString().trim().take(40)
+                                if (name.isBlank()) {
+                                    Toast.makeText(this, tr("Tên nhóm không được để trống", "Group name cannot be empty"), Toast.LENGTH_SHORT).show()
+                                } else {
+                                    tabGroups.add(name)
+                                    currentTab()?.group = name
+                                    persistSession()
+                                    Toast.makeText(this, tr("Đã chuyển tab vào nhóm: ", "Moved tab to group: ") + name, Toast.LENGTH_SHORT).show()
+                                }
+                            }.show()
+                    }
+                    1 -> chooseTabGroup(currentTab())
+                    else -> {
+                        val group = groups[which - 2]
+                        val members = tabs.indices.filter { tabs[it].group == group }
+                        if (members.isEmpty()) {
+                            Toast.makeText(this, tr("Nhóm này chưa có tab", "This group has no tabs"), Toast.LENGTH_SHORT).show()
+                        } else {
+                            val labels = members.map { index ->
+                                (if (index == selectedTab) "● " else "○ ") +
+                                    (tabs[index].title.takeIf { it.isNotBlank() } ?: tr("Tab mới", "New tab"))
+                            }.toTypedArray()
+                            android.app.AlertDialog.Builder(this)
+                                .setTitle(group)
+                                .setItems(labels) { _, selected -> selectTab(members[selected]) }
+                                .setPositiveButton(tr("Đóng", "Close"), null)
+                                .show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(tr("Đóng", "Close"), null)
+            .show()
+    }
+
+    private fun currentTab(): BrowserTab? = tabs.getOrNull(selectedTab)
+
+    private fun chooseTabGroup(tab: BrowserTab?) {
+        if (tab == null) return
+        val groups = tabGroups.toList().ifEmpty { listOf("Default") }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Chuyển tab vào nhóm", "Move tab to group"))
+            .setItems(groups.toTypedArray()) { _, which ->
+                tab.group = groups[which]
+                persistSession()
+                Toast.makeText(this, tr("Đã chuyển vào nhóm: ", "Moved to group: ") + tab.group, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(tr("Hủy", "Cancel"), null)
+            .show()
     }
 
     private fun showTabs() {
@@ -1889,6 +1970,8 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         }
         prefs.edit()
             .putString("session_tab_urls", urls.toString())
+            .putString("session_tab_groups", org.json.JSONArray().apply { tabs.forEach { put(it.group) } }.toString())
+            .putString("tab_group_names", org.json.JSONArray().apply { tabGroups.forEach { put(it) } }.toString())
             .putInt("session_selected_tab", if (tabs.isEmpty()) 0 else selectedTab.coerceIn(0, tabs.lastIndex))
             .apply()
     }
