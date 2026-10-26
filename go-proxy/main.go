@@ -364,7 +364,7 @@ func loadPersistedStats() {
 	log.Printf("loaded analytics for %d clients from %s", len(file.Registered), statsFilePath())
 }
 
-func savePersistedStats() {
+func savePersistedStats() error {
 	file := persistedStatsFile{
 		SavedAt: time.Now().UTC().Format(time.RFC3339),
 		Global:  countersToPersisted(&proxyStats),
@@ -380,16 +380,21 @@ func savePersistedStats() {
 		file.IDByIP[ip] = id
 	}
 	clientTracking.RUnlock()
+
 	data, err := json.MarshalIndent(file, "", "  ")
 	if err != nil {
-		return
+		return fmt.Errorf("encode stats: %w", err)
 	}
-	tmp := statsFilePath() + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		log.Printf("stats save failed: %v", err)
-		return
+	path := statsFilePath()
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return fmt.Errorf("write temporary stats file %q: %w", tmp, err)
 	}
-	_ = os.Rename(tmp, statsFilePath())
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("replace stats file %q: %w", path, err)
+	}
+	return nil
 }
 
 func startStatsPersistence() {
@@ -399,7 +404,10 @@ func startStatsPersistence() {
 		defer ticker.Stop()
 		for range ticker.C {
 			if statsDirty.Swap(false) {
-				savePersistedStats()
+				if err := savePersistedStats(); err != nil {
+					log.Printf("stats save failed: %v; will retry", err)
+					statsDirty.Store(true)
+				}
 			}
 		}
 	}()
