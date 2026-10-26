@@ -231,6 +231,7 @@ func registerClient(remoteAddr, id string) bool {
 	if clientTracking.stats[id] == nil {
 		clientTracking.stats[id] = &clientCounterSet{}
 	}
+	markStatsDirty()
 	return true
 }
 
@@ -261,7 +262,148 @@ func clientIDFromRequest(r *http.Request) string {
 func addClientCounter(id string, update func(*clientCounterSet)) {
 	if counters := clientCounters(id); counters != nil {
 		update(counters)
+		markStatsDirty()
 	}
+}
+
+
+type persistedCounters struct {
+	HTTPRequests            int64 `json:"http_requests"`
+	HTTPResponseBytes       int64 `json:"http_response_bytes"`
+	GzipResponses           int64 `json:"gzip_responses"`
+	GzipOriginalBytes       int64 `json:"gzip_original_bytes"`
+	GzipCompressedBytes     int64 `json:"gzip_compressed_bytes"`
+	ConnectTunnels          int64 `json:"connect_tunnels"`
+	ConnectClientToUpstream int64 `json:"connect_client_to_upstream_bytes"`
+	ConnectUpstreamToClient int64 `json:"connect_upstream_to_client_bytes"`
+}
+
+type persistedStatsFile struct {
+	SavedAt    string                       `json:"saved_at"`
+	Global     persistedCounters            `json:"global"`
+	Clients    map[string]persistedCounters `json:"clients"`
+	Registered []string                     `json:"registered"`
+	IDByIP     map[string]string            `json:"id_by_ip"`
+}
+
+func statsFilePath() string {
+	if p := os.Getenv("PROXY_STATS_FILE"); p != "" {
+		return p
+	}
+	return "proxy-stats.json"
+}
+
+func countersToPersisted(c *clientCounterSet) persistedCounters {
+	if c == nil {
+		return persistedCounters{}
+	}
+	return persistedCounters{
+		HTTPRequests:            c.httpRequests.Load(),
+		HTTPResponseBytes:       c.httpResponseBytes.Load(),
+		GzipResponses:           c.gzipResponses.Load(),
+		GzipOriginalBytes:       c.gzipOriginalBytes.Load(),
+		GzipCompressedBytes:     c.gzipCompressedBytes.Load(),
+		ConnectTunnels:          c.connectTunnels.Load(),
+		ConnectClientToUpstream: c.connectClientToUpstream.Load(),
+		ConnectUpstreamToClient: c.connectUpstreamToClient.Load(),
+	}
+}
+
+func applyPersisted(c *clientCounterSet, p persistedCounters) {
+	c.httpRequests.Store(p.HTTPRequests)
+	c.httpResponseBytes.Store(p.HTTPResponseBytes)
+	c.gzipResponses.Store(p.GzipResponses)
+	c.gzipOriginalBytes.Store(p.GzipOriginalBytes)
+	c.gzipCompressedBytes.Store(p.GzipCompressedBytes)
+	c.connectTunnels.Store(p.ConnectTunnels)
+	c.connectClientToUpstream.Store(p.ConnectClientToUpstream)
+	c.connectUpstreamToClient.Store(p.ConnectUpstreamToClient)
+}
+
+var statsDirty atomic.Bool
+
+func markStatsDirty() { statsDirty.Store(true) }
+
+func loadPersistedStats() {
+	data, err := os.ReadFile(statsFilePath())
+	if err != nil {
+		return
+	}
+	var file persistedStatsFile
+	if err := json.Unmarshal(data, &file); err != nil {
+		log.Printf("stats load failed: %v", err)
+		return
+	}
+	applyPersisted(&proxyStats, file.Global)
+	clientTracking.Lock()
+	defer clientTracking.Unlock()
+	if clientTracking.registeredIDs == nil {
+		clientTracking.registeredIDs = make(map[string]struct{})
+	}
+	if clientTracking.stats == nil {
+		clientTracking.stats = make(map[string]*clientCounterSet)
+	}
+	if clientTracking.idByIP == nil {
+		clientTracking.idByIP = make(map[string]string)
+	}
+	for _, id := range file.Registered {
+		if id == "" {
+			continue
+		}
+		clientTracking.registeredIDs[id] = struct{}{}
+		cs := &clientCounterSet{}
+		if p, ok := file.Clients[id]; ok {
+			applyPersisted(cs, p)
+		}
+		clientTracking.stats[id] = cs
+	}
+	for ip, id := range file.IDByIP {
+		if ip != "" && id != "" {
+			clientTracking.idByIP[ip] = id
+		}
+	}
+	log.Printf("loaded analytics for %d clients from %s", len(file.Registered), statsFilePath())
+}
+
+func savePersistedStats() {
+	file := persistedStatsFile{
+		SavedAt: time.Now().UTC().Format(time.RFC3339),
+		Global:  countersToPersisted(&proxyStats),
+		Clients: map[string]persistedCounters{},
+		IDByIP:  map[string]string{},
+	}
+	clientTracking.RLock()
+	for id := range clientTracking.registeredIDs {
+		file.Registered = append(file.Registered, id)
+		file.Clients[id] = countersToPersisted(clientTracking.stats[id])
+	}
+	for ip, id := range clientTracking.idByIP {
+		file.IDByIP[ip] = id
+	}
+	clientTracking.RUnlock()
+	data, err := json.MarshalIndent(file, "", "  ")
+	if err != nil {
+		return
+	}
+	tmp := statsFilePath() + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		log.Printf("stats save failed: %v", err)
+		return
+	}
+	_ = os.Rename(tmp, statsFilePath())
+}
+
+func startStatsPersistence() {
+	loadPersistedStats()
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if statsDirty.Swap(false) {
+				savePersistedStats()
+			}
+		}
+	}()
 }
 
 func maxInt64(a, b int64) int64 {
@@ -287,7 +429,9 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       90 * time.Second,
 	}
-	log.Printf("TGFN.BrowserMini Go proxy listening on %s", addr)
+	startStatsPersistence()
+	log.Printf("TGFN.BrowserMini Go proxy listening on %s (stats file %s)", addr, statsFilePath())
+	defer savePersistedStats()
 	log.Fatal(server.ListenAndServe())
 }
 
@@ -384,7 +528,7 @@ func proxyHandlerWithAuth(username, password string) http.Handler {
 			return
 		}
 
-		proxyStats.httpRequests.Add(1)
+		proxyStats.httpRequests.Add(1); markStatsDirty()
 		addClientCounter(clientID, func(c *clientCounterSet) { c.httpRequests.Add(1) })
 		target := ""
 		if r.URL != nil {
