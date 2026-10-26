@@ -1,6 +1,7 @@
 package TGFN.BrowserMini
 
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -503,6 +504,9 @@ class MainActivity : Activity() {
                 hideFullscreenView()
             }
         }
+        web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+            enqueueDownload(url, userAgent, contentDisposition, mimeType)
+        }
         if (select) selectTab(tabs.lastIndex)
         if (popupTransport != null) {
             val transport = popupTransport.obj as? WebView.WebViewTransport
@@ -649,6 +653,54 @@ class MainActivity : Activity() {
             if (stroke != null) setStroke(dp(strokeWidth), stroke)
         }
 
+    /** Hand WebView downloads to Android's download service, preserving page cookies. */
+    private fun enqueueDownload(
+        url: String?,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?
+    ) {
+        if (url.isNullOrBlank() || !(url.startsWith("https://", true) || url.startsWith("http://", true))) {
+            Toast.makeText(this, tr("Liên kết tải xuống không được hỗ trợ", "Unsupported download URL"), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            val filename = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
+                .replace(Regex("[/\\\\:*?\"<>|]"), "_")
+                .trim()
+                .take(180)
+                .ifBlank { "download" }
+            val request = DownloadManager.Request(android.net.Uri.parse(url))
+                .setTitle(filename)
+                .setDescription(url)
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(false)
+            if (!mimeType.isNullOrBlank()) request.setMimeType(mimeType)
+            if (!userAgent.isNullOrBlank()) request.addRequestHeader("User-Agent", userAgent)
+            android.webkit.CookieManager.getInstance().getCookie(url)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { request.addRequestHeader("Cookie", it) }
+            val id = (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+            Toast.makeText(this, tr("Đã thêm tải xuống #", "Download queued #") + id, Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                tr("Không thể tải xuống: ", "Could not start download: ") + (e.message ?: "error"),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun openDownloads() {
+        try {
+            startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
+        } catch (_: Exception) {
+            Toast.makeText(this, tr("Không tìm thấy trình quản lý tải xuống", "No downloads app is available"), Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun showBrowserMenu() {
         val desktopLabel = if (isDesktopModeEnabled()) tr("Phiên bản máy tính: đang bật", "Desktop site: on") else tr("Phiên bản máy tính", "Desktop site")
         val dataSaverLabel = if (isDataSaverEnabled()) "Data Saver: " + tr("bật", "on") else "Data Saver: " + tr("tắt", "off")
@@ -656,7 +708,7 @@ class MainActivity : Activity() {
             tr("Tab mới", "New tab"), tr("Tab ẩn danh mới", "New incognito tab"), tr("Dịch trang", "Translate page"), tr("Tìm trong trang", "Find in page"), tr("Thu phóng", "Zoom"),
             desktopLabel, tr("Lưu/Bỏ dấu trang", "Add/remove bookmark"), tr("Dấu trang", "Bookmarks"), tr("Lịch sử", "History"),
             tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel,
-            tr("Phân tích Data Saver", "Data Saver analytics")
+            tr("Phân tích Data Saver", "Data Saver analytics"), tr("Tải xuống", "Downloads")
         )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("TGFN Browser · Tiện ích", "TGFN Browser · Tools"))
@@ -676,6 +728,7 @@ class MainActivity : Activity() {
                     11 -> closeCurrentTab()
                     12 -> toggleDataSaver()
                     13 -> showDataSaverAnalytics()
+                    14 -> openDownloads()
                 }
             }
             .show()
