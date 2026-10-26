@@ -137,7 +137,7 @@ class MainActivity : Activity() {
             }
             if (!savedUrls.isNullOrEmpty()) {
                 val savedGroups = try { org.json.JSONArray(prefs.getString("session_tab_groups", "[]")) } catch (_: Exception) { org.json.JSONArray() }
-                val knownGroups = try { org.json.JSONArray(prefs.getString("tab_group_names", "[\\"Default\\"]")) } catch (_: Exception) { org.json.JSONArray() }
+                val knownGroups = try { org.json.JSONArray(prefs.getString("tab_group_names", org.json.JSONArray().put("Default").toString())) } catch (_: Exception) { org.json.JSONArray() }
                 for (i in 0 until knownGroups.length()) knownGroups.optString(i).takeIf { it.isNotBlank() }?.let { tabGroups.add(it) }
                 savedUrls.forEachIndexed { index, url ->
                     createTab(url, index == restoreIndex)
