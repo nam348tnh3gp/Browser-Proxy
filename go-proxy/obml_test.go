@@ -208,14 +208,17 @@ func TestOBMLResponseOnlyTransformsOptedInHTML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Header.Get("Content-Type") != "text/html; charset=utf-8" {
+	if len(packet) < 4 || string(packet[:4]) != obmlMagic {
+		t.Fatalf("TBO1 must return compact binary, got content-type=%q body=%q", resp.Header.Get("Content-Type"), packet)
+	}
+	if resp.Header.Get("Content-Type") != "application/x-tgfn-obml; version=1" {
 		t.Fatalf("unexpected content type: %s", resp.Header.Get("Content-Type"))
 	}
-	if len(packet) == 0 || strings.Contains(string(packet), ">\n<") {
-		t.Fatalf("expected minified HTML, got %q", packet)
+	if !bytes.Contains(packet, []byte("Hello")) {
+		t.Fatalf("compact packet lost page text: %q", packet)
 	}
-	if !strings.Contains(string(packet), "<p>Hello</p>") {
-		t.Fatalf("HTML structure was not preserved: %q", packet)
+	if strings.Contains(string(packet), "<html") || strings.Contains(string(packet), "<p>") {
+		t.Fatalf("TBO1 leaked HTML: %q", packet)
 	}
 	if resp.ContentLength != int64(len(packet)) {
 		t.Fatalf("content length mismatch: %d != %d", resp.ContentLength, len(packet))
