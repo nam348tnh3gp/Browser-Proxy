@@ -3064,6 +3064,14 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         fileChooserCallback?.onReceiveValue(null)
         fileChooserCallback = null
         hideFullscreenView()
+        gifBackgroundRenderer?.let { renderer ->
+            (renderer.parent as? ViewGroup)?.removeView(renderer)
+            renderer.stopLoading()
+            renderer.destroy()
+        }
+        gifBackgroundRenderer = null
+        videoBackground?.stopPlayback()
+        videoBackground = null
         persistSession()
         tabs.forEach { tab ->
             (tab.webView.parent as? ViewGroup)?.removeView(tab.webView)
