@@ -889,13 +889,12 @@ class MainActivity : Activity() {
         @media(max-width:340px){.wrap{padding:7vh 14px 24px}.brand{font-size:29px}.grid{gap:18px 6px}.circle{width:46px;height:46px}.quick a{font-size:11px}}
         </style></head><body><div class="wrap"><div class="brand">TGFN <span>Browser</span></div>
         <form class="search" action="https://www.google.com/search" method="get"><input name="q" placeholder="${tr("Tìm kiếm trên Google", "Search Google")}" autofocus><button class="go" type="submit">${tr("Tìm", "Search")}</button></form>
-        <div class="tools"><label>${tr("Lối tắt · nhấn giữ để sửa/xóa", "Shortcuts · hold to edit/remove")}</label><select id="layout" aria-label="Shortcut layout"><option value="default">${tr("Mặc định", "Default layout")}</option><option value="custom">${tr("Tùy chỉnh", "Custom layout")}</option></select></div>
-        <div id="grid" class="grid"></div>
+        <div id="grid" class="grid" aria-label="Shortcuts"></div>
         <div class="quick">
         <a href="https://tgfn.browser/__bookmarks">${tr("Dấu trang", "Bookmarks")}</a>
         <a href="https://tgfn.browser/__history">${tr("Lịch sử", "History")}</a>
         <a href="https://tgfn.browser/__downloads">${tr("Tải xuống", "Downloads")}</a>
-        </div><div class="note">${tr("Nhấn giữ lối tắt để sửa hoặc xóa · Kéo để sắp xếp ở chế độ tùy chỉnh", "Hold a shortcut to edit or remove · Drag to reorder in custom layout")}</div></div>
+        </div><div class="note">${tr("Nhấn giữ lối tắt hoặc vùng trống để tùy chỉnh", "Hold a shortcut or empty space to customize")}</div></div>
         <script>
         (function(){
           var KEY='tgfn_shortcuts_v1', LAYOUT='tgfn_shortcuts_layout_v1';
@@ -907,7 +906,7 @@ class MainActivity : Activity() {
             {title:'Reddit',url:'https://www.reddit.com'},
             {title:'Bing',url:'https://www.bing.com'}
           ];
-          var grid=document.getElementById('grid'), layout=document.getElementById('layout'), dragIndex=-1;
+          var grid=document.getElementById('grid'), layout={value:'default'}, dragIndex=-1;
           function read(key,fallback){try{var v=JSON.parse(localStorage.getItem(key));return v===null?fallback:v}catch(e){return fallback}}
           function save(){try{localStorage.setItem(KEY,JSON.stringify(items));localStorage.setItem(LAYOUT,layout.value)}catch(e){}}
           var items=read(KEY,null); if(!Array.isArray(items)) items=defaults.slice();
@@ -932,13 +931,15 @@ class MainActivity : Activity() {
               a.appendChild(circle);a.appendChild(name);
               a.addEventListener('contextmenu',function(e){
                 e.preventDefault();e.stopPropagation();
-                var action=prompt('${tr("Lối tắt", "Shortcut")}: '+item.title+'\n1 = ${tr("Sửa", "Edit")}\n2 = ${tr("Xóa", "Remove")}\n3 = ${tr("Hủy", "Cancel")}','1');
+                var action=prompt('${tr("Tùy chọn lối tắt", "Shortcut options")}\n1 = ${tr("Sửa", "Edit")}\n2 = ${tr("Xóa", "Remove")}\n3 = ${tr("Thêm lối tắt", "Add shortcut")}\n4 = ${tr("Đổi kiểu bố cục", "Change layout")}','');
                 if(action==='1'){
                   var url=prompt('${tr("Địa chỉ URL", "URL")}',item.url);if(!url)return;url=url.trim();
                   if(!/^https?:\/\//i.test(url)){alert('${tr("URL không hợp lệ", "Invalid URL")}');return}
                   var title=prompt('${tr("Tên lối tắt", "Shortcut name")}',item.title)||url;
                   items[index]={title:title.trim()||url,url:url};save();render();
                 }else if(action==='2'){if(confirm('${tr("Xóa lối tắt này?", "Remove this shortcut?")}')){items.splice(index,1);save();render()}}
+                else if(action==='3'){addShortcut()}
+                else if(action==='4'){layout.value=layout.value==='custom'?'default':'custom';save();render()}
               });
               a.addEventListener('dragstart',function(e){if(layout.value!=='custom'){e.preventDefault();return}dragIndex=index;a.classList.add('dragging');if(e.dataTransfer)e.dataTransfer.setData('text/plain',String(index))});
               a.addEventListener('dragover',function(e){if(layout.value==='custom'){e.preventDefault();a.classList.add('over')}});
@@ -947,10 +948,10 @@ class MainActivity : Activity() {
               a.addEventListener('dragend',function(){dragIndex=-1;render()});
               grid.appendChild(a);
             });
-            if(items.length===0){var empty=document.createElement('div');empty.className='empty';empty.textContent='${tr("Chưa có lối tắt nào. Nhấn + Thêm để tạo lối tắt.", "No shortcuts yet. Tap + Add to create one.")}';grid.appendChild(empty)}
-            var add=document.createElement('button');add.className='item';add.type='button';add.style.border='0';add.style.background='transparent';add.style.color='inherit';add.innerHTML='<span class="circle" style="font-size:28px;color:#1a73e8">+</span><span class="name">${tr("Thêm lối tắt", "Add shortcut")}</span>';add.addEventListener('click',addShortcut);add.addEventListener('contextmenu',function(e){e.preventDefault();addShortcut()});grid.appendChild(add);
+            if(items.length===0){var empty=document.createElement('div');empty.className='empty';empty.textContent='${tr("Chưa có lối tắt. Nhấn giữ vùng này để thêm.", "No shortcuts. Hold this area to add one.")}';grid.appendChild(empty)}
           }
-          layout.addEventListener('change',function(){save();render()});render();
+          grid.addEventListener('contextmenu',function(e){if(e.target===grid||e.target.classList.contains('empty')){e.preventDefault();var action=prompt('${tr("Tùy chỉnh tab mới", "Customize new tab")}\n1 = ${tr("Thêm lối tắt", "Add shortcut")}\n2 = ${tr("Đổi kiểu bố cục", "Change layout")}\n3 = ${tr("Xóa tất cả lối tắt", "Remove all shortcuts")}','1');if(action==='1')addShortcut();else if(action==='2'){layout.value=layout.value==='custom'?'default':'custom';save();render()}else if(action==='3'&&confirm('${tr("Xóa tất cả lối tắt?", "Remove all shortcuts?")}')){items=[];save();render()}}});
+          render();
         })();
         </script></body></html>
     """.trimIndent()
