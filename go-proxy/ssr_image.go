@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -119,7 +120,7 @@ func ssrImageResponse(resp *http.Response) error {
 		}
 		shotQuality = 90
 		jpegQuality = 88
-		scale = 2
+		scale = 1
 		packetLimit = 4 << 20
 	}
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
@@ -157,6 +158,9 @@ func ssrImageResponse(resp *http.Response) error {
 		})()`, nil),
 		chromedp.Sleep(450*time.Millisecond),
 		chromedp.ActionFunc(func(ctx context.Context) error {
+			if err := chromedp.Evaluate(`window.scrollTo(0,0)`, nil).Do(ctx); err != nil {
+				return err
+			}
 			_, _, _, _, _, cssContent, err := page.GetLayoutMetrics().Do(ctx)
 			if err != nil {
 				return err
@@ -170,19 +174,19 @@ func ssrImageResponse(resp *http.Response) error {
 					clipH = cssContent.Height
 				}
 			}
+			if clipW > float64(viewportWidth) {
+				clipW = float64(viewportWidth)
+			}
 			if clipH > 12000 {
 				clipH = 12000
 			}
-			format := page.CaptureScreenshotFormatPng
-			if shotQuality != 100 {
-				format = page.CaptureScreenshotFormatJpeg
-			}
+			format := page.CaptureScreenshotFormatJpeg
 			shot, err := page.CaptureScreenshot().
 				WithFormat(format).
 				WithQuality(int64(shotQuality)).
 				WithCaptureBeyondViewport(true).
 				WithFromSurface(true).
-				WithClip(&page.Viewport{X: 0, Y: 0, Width: clipW, Height: clipH, Scale: scale}).
+				WithClip(&page.Viewport{X: 0, Y: 0, Width: clipW, Height: clipH, Scale: 1}).
 				Do(ctx)
 			if err != nil {
 				return err
@@ -196,6 +200,7 @@ func ssrImageResponse(resp *http.Response) error {
 				var as = document.querySelectorAll('a[href]');
 				var docW = window.innerWidth || document.documentElement.clientWidth || 1;
 				var docH = Math.max(document.documentElement.scrollHeight || 0, document.body ? document.body.scrollHeight : 0, 1);
+				window.scrollTo(0, 0);
 				for (var i = 0; i < as.length && out.length < 200; i++) {
 					var a = as[i];
 					var href = a.href || '';
@@ -206,20 +211,25 @@ func ssrImageResponse(resp *http.Response) error {
 						t = img ? (img.getAttribute('alt') || img.getAttribute('title') || 'image') : 'link';
 					}
 					if (t.length > 80) t = t.substring(0, 80);
+					var pos = window.getComputedStyle(a).position;
+					if (pos === 'fixed' || pos === 'sticky') continue;
 					var rects = a.getClientRects();
 					var sx = window.pageXOffset || document.documentElement.scrollLeft || 0;
 					var sy = window.pageYOffset || document.documentElement.scrollTop || 0;
 					var added = 0;
-					for (var r = 0; r < rects.length && out.length < 200 && added < 2; r++) {
+					for (var r = 0; r < rects.length && out.length < 200 && added < 3; r++) {
 						var box = rects[r];
-						if (!box || box.width < 2 || box.height < 2) continue;
+						if (!box || box.width < 4 || box.height < 4) continue;
+						var x = box.left + sx;
+						var y = box.top + sy;
+						if (x > docW || y > docH) continue;
 						out.push({
 							text: t,
 							url: href,
-							x: Math.max(0, Math.round(box.left + sx)),
-							y: Math.max(0, Math.round(box.top + sy)),
-							w: Math.max(1, Math.round(box.width)),
-							h: Math.max(1, Math.round(box.height))
+							x: Math.max(0, Math.round(x)),
+							y: Math.max(0, Math.round(y)),
+							w: Math.max(1, Math.round(Math.min(box.width, docW - x))),
+							h: Math.max(1, Math.round(Math.min(box.height, docH - y)))
 						});
 						added++;
 					}
@@ -255,6 +265,13 @@ func ssrImageResponse(resp *http.Response) error {
 		docH = capture.DocH
 	}
 	links := scaleLinksToImage(capture.Links, docW, docH, bounds.Dx(), bounds.Dy())
+	sort.Slice(links, func(i, j int) bool {
+		if links[i].Y == links[j].Y {
+			return links[i].X < links[j].X
+		}
+		return links[i].Y < links[j].Y
+	})
+	links = padLinks(links, bounds.Dx(), bounds.Dy(), 3)
 	links = thinLinks(links, 80)
 	fmt.Println("[SSRIMG] link map clip=", docW, "x", docH, "img=", bounds.Dx(), "x", bounds.Dy(), "links=", len(links))
 	tileCount := (bounds.Dy() + mobileTileHeight - 1) / mobileTileHeight
@@ -309,6 +326,37 @@ func mobileViewportWidth(value string) int {
 		return maxMobileViewportWidth
 	}
 	return width
+}
+
+func padLinks(links []pageLink, imgW, imgH, pad int) []pageLink {
+	for i := range links {
+		l := &links[i]
+		l.X -= pad
+		l.Y -= pad
+		l.W += pad * 2
+		l.H += pad * 2
+		if l.X < 0 {
+			l.W += l.X
+			l.X = 0
+		}
+		if l.Y < 0 {
+			l.H += l.Y
+			l.Y = 0
+		}
+		if l.W < 1 {
+			l.W = 1
+		}
+		if l.H < 1 {
+			l.H = 1
+		}
+		if l.X+l.W > imgW {
+			l.W = imgW - l.X
+		}
+		if l.Y+l.H > imgH {
+			l.H = imgH - l.Y
+		}
+	}
+	return links
 }
 
 // thinLinks keeps hitboxes spread down the page instead of only the first DOM links.
