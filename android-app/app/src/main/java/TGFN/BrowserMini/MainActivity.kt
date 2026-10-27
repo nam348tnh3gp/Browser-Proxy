@@ -7,6 +7,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -223,16 +225,18 @@ class MainActivity : Activity() {
     }
 
     private fun buildUi() {
+        val hasCustomBackground = !prefs.getString("app_background_uri", null).isNullOrBlank()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(canvas)
         }
+        applyCustomAppBackground(root)
 
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(6), dp(6), dp(6))
-            setBackgroundColor(canvas)
+            setBackgroundColor(if (hasCustomBackground) Color.TRANSPARENT else canvas)
         }
 
         // Keep the address field wide on phones; secondary controls live in the menu.
@@ -313,7 +317,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(dp(6), dp(5), dp(6), dp(5))
-            setBackgroundColor(canvas)
+            setBackgroundColor(if (hasCustomBackground) Color.TRANSPARENT else canvas)
             elevation = dp(8).toFloat()
         }
         bottomBar.addView(bottomAction("‹", tr("Quay lại", "Back")) { currentWebView()?.let { if (it.canGoBack()) it.goBack() } })
@@ -327,7 +331,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(4), dp(12), dp(5))
-            setBackgroundColor(canvas)
+            setBackgroundColor(if (hasCustomBackground) Color.TRANSPARENT else canvas)
         }
         status = TextView(this).apply {
             text = tr("Sẵn sàng", "Ready")
@@ -2093,6 +2097,32 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             .show()
     }
 
+    private fun applyCustomAppBackground(root: View) {
+        val rawUri = prefs.getString("app_background_uri", null)
+        if (rawUri.isNullOrBlank()) {
+            root.setBackgroundColor(canvas)
+            return
+        }
+        try {
+            val uri = android.net.Uri.parse(rawUri)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            var sample = 1
+            while (bounds.outWidth / sample > 1600 || bounds.outHeight / sample > 1600) sample *= 2
+            val options = BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) }
+            val bitmap = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+            if (bitmap != null) {
+                root.background = BitmapDrawable(resources, bitmap).apply { gravity = Gravity.FILL }
+            } else root.setBackgroundColor(canvas)
+        } catch (_: Exception) {
+            root.setBackgroundColor(canvas)
+        }
+    }
+
+    private fun dialogSafeRecreate() {
+        recreate()
+    }
+
     private fun showSettings() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2115,6 +2145,42 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             isChecked = darkMode
         }
         content.addView(dark)
+        val backgroundButtons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(4), 0, dp(4))
+        }
+        val chooseBackground = android.widget.Button(this).apply {
+            text = tr("Chọn hình nền", "Choose background")
+            setOnClickListener {
+                try {
+                    val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "image/*"
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                    }
+                    startActivityForResult(picker, 2302)
+                } catch (_: Exception) {
+                    Toast.makeText(this@MainActivity, tr("Không mở được bộ chọn ảnh", "Could not open image picker"), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        backgroundButtons.addView(chooseBackground, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val clearBackground = android.widget.Button(this).apply {
+            text = tr("Xóa nền", "Clear")
+            setOnClickListener {
+                prefs.edit().remove("app_background_uri").apply()
+                dialogSafeRecreate()
+            }
+        }
+        backgroundButtons.addView(clearBackground, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        content.addView(TextView(this).apply {
+            text = tr("Hình nền ứng dụng (chỉ phủ giao diện trình duyệt, không che nội dung website)", "App background (browser chrome only; website content stays visible)")
+            textSize = 12f
+            setTextColor(muted)
+            setPadding(0, dp(6), 0, 0)
+        })
+        content.addView(backgroundButtons)
         val restoreSession = android.widget.CheckBox(this).apply {
             text = tr("Khôi phục các tab khi mở lại trình duyệt", "Restore tabs when reopening the browser")
             isChecked = prefs.getBoolean("restore_session_enabled", true)
@@ -2593,9 +2659,23 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         currentWebView()?.loadUrl(normalized)
     }
 
+    private fun saveCustomBackgroundResult(resultCode: Int, data: Intent?) {
+        if (resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        try {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: Exception) { }
+        prefs.edit().putString("app_background_uri", uri.toString()).apply()
+        recreate()
+    }
+
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 2302) {
+            saveCustomBackgroundResult(resultCode, data)
+            return
+        }
         if (requestCode != FILE_CHOOSER_REQUEST) return
         val callback = fileChooserCallback ?: return
         fileChooserCallback = null
