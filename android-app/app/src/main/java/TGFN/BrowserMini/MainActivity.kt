@@ -132,7 +132,7 @@ class MainActivity : Activity() {
         buildUi()
 
         val savedUrls = savedInstanceState?.getStringArrayList("tab_urls")
-            ?: loadPersistedSessionUrls()
+            ?: if (prefs.getBoolean("restore_session_enabled", true)) loadPersistedSessionUrls() else null
         val restoreIndex = savedInstanceState?.getInt("selected_tab")
             ?: prefs.getInt("session_selected_tab", 0)
         applySavedProxy { success ->
@@ -1982,6 +1982,11 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             isChecked = darkMode
         }
         content.addView(dark)
+        val restoreSession = android.widget.CheckBox(this).apply {
+            text = tr("Khôi phục các tab khi mở lại trình duyệt", "Restore tabs when reopening the browser")
+            isChecked = prefs.getBoolean("restore_session_enabled", true)
+        }
+        content.addView(restoreSession)
         content.addView(TextView(this).apply {
             text = tr("Ngôn ngữ / Language", "Language / Ngôn ngữ")
             textSize = 14f
@@ -2097,6 +2102,7 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
                     .putBoolean("desktop_mode", desktop.isChecked)
                     .putBoolean("data_saver_enabled", dataSaver.isChecked)
                     .putBoolean("adblock_enabled", adblock.isChecked)
+                    .putBoolean("restore_session_enabled", restoreSession.isChecked)
                     .putString("language", selectedLanguage)
                     .putString("proxy_url", rawProxy).putString("home_url", normalizedHome).apply()
                 tabs.forEach { tab ->
