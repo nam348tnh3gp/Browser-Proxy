@@ -771,11 +771,11 @@ class MainActivity : Activity() {
                     showImageContextMenu(hit.extra, target)
                     true
                 }
-                // Treat long-presses on ordinary text/blank page space as browser context
-                // actions instead of allowing WebView to open Android's text-selection toolbar.
-                // Editable fields can still be focused and edited with a normal tap.
+                // Keep Android's native text selection and editing behavior for text/input
+                // targets. WebView reports ordinary text as UNKNOWN_TYPE on many versions,
+                // so let its native long-press handler process unknown targets as well.
                 WebView.HitTestResult.EDIT_TEXT_TYPE,
-                WebView.HitTestResult.UNKNOWN_TYPE -> { showPageContextMenu(target); true }
+                WebView.HitTestResult.UNKNOWN_TYPE -> false
                 else -> { showPageContextMenu(target); true }
             }
         }
