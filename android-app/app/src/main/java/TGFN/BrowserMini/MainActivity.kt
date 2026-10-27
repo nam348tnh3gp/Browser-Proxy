@@ -412,7 +412,7 @@ class MainActivity : Activity() {
                                 )
                                 val fittedWidth = (videoWidth * scale).toInt().coerceAtLeast(1)
                                 val fittedHeight = (videoHeight * scale).toInt().coerceAtLeast(1)
-                                player.layoutParams = FrameLayout.LayoutParams(
+                                this@apply.layoutParams = FrameLayout.LayoutParams(
                                     fittedWidth, fittedHeight, Gravity.CENTER
                                 )
                             }
