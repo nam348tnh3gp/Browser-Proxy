@@ -414,6 +414,7 @@ class MainActivity : Activity() {
                 if (isAdUrl(url)) {
                     return WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
                 }
+                fetchViaHttpsProxy(url)?.let { return it }
                 return super.shouldInterceptRequest(view, request)
             }
 
@@ -2384,7 +2385,7 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         }
         content.addView(home)
         content.addView(TextView(this).apply {
-            text = tr("Khi bật, HTTP đi qua proxy và HTTPS dùng đường hầm CONNECT. Khi tắt, trình duyệt kết nối trực tiếp. Proxy cần hỗ trợ HTTP CONNECT để tải HTTPS.", "When enabled, HTTP uses the proxy and HTTPS uses CONNECT tunneling. When disabled, the browser connects directly. The proxy must support HTTP CONNECT for HTTPS.")
+            text = tr("Proxy http:// dùng CONNECT. Proxy https:// (ngrok) tải trang qua /__tgfn/fetch, giống J2ME, vì ngrok HTTP free không chuyển CONNECT.", "When enabled, HTTP uses the proxy and HTTPS uses CONNECT tunneling. When disabled, the browser connects directly. The proxy must support HTTP CONNECT for HTTPS.")
             textSize = 13f
             setTextColor(muted)
             setPadding(0, dp(8), 0, dp(8))
@@ -2708,6 +2709,14 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             callback(false)
             return
         }
+        // ngrok HTTP free terminates TLS and cannot carry WebView CONNECT tunnels.
+        // HTTPS proxy URLs therefore use /__tgfn/fetch, the same path J2ME uses.
+        if (endpoint.scheme == "https") {
+            ProxyController.getInstance().clearProxyOverride(mainExecutor, Runnable {
+                registerClient(endpoint.host, endpoint.port, endpoint.scheme) { callback(true) }
+            })
+            return
+        }
         val config = ProxyConfig.Builder().addProxyRule(endpoint.rule()).build()
         ProxyController.getInstance().setProxyOverride(config, mainExecutor, Runnable {
             registerClient(endpoint.host, endpoint.port, endpoint.scheme) {
@@ -2715,6 +2724,33 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
                 callback(true)
             }
         })
+    }
+
+    private fun fetchViaHttpsProxy(target: String?): WebResourceResponse? {
+        if (target.isNullOrBlank()) return null
+        if (!target.startsWith("http://") && !target.startsWith("https://")) return null
+        if (target.startsWith("https://tgfn.browser", ignoreCase = true)) return null
+        if (!prefs.getBoolean("proxy_enabled", false)) return null
+        val endpoint = parseProxyUrl(prefs.getString("proxy_url", "") ?: "") ?: return null
+        if (endpoint.scheme != "https") return null
+        if (target.contains(endpoint.host) && target.contains("/__tgfn/")) return null
+        return try {
+            val base = if (endpoint.port == 443) "https://${endpoint.host}" else "https://${endpoint.host}:${endpoint.port}"
+            val proxyUrl = base + "/__tgfn/fetch?url=" + java.net.URLEncoder.encode(target, "UTF-8")
+            val connection = java.net.URL(proxyUrl).openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 20000
+            connection.readTimeout = 35000
+            connection.instanceFollowRedirects = true
+            connection.setRequestProperty("User-Agent", "TGFN-BrowserMini-Android")
+            connection.setRequestProperty("ngrok-skip-browser-warning", "1")
+            connection.setRequestProperty("Accept", "*/*")
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream ?: java.io.ByteArrayInputStream(ByteArray(0))
+            val mime = connection.contentType?.substringBefore(";")?.trim().takeUnless { it.isNullOrBlank() } ?: "text/html"
+            WebResourceResponse(mime, "utf-8", stream)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun registerClient(host: String, port: Int, scheme: String, callback: (Boolean) -> Unit) {
