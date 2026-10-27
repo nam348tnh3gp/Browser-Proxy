@@ -63,14 +63,19 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private String proxyPort = "8080";
     private boolean proxyEnabled;
     private boolean showingBookmarks;
+    private boolean historyListMode;
     private Form proxyForm;
     private TextField proxyHostField;
     private TextField proxyPortField;
     private ChoiceGroup proxyEnabledChoice;
     private ChoiceGroup loadImagesChoice;
+    private ChoiceGroup searchChoice;
     private TextField homeUrlField;
     private boolean loadImages = true;
+    private boolean limitImageSize = true;
+    private int searchEngine = 0;
     private String homeUrl = "https://lite.duckduckgo.com/lite/";
+    private final Command deleteBookmarkCommand = new Command("Delete", Command.ITEM, 2);
     private final Vector bookmarks = new Vector();
     private final Vector pageLinkItems = new Vector();
     private final Vector pageImageItems = new Vector();
@@ -131,6 +136,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         String url = trim(value);
         if (url.length() == 0) return "";
         if (url.indexOf(' ') >= 0 || (url.indexOf('.') < 0 && url.indexOf(':') < 0)) {
+            if (searchEngine == 1) return "https://www.google.com/search?q=" + encodeQuery(url);
             return "https://lite.duckduckgo.com/lite/?q=" + encodeQuery(url);
         }
         if (url.indexOf("://") < 0) url = "https://" + url;
@@ -187,7 +193,14 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     for (int imageIndex = 0; imageIndex < result.images.size() && imageIndex < imageCap; imageIndex++) {
                         ImageRef imageRef = (ImageRef)result.images.elementAt(imageIndex);
                         if (imageRef.image == null && imageRef.url != null && imageRef.url.length() > 0) {
-                            try { imageRef.image = loadImage(imageRef.url); } catch (Exception ignoredImage) {}
+                            try {
+                                Image loaded = loadImage(imageRef.url);
+                                if (loaded != null && limitImageSize && loaded.getWidth() > 160) {
+                                    int nh = Math.max(1, loaded.getHeight() * 160 / loaded.getWidth());
+                                    loaded = scaleImage(loaded, 160, nh);
+                                }
+                                imageRef.image = loaded;
+                            } catch (Exception ignoredImage) {}
                         }
                     }
                     synchronized (BrowserMidlet.this) {
@@ -679,6 +692,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         browserMenu.append("Open address / search", null);
         if (browserMenuHasPageLinks) browserMenu.append("Page links", null);
         browserMenu.append("Bookmarks", null);
+        browserMenu.append("History", null);
         browserMenu.append("Add bookmark", null);
         browserMenu.append("Find", null);
         browserMenu.append("Reload page", null);
@@ -696,24 +710,23 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         if (command == backCommand) { display.setCurrent(browserCanvas); return; }
         if (command != List.SELECT_COMMAND) return;
         int selected = browserMenu.getSelectedIndex();
-        if (selected >= 0 && "Find".equals(browserMenu.getString(selected))) { showFind(); return; }
-        if (selected == 0) { showAddress(); return; }
-        int offset = 1;
-        if (browserMenuHasPageLinks) {
-            if (selected == offset) { showLinks(); return; }
-            offset++;
-        }
-        if (selected == offset) showBookmarks();
-        else if (selected == offset + 1) addBookmark(currentUrl);
-        else if (selected == offset + 2) navigate(currentUrl, false);
-        else if (selected == offset + 3) navigate(homeUrl, true);
-        else if (selected == offset + 4) {
+        if (selected < 0) return;
+        String item = browserMenu.getString(selected);
+        if ("Open address / search".equals(item)) showAddress();
+        else if ("Page links".equals(item)) showLinks();
+        else if ("Bookmarks".equals(item)) showBookmarks();
+        else if ("History".equals(item)) showHistory();
+        else if ("Add bookmark".equals(item)) addBookmark(currentUrl);
+        else if ("Find".equals(item)) showFind();
+        else if ("Reload page".equals(item)) navigate(currentUrl, false);
+        else if ("Home".equals(item)) navigate(homeUrl, true);
+        else if ("Forward".equals(item)) {
             if (historyIndex >= 0 && historyIndex + 1 < history.size()) {
                 historyIndex++; navigate((String)history.elementAt(historyIndex), false);
             } else showError("Forward", "There is no next page in history.");
-        } else if (selected == offset + 5) showProxySettings();
-        else if (selected == offset + 6) showPageInfo();
-        else if (selected == offset + 7) notifyDestroyed();
+        } else if ("Proxy settings".equals(item)) showProxySettings();
+        else if ("Page info".equals(item)) showPageInfo();
+        else if ("Exit".equals(item)) notifyDestroyed();
     }
 
     private void showLinks() {
@@ -726,6 +739,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             return;
         }
         showingBookmarks = false;
+        historyListMode = false;
         linkList = new List("Page links", List.IMPLICIT);
         for (int i = 0; i < links.size(); i++) {
             LinkItem link = (LinkItem)links.elementAt(i);
@@ -785,6 +799,8 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 proxyPort = port;
                 proxyEnabled = proxyEnabledChoice.isSelected(0);
                 loadImages = loadImagesChoice != null && loadImagesChoice.isSelected(0);
+                limitImageSize = loadImagesChoice != null && loadImagesChoice.isSelected(1);
+                if (searchChoice != null) searchEngine = searchChoice.getSelectedIndex();
                 String nextHome = trim(homeUrlField.getString());
                 if (nextHome.length() > 0) homeUrl = normalizeAddress(nextHome);
                 saveSettings();
@@ -795,10 +811,25 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         } else if (source == linkList) {
             if (command == List.SELECT_COMMAND) {
                 int selected = linkList.getSelectedIndex();
-                if (selected >= 0 && showingBookmarks && selected < bookmarks.size()) {
+                if (historyListMode && selected >= 0) {
+                    int index = history.size() - 1 - selected;
+                    if (index >= 0 && index < history.size()) {
+                        historyIndex = index;
+                        navigate((String)history.elementAt(index), false);
+                    }
+                } else if (selected >= 0 && showingBookmarks && selected < bookmarks.size()) {
                     navigate((String)bookmarks.elementAt(selected), true);
                 } else if (selected >= 0 && !showingBookmarks && selected < links.size()) {
                     openTarget(((LinkItem)links.elementAt(selected)).url, true);
+                }
+            } else if (command == deleteBookmarkCommand && showingBookmarks) {
+                int selected = linkList.getSelectedIndex();
+                if (selected >= 0 && selected < bookmarks.size()) {
+                    bookmarks.removeElementAt(selected);
+                    saveSettings();
+                    if (bookmarks.size() == 0) {
+                        if (browserCanvas != null) display.setCurrent(browserCanvas);
+                    } else showBookmarks();
                 }
             } else if (command == backCommand) {
                 if (browserCanvas != null) display.setCurrent(browserCanvas);
@@ -812,7 +843,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         } else if (command == bookmarkCommand) {
             addBookmark(currentUrl);
         } else if (command == homeCommand) {
-            navigate("https://lite.duckduckgo.com/lite/", true);
+            navigate(homeUrl, true);
         } else if (command == reloadCommand) {
             navigate(currentUrl, false);
         } else if (command == linksCommand) {
@@ -855,8 +886,15 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         proxyForm.append(proxyEnabledChoice);
         loadImagesChoice = new ChoiceGroup("Images", ChoiceGroup.MULTIPLE);
         loadImagesChoice.append("Load page images", null);
+        loadImagesChoice.append("Limit image size", null);
         loadImagesChoice.setSelectedIndex(0, loadImages);
+        loadImagesChoice.setSelectedIndex(1, limitImageSize);
         proxyForm.append(loadImagesChoice);
+        searchChoice = new ChoiceGroup("Search", ChoiceGroup.EXCLUSIVE);
+        searchChoice.append("DuckDuckGo Lite", null);
+        searchChoice.append("Google", null);
+        searchChoice.setSelectedIndex(searchEngine, true);
+        proxyForm.append(searchChoice);
         homeUrlField = new TextField("Home page", homeUrl, 200, TextField.URL);
         proxyForm.append(homeUrlField);
         proxyForm.addCommand(saveProxyCommand);
@@ -871,10 +909,33 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             return;
         }
         showingBookmarks = true;
+        historyListMode = false;
         List list = new List("Bookmarks", List.IMPLICIT);
         for (int i = 0; i < bookmarks.size(); i++) list.append((String)bookmarks.elementAt(i), null);
+        list.addCommand(deleteBookmarkCommand);
         list.addCommand(backCommand);
         list.addCommand(addressCommand);
+        list.setCommandListener(this);
+        display.setCurrent(list);
+        linkList = list;
+    }
+
+    private void showHistory() {
+        if (history.size() == 0) {
+            showError("No history", "Open a page first.");
+            return;
+        }
+        showingBookmarks = false;
+        historyListMode = true;
+        List list = new List("History", List.IMPLICIT);
+        for (int i = history.size() - 1; i >= 0; i--) {
+            String title = i < historyTitles.size() ? (String)historyTitles.elementAt(i) : "";
+            String url = (String)history.elementAt(i);
+            String label = title != null && title.length() > 0 ? title : url;
+            if (label.length() > 40) label = label.substring(0, 37) + "...";
+            list.append(label, null);
+        }
+        list.addCommand(backCommand);
         list.setCommandListener(this);
         display.setCurrent(list);
         linkList = list;
@@ -928,8 +989,22 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                                 loadImages = tail.equals("1");
                             } else {
                                 loadImages = tail.substring(0, fourth).equals("1");
-                                String savedHome = tail.substring(fourth + 1);
-                                if (savedHome.length() > 0) homeUrl = savedHome;
+                                String afterImages = tail.substring(fourth + 1);
+                                int fifth = afterImages.indexOf('|');
+                                if (fifth < 0) {
+                                    if (afterImages.length() > 0) homeUrl = afterImages;
+                                } else {
+                                    limitImageSize = afterImages.substring(0, fifth).equals("1");
+                                    String afterLimit = afterImages.substring(fifth + 1);
+                                    int sixth = afterLimit.indexOf('|');
+                                    if (sixth < 0) {
+                                        if (afterLimit.length() > 0) homeUrl = afterLimit;
+                                    } else {
+                                        try { searchEngine = Integer.parseInt(afterLimit.substring(0, sixth)); } catch (Exception ignoredEngine) {}
+                                        String savedHome = afterLimit.substring(sixth + 1);
+                                        if (savedHome.length() > 0) homeUrl = savedHome;
+                                    }
+                                }
                             }
                         }
                         proxyHost = header.substring(first + 1, second);
@@ -956,7 +1031,10 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             store = RecordStore.openRecordStore("browsermini", true);
             StringBuffer saved = new StringBuffer();
             saved.append(proxyEnabled ? "1" : "0").append('|').append(proxyHost).append('|').append(proxyPort)
-                .append('|').append(loadImages ? "1" : "0").append('|').append(homeUrl).append('\n');
+                .append('|').append(loadImages ? "1" : "0")
+                .append('|').append(limitImageSize ? "1" : "0")
+                .append('|').append(searchEngine)
+                .append('|').append(homeUrl).append('\n');
             for (int i = 0; i < bookmarks.size(); i++) saved.append((String)bookmarks.elementAt(i)).append('\n');
             byte[] data = saved.toString().getBytes("UTF-8");
             if (store.getNumRecords() == 0) store.addRecord(data, 0, data.length);
