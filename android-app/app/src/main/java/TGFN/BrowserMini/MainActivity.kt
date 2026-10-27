@@ -791,6 +791,11 @@ class MainActivity : Activity() {
         web.setOnLongClickListener { view ->
             val target = view as? WebView ?: return@setOnLongClickListener false
             val hit = target.hitTestResult ?: return@setOnLongClickListener false
+            // On the built-in new-tab page, let its own JavaScript manage long-press menus.
+            // CSS disables selection on built-in labels while leaving input fields editable.
+            if (tab.isNewTab && target.url?.startsWith("https://tgfn.browser/") == true) {
+                return@setOnLongClickListener false
+            }
             when (hit.type) {
                 WebView.HitTestResult.ANCHOR_TYPE,
                 WebView.HitTestResult.SRC_ANCHOR_TYPE,
@@ -921,7 +926,9 @@ class MainActivity : Activity() {
         input,textarea{ -webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default }
         body.tgfn-dragging,body.tgfn-dragging *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;-webkit-tap-highlight-color:transparent!important}
         body.tgfn-dragging input,body.tgfn-dragging textarea{-webkit-user-select:text!important;user-select:text!important}
-        .wrap{max-width:560px;margin:0 auto;padding:10vh 22px 32px}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:24px}.brand span{color:#188038}
+        .wrap{max-width:560px;margin:0 auto;padding:10vh 22px 32px;position:relative;min-height:100vh}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:24px}.brand span{color:#188038}
+        .component{max-width:100%}.wrap.layout-editing .component{outline:1px dashed #1a73e8;outline-offset:4px;touch-action:none;cursor:move}.wrap.layout-editing .component.dragging-component{z-index:50;opacity:.92;box-shadow:0 4px 18px #0003}.component[hidden]{display:none!important}
+        .layout-controls{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:8px 0}.layout-controls button{border:1px solid #dadce0;border-radius:18px;padding:7px 10px;background:#f8f9fa;color:inherit;font-size:12px}
         .search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
         input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go,.tool{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:13px}
         .tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:20px}.tools label{font-size:12px;color:#80868b}.tools select{max-width:145px;background:${if (darkMode) "#303134" else "#f8f9fa"};color:inherit;border:1px solid ${if (darkMode) "#555" else "#dadce0"};border-radius:10px;padding:8px}
@@ -931,14 +938,15 @@ class MainActivity : Activity() {
         .quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:22px}.quick a{display:block;text-align:center;text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};background:${if (darkMode) "#303134" else "#f8f9fa"};border:1px solid ${if (darkMode) "#44464a" else "#e8eaed"};border-radius:14px;padding:11px 4px;font-size:12px}
         .note{text-align:center;color:#80868b;font-size:12px;margin-top:24px}.empty{grid-column:1/-1;text-align:center;padding:22px 8px;color:#80868b;font-size:13px;border:1px dashed #9aa0a6;border-radius:14px}
         @media(max-width:340px){.wrap{padding:7vh 14px 24px}.brand{font-size:29px}.grid{gap:18px 6px}.circle{width:46px;height:46px}.quick a{font-size:11px}}
-        </style></head><body><div class="wrap"><div class="brand">TGFN <span>Browser</span></div>
-        <form class="search" action="https://www.google.com/search" method="get"><input name="q" placeholder="${tr("Tìm kiếm trên Google", "Search Google")}" autofocus><button class="go" type="submit">${tr("Tìm", "Search")}</button></form>
-        <div id="grid" class="grid" aria-label="Shortcuts"></div>
-        <div class="quick">
+        </style></head><body><div class="wrap" id="layoutStage"><div class="brand component" id="brand" data-component="brand">TGFN <span>Browser</span></div>
+        <form class="search component" id="search" data-component="search" action="https://www.google.com/search" method="get"><input name="q" placeholder="${tr("Tìm kiếm trên Google", "Search Google")}" autofocus><button class="go" type="submit">${tr("Tìm", "Search")}</button></form>
+        <div id="grid" class="grid component" data-component="grid" aria-label="Shortcuts"></div>
+        <div class="quick component" id="quick" data-component="quick">
         <a href="https://tgfn.browser/__bookmarks">${tr("Dấu trang", "Bookmarks")}</a>
         <a href="https://tgfn.browser/__history">${tr("Lịch sử", "History")}</a>
         <a href="https://tgfn.browser/__downloads">${tr("Tải xuống", "Downloads")}</a>
-        </div><div class="note">${tr("Nhấn giữ lối tắt hoặc vùng trống để tùy chỉnh", "Hold a shortcut or empty space to customize")}</div></div>
+        </div><div class="note component" id="note" data-component="note">${tr("Nhấn giữ lối tắt để quản lý; bật tùy chỉnh để kéo thả thành phần", "Hold a shortcut to manage it; enable layout editing to drag components")}
+        <div class="layout-controls"><button type="button" id="layoutToggle">${tr("Tùy chỉnh bố cục", "Customize layout")}</button><button type="button" id="layoutRestore">${tr("Khôi phục bố cục", "Reset layout")}</button><button type="button" id="componentRestore">${tr("Thêm thành phần", "Restore component")}</button></div></div></div>
         <script>
         (function(){
           var KEY='tgfn_shortcuts_v1', LAYOUT='tgfn_shortcuts_layout_v1';
@@ -951,15 +959,57 @@ class MainActivity : Activity() {
             {title:'Bing',url:'https://www.bing.com'}
           ];
           var grid=document.getElementById('grid'), layout={value:'default'}, dragIndex=-1;
-          // Prevent accidental text selection/copy while dragging shortcut tiles.
+          var stage=document.getElementById('layoutStage'), editComponents=false;
+          var POSITIONS='tgfn_newtab_component_positions_v1', HIDDEN='tgfn_newtab_hidden_components_v1';
           var DISABLE_TEXT_SELECTION_DURING_DRAG=true;
           document.addEventListener('dragend',function(){if(DISABLE_TEXT_SELECTION_DURING_DRAG)document.body.classList.remove('tgfn-dragging')});
           document.addEventListener('drop',function(){if(DISABLE_TEXT_SELECTION_DURING_DRAG)document.body.classList.remove('tgfn-dragging')});
+          function components(){return Array.prototype.slice.call(stage.querySelectorAll('[data-component]'))}
+          function readObject(key){var v=read(key,{});return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}
+          function savePositions(pos){try{localStorage.setItem(POSITIONS,JSON.stringify(pos))}catch(e){}}
+          function applyHidden(){var hidden=readObject(HIDDEN);components().forEach(function(el){el.hidden=!!hidden[el.dataset.component]})}
+          function applyPositions(){
+            var pos=readObject(POSITIONS), maxBottom=window.innerHeight;
+            components().forEach(function(el){var p=pos[el.dataset.component];if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))return;
+              el.style.position='absolute';el.style.left=Math.max(0,p.x)+'px';el.style.top=Math.max(0,p.y)+'px';
+              if(Number.isFinite(p.w)&&p.w>0)el.style.width=Math.min(p.w,stage.clientWidth)+'px';maxBottom=Math.max(maxBottom,p.y+el.offsetHeight+48)});
+            if(Object.keys(pos).length)stage.style.minHeight=maxBottom+'px';
+          }
+          function enterComponentEdit(){
+            var pos=readObject(POSITIONS),sr=stage.getBoundingClientRect();
+            components().forEach(function(el){var key=el.dataset.component;if(!pos[key]){var r=el.getBoundingClientRect();pos[key]={x:Math.max(0,r.left-sr.left),y:Math.max(0,r.top-sr.top),w:r.width}}
+              el.style.position='absolute';el.style.left=pos[key].x+'px';el.style.top=pos[key].y+'px';el.style.width=Math.min(pos[key].w,stage.clientWidth)+'px'});
+            savePositions(pos);editComponents=true;stage.classList.add('layout-editing');document.body.classList.add('tgfn-dragging');
+            document.getElementById('layoutToggle').textContent='${tr("Xong", "Done")}';
+          }
+          function exitComponentEdit(){editComponents=false;stage.classList.remove('layout-editing');document.body.classList.remove('tgfn-dragging');document.getElementById('layoutToggle').textContent='${tr("Tùy chỉnh bố cục", "Customize layout")}'}
+          function resetPositions(){try{localStorage.removeItem(POSITIONS)}catch(e){}components().forEach(function(el){el.style.position='';el.style.left='';el.style.top='';el.style.width=''});stage.style.minHeight='100vh';exitComponentEdit()}
+          function restoreComponent(){
+            var hidden=readObject(HIDDEN), keys=Object.keys(hidden).filter(function(k){return hidden[k]});
+            if(!keys.length){alert('${tr("Không có thành phần nào bị ẩn.", "No hidden components to restore.")}');return}
+            var choice=prompt('${tr("Nhập số để khôi phục thành phần:", "Enter number to restore a component:")}\n'+keys.map(function(k,i){return (i+1)+' = '+k}).join('\n'));
+            var index=Number(choice)-1;if(index>=0&&index<keys.length){delete hidden[keys[index]];try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(e){}applyHidden()}
+          }
+          function moveComponent(el){
+            el.addEventListener('pointerdown',function(e){
+              if(!editComponents||e.target.closest('button,input,a'))return;if(e.button!==undefined&&e.button!==0)return;
+              e.preventDefault();e.stopPropagation();var sx=e.clientX,sy=e.clientY,l=parseFloat(el.style.left)||0,t=parseFloat(el.style.top)||0,pid=e.pointerId;
+              el.classList.add('dragging-component');document.body.classList.add('tgfn-dragging');try{el.setPointerCapture(pid)}catch(_){}
+              function move(ev){if(ev.pointerId!==pid)return;ev.preventDefault();var x=Math.max(0,l+ev.clientX-sx),y=Math.max(0,t+ev.clientY-sy);el.style.left=x+'px';el.style.top=y+'px';stage.style.minHeight=Math.max(window.innerHeight,y+el.offsetHeight+48)+'px'}
+              function finish(ev){if(ev.pointerId!==pid)return;el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',finish);el.removeEventListener('pointercancel',finish);el.classList.remove('dragging-component');var pos=readObject(POSITIONS);components().forEach(function(n){pos[n.dataset.component]={x:parseFloat(n.style.left)||0,y:parseFloat(n.style.top)||0,w:n.getBoundingClientRect().width}});savePositions(pos);document.body.classList.remove('tgfn-dragging')}
+              el.addEventListener('pointermove',move);el.addEventListener('pointerup',finish);el.addEventListener('pointercancel',finish);
+            });
+            el.addEventListener('contextmenu',function(e){if(editComponents&&el.dataset.component!=='note'){e.preventDefault();e.stopPropagation();var action=prompt('${tr("Thành phần", "Component")}: '+el.dataset.component+'\n1 = ${tr("Ẩn thành phần", "Hide component")}\n2 = ${tr("Hủy", "Cancel")}','1');if(action==='1'){var hidden=readObject(HIDDEN);hidden[el.dataset.component]=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden()}}});
+          }
           function read(key,fallback){try{var v=JSON.parse(localStorage.getItem(key));return v===null?fallback:v}catch(e){return fallback}}
           function save(){try{localStorage.setItem(KEY,JSON.stringify(items));localStorage.setItem(LAYOUT,layout.value)}catch(e){}}
           var items=read(KEY,null); if(!Array.isArray(items)) items=defaults.slice();
           items=items.filter(function(x){return x&&typeof x.url==='string'&&/^https?:\/\//i.test(x.url)}).map(function(x){return {title:String(x.title||x.url),url:x.url}});
           layout.value=read(LAYOUT,'default')==='custom'?'custom':'default';
+          applyPositions();applyHidden();components().forEach(moveComponent);
+          document.getElementById('layoutToggle').addEventListener('click',function(){if(editComponents)exitComponentEdit();else enterComponentEdit()});
+          document.getElementById('layoutRestore').addEventListener('click',function(){if(confirm('${tr("Khôi phục vị trí mặc định của các thành phần?", "Reset component positions to default?")}'))resetPositions()});
+          document.getElementById('componentRestore').addEventListener('click',restoreComponent);
           function addShortcut(){
             var url=prompt('${tr("Nhập địa chỉ URL (https://...)", "Enter shortcut URL (https://...)")}','https://');
             if(!url)return; url=url.trim(); if(!/^https?:\/\//i.test(url)){alert('${tr("URL phải bắt đầu bằng http:// hoặc https://", "URL must start with http:// or https://")}');return}
@@ -998,7 +1048,7 @@ class MainActivity : Activity() {
             });
             if(items.length===0){var empty=document.createElement('div');empty.className='empty';empty.textContent='${tr("Chưa có lối tắt. Nhấn giữ vùng này để thêm.", "No shortcuts. Hold this area to add one.")}';grid.appendChild(empty)}
           }
-          grid.addEventListener('contextmenu',function(e){if(e.target===grid||e.target.classList.contains('empty')){e.preventDefault();var action=prompt('${tr("Tùy chỉnh tab mới", "Customize new tab")}\n1 = ${tr("Thêm lối tắt", "Add shortcut")}\n2 = ${tr("Đổi kiểu bố cục", "Change layout")}\n3 = ${tr("Xóa tất cả lối tắt", "Remove all shortcuts")}','1');if(action==='1')addShortcut();else if(action==='2'){layout.value=layout.value==='custom'?'default':'custom';save();render()}else if(action==='3'&&confirm('${tr("Xóa tất cả lối tắt?", "Remove all shortcuts?")}')){items=[];save();render()}}});
+          grid.addEventListener('contextmenu',function(e){if(e.target===grid||e.target.classList.contains('empty')){e.preventDefault();var action=prompt('${tr("Tùy chỉnh tab mới", "Customize new tab")}\\n1 = ${tr("Thêm lối tắt", "Add shortcut")}\\n2 = ${tr("Đổi kiểu sắp xếp shortcut", "Toggle shortcut reorder")}\\n3 = ${tr("Xóa tất cả lối tắt", "Remove all shortcuts")}\\n4 = ${tr("Ẩn cụm shortcut", "Hide shortcut grid")}','1');if(action==='1')addShortcut();else if(action==='2'){layout.value=layout.value==='custom'?'default':'custom';save();render()}else if(action==='3'&&confirm('${tr("Xóa tất cả lối tắt?", "Remove all shortcuts?")}')){items=[];save();render()}else if(action==='4'){var hidden=readObject(HIDDEN);hidden.grid=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden()}}});
           render();
         })();
         </script></body></html>
