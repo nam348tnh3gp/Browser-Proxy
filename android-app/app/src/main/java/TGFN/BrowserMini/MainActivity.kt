@@ -15,6 +15,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Message
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
@@ -754,7 +755,39 @@ class MainActivity : Activity() {
         web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
             enqueueDownload(url, userAgent, contentDisposition, mimeType)
         }
-        // Chromium-style link actions: intercept long-presses only when the hit target is a link.
+        // Cache whether the touch-down point is ordinary text or genuinely blank page
+        // space. The JS check is asynchronous, so it must never consume the touch event:
+        // Chromium still receives the gesture and can create its normal text selection.
+        var longPressContentKind = "unknown"
+        web.setOnTouchListener { view, event ->
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                longPressContentKind = "unknown"
+                val density = resources.displayMetrics.density.coerceAtLeast(1f)
+                val x = event.x / density
+                val y = event.y / density
+                (view as? WebView)?.evaluateJavascript(
+                    """(function(){try {
+                        var e=document.elementFromPoint($x,$y);
+                        if(!e) return 'blank';
+                        if(e.matches('input,textarea,select,[contenteditable="true"]') ||
+                           e.isContentEditable) return 'editable';
+                        if(e.closest('a[href]')) return 'link';
+                        if(e.closest('img,video,canvas,svg')) return 'media';
+                        var d=document.caretRangeFromPoint ? document.caretRangeFromPoint($x,$y) : null;
+                        if(d && d.startContainer && d.startContainer.nodeType===3 &&
+                           d.startContainer.textContent && d.startContainer.textContent.trim().length) return 'text';
+                        if(e===document.body || e===document.documentElement ||
+                           !((e.innerText || e.textContent || '').trim())) return 'blank';
+                        return 'text';
+                    } catch(_) { return 'unknown'; }})()"""
+                ) { value ->
+                    longPressContentKind = value?.trim('"')?.takeIf { it.isNotBlank() } ?: "unknown"
+                }
+            }
+            false
+        }
+        // Keep the native selection toolbar/handles for text. Only replace Chromium's
+        // link/image menus with TGFN menus, and use the page menu for confirmed blank space.
         web.setOnLongClickListener { view ->
             val target = view as? WebView ?: return@setOnLongClickListener false
             val hit = target.hitTestResult ?: return@setOnLongClickListener false
@@ -771,12 +804,18 @@ class MainActivity : Activity() {
                     showImageContextMenu(hit.extra, target)
                     true
                 }
-                // Keep Android's native text selection and editing behavior for text/input
-                // targets. WebView reports ordinary text as UNKNOWN_TYPE on many versions,
-                // so let its native long-press handler process unknown targets as well.
-                WebView.HitTestResult.EDIT_TEXT_TYPE,
-                WebView.HitTestResult.UNKNOWN_TYPE -> false
-                else -> { showPageContextMenu(target); true }
+                WebView.HitTestResult.EDIT_TEXT_TYPE -> false
+                WebView.HitTestResult.UNKNOWN_TYPE -> {
+                    if (longPressContentKind == "blank") {
+                        showPageContextMenu(target)
+                        true
+                    } else {
+                        // In particular, do not consume ordinary-text long presses:
+                        // WebView needs them to start and maintain native text selection.
+                        false
+                    }
+                }
+                else -> false
             }
         }
         if (select) selectTab(tabs.lastIndex)
