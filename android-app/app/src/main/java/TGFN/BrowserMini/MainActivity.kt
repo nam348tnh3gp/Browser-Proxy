@@ -112,6 +112,9 @@ class MainActivity : Activity() {
     private var browserTopBar: LinearLayout? = null
     private var browserBottomBar: LinearLayout? = null
     private var browserStatusRow: LinearLayout? = null
+    private var mediaBackgroundHost: FrameLayout? = null
+    private var videoBackground: android.widget.VideoView? = null
+    private var gifBackground: GifBackgroundView? = null
     private lateinit var proxySummary: TextView
     private var browserRoot: View? = null
     private var fullscreenView: View? = null
@@ -228,12 +231,16 @@ class MainActivity : Activity() {
     }
 
     private fun buildUi() {
-        val hasCustomBackground = !prefs.getString("app_background_uri", null).isNullOrBlank()
+        val backgroundUri = prefs.getString("app_background_uri", null)
+        val hasCustomBackground = !backgroundUri.isNullOrBlank()
+        val isGifBackground = backgroundUri?.let { isGifUri(Uri.parse(it)) } == true
+        val isVideoBackground = backgroundUri?.let { isMp4Uri(Uri.parse(it)) } == true
+        val isMediaBackground = isGifBackground || isVideoBackground
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(canvas)
+            setBackgroundColor(if (isMediaBackground) Color.TRANSPARENT else canvas)
         }
-        applyCustomAppBackground(root)
+        if (hasCustomBackground && !isMediaBackground) applyCustomAppBackground(root)
 
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -356,7 +363,38 @@ class MainActivity : Activity() {
         browserStatusRow = statusRow
         root.addView(statusRow)
         browserRoot = root
-        setContentView(root)
+        if (isMediaBackground && backgroundUri != null) {
+            val host = FrameLayout(this)
+            mediaBackgroundHost = host
+            if (isVideoBackground) {
+                val player = android.widget.VideoView(this).apply {
+                    setBackgroundColor(canvas)
+                    setVideoURI(Uri.parse(backgroundUri))
+                    setOnPreparedListener { mediaPlayer ->
+                        mediaPlayer.isLooping = true
+                        mediaPlayer.setVolume(0f, 0f)
+                        start()
+                    }
+                    setOnErrorListener { _, _, _ -> true }
+                }
+                videoBackground = player
+                host.addView(player, FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                ))
+            } else if (isGifBackground) {
+                val gif = GifBackgroundView(this, Uri.parse(backgroundUri))
+                gifBackground = gif
+                host.addView(gif, FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                ))
+            }
+            host.addView(root, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            ))
+            setContentView(host)
+        } else {
+            setContentView(root)
+        }
         loadAdHosts()
     }
 
@@ -712,13 +750,61 @@ class MainActivity : Activity() {
      * All browser chrome and the WebView container are opaque on real sites,
      * and become transparent again when returning to the new-tab page.
      */
+    private fun isGifUri(uri: Uri): Boolean {
+        val mime = try { contentResolver.getType(uri) } catch (_: Exception) { null }
+        return mime.equals("image/gif", ignoreCase = true) ||
+            uri.lastPathSegment.orEmpty().substringBefore('?').endsWith(".gif", ignoreCase = true)
+    }
+
+    private fun isMp4Uri(uri: Uri): Boolean {
+        val mime = try { contentResolver.getType(uri) } catch (_: Exception) { null }
+        return mime.equals("video/mp4", ignoreCase = true) ||
+            uri.lastPathSegment.orEmpty().substringBefore('?').endsWith(".mp4", ignoreCase = true)
+    }
+
     private fun updateBrowserChromeBackground(showWallpaper: Boolean) {
-        val hasCustomBackground = !prefs.getString("app_background_uri", null).isNullOrBlank()
+        val rawUri = prefs.getString("app_background_uri", null)
+        val hasCustomBackground = !rawUri.isNullOrBlank()
+        val isGif = if (rawUri.isNullOrBlank()) false else isGifUri(Uri.parse(rawUri))
+        val isVideo = if (rawUri.isNullOrBlank()) false else isMp4Uri(Uri.parse(rawUri))
+        val isMedia = isGif || isVideo
         val color = if (hasCustomBackground && showWallpaper) Color.TRANSPARENT else canvas
         browserTopBar?.setBackgroundColor(color)
         browserBottomBar?.setBackgroundColor(color)
         browserStatusRow?.setBackgroundColor(color)
+        if (isMedia) {
+            browserRoot?.setBackgroundColor(if (showWallpaper) Color.TRANSPARENT else canvas)
+        }
         if (::webContainer.isInitialized) webContainer.setBackgroundColor(color)
+        mediaBackgroundHost?.setBackgroundColor(if (showWallpaper && isMedia) Color.TRANSPARENT else canvas)
+        videoBackground?.visibility = if (showWallpaper && isVideo) View.VISIBLE else View.GONE
+        gifBackground?.visibility = if (showWallpaper && isGif) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Minimal animated GIF renderer for app wallpaper. It decodes the GIF from the
+     * persisted document URI and scales/crops it to fill the available view.
+     */
+    private class GifBackgroundView(context: Context, uri: Uri) : View(context) {
+        private val movie: android.graphics.Movie? = try {
+            context.contentResolver.openInputStream(uri)?.use { android.graphics.Movie.decodeStream(it) }
+        } catch (_: Exception) { null }
+        private val startedAt = android.os.SystemClock.uptimeMillis()
+
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            super.onDraw(canvas)
+            val gif = movie ?: return
+            val duration = gif.duration().takeIf { it > 0 } ?: 1000
+            gif.setTime(((android.os.SystemClock.uptimeMillis() - startedAt) % duration).toInt())
+            val sourceWidth = gif.width().toFloat().coerceAtLeast(1f)
+            val sourceHeight = gif.height().toFloat().coerceAtLeast(1f)
+            val scale = maxOf(width / sourceWidth, height / sourceHeight)
+            val save = canvas.save()
+            canvas.scale(scale, scale)
+            gif.draw(canvas, (width / scale - sourceWidth) / 2f, (height / scale - sourceHeight) / 2f)
+            canvas.restoreToCount(save)
+            if (visibility == View.VISIBLE) postInvalidateDelayed(33)
+        }
     }
 
     private fun loadNewTabPage(web: WebView) {
@@ -2280,12 +2366,13 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             setPadding(0, dp(4), 0, dp(4))
         }
         val chooseBackground = android.widget.Button(this).apply {
-            text = tr("Chọn hình nền", "Choose background")
+            text = tr("Chọn nền ảnh/GIF/MP4", "Choose image/GIF/MP4 background")
             setOnClickListener {
                 try {
                     val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "image/*"
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/mp4"))
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
                     }
                     startActivityForResult(picker, 2302)
@@ -2304,7 +2391,7 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         }
         backgroundButtons.addView(clearBackground, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         content.addView(TextView(this).apply {
-            text = tr("Hình nền ứng dụng (chỉ phủ giao diện trình duyệt, không che nội dung website)", "App background (browser chrome only; website content stays visible)")
+            text = tr("Nền ứng dụng: ảnh tĩnh, GIF động hoặc video MP4 lặp lại; chỉ hiện ở trang chủ, không che website", "App background: still image, animated GIF, or looping MP4; shown only on the home page, never over website content")
             textSize = 12f
             setTextColor(muted)
             setPadding(0, dp(6), 0, 0)
@@ -2871,6 +2958,16 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
     private fun saveCustomBackgroundResult(resultCode: Int, data: Intent?) {
         if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
+        val mime = try { contentResolver.getType(uri) } catch (_: Exception) { null }
+        val path = uri.lastPathSegment.orEmpty().substringBefore('?')
+        val supported = mime?.startsWith("image/") == true ||
+            mime.equals("video/mp4", ignoreCase = true) ||
+            path.endsWith(".gif", ignoreCase = true) ||
+            path.endsWith(".mp4", ignoreCase = true)
+        if (!supported) {
+            Toast.makeText(this, tr("Chỉ hỗ trợ ảnh, GIF và video MP4", "Only images, GIF, and MP4 video are supported"), Toast.LENGTH_LONG).show()
+            return
+        }
         try {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (_: Exception) { }
