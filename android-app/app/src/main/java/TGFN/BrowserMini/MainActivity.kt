@@ -386,7 +386,8 @@ class MainActivity : Activity() {
                 }
                 videoBackground = player
                 host.addView(player, FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+                    Gravity.CENTER
                 ))
             } else if (isGifBackground) {
                 // Chromium renders animated GIFs in its renderer process rather than decoding via Movie in the Activity.
@@ -401,7 +402,7 @@ class MainActivity : Activity() {
                     overScrollMode = View.OVER_SCROLL_NEVER
                     loadDataWithBaseURL(
                         "https://tgfn.browser/",
-                        "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}img{width:100%;height:100%;object-fit:cover;display:block}</style></head><body><img src=\"" + android.text.TextUtils.htmlEncode(backgroundUri) + "\" alt=\"\"></body></html>",
+                        "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}img{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;display:block}</style></head><body><img src=\"" + android.text.TextUtils.htmlEncode(backgroundUri) + "\" alt=\"\"></body></html>",
                         "text/html",
                         "UTF-8",
                         null
