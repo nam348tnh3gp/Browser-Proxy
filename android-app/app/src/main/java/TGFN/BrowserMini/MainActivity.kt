@@ -2131,25 +2131,89 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
 
     private fun rememberHistory(tab: BrowserTab) {
         if (tab.url.isBlank() || !tab.url.startsWith("http")) return
+
         val history = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toMutableSet()
-        history.remove(tab.url)
         history.add(tab.url)
-        prefs.edit().putStringSet("history", history.toList().takeLast(100).toSet()).apply()
+        val timestamps = try {
+            org.json.JSONObject(prefs.getString("history_timestamps", "{}") ?: "{}")
+        } catch (_: Exception) {
+            org.json.JSONObject()
+        }
+        timestamps.put(tab.url, System.currentTimeMillis())
+
+        // Keep the complete browsing history. The history UI pages through it as the user scrolls.
+        prefs.edit()
+            .putStringSet("history", history)
+            .putString("history_timestamps", timestamps.toString())
+            .apply()
     }
 
     private fun showHistory() {
-        val history = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toList().sortedDescending()
+        val savedHistory = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toList()
+        val timestamps = try {
+            org.json.JSONObject(prefs.getString("history_timestamps", "{}") ?: "{}")
+        } catch (_: Exception) {
+            org.json.JSONObject()
+        }
+        val history = savedHistory.sortedWith(
+            compareByDescending<String> { timestamps.optLong(it, 0L) }.thenByDescending { it }
+        )
         if (history.isEmpty()) {
             Toast.makeText(this, tr("Chưa có lịch sử duyệt web", "No browsing history yet"), Toast.LENGTH_SHORT).show()
             return
         }
-        android.app.AlertDialog.Builder(this).setTitle(tr("Lịch sử", "History"))
-            .setItems(history.toTypedArray()) { _, which -> currentWebView()?.loadUrl(history[which]) }
+
+        val pageSize = 50
+        var loadedCount = minOf(pageSize, history.size)
+        val formatter = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        fun labelFor(url: String): String {
+            val visitedAt = timestamps.optLong(url, 0L)
+            return if (visitedAt > 0L) "${formatter.format(java.util.Date(visitedAt))}\n$url" else url
+        }
+
+        val adapter = android.widget.ArrayAdapter<String>(
+            this, android.R.layout.simple_list_item_1,
+            history.take(loadedCount).map(::labelFor)
+        )
+        val list = android.widget.ListView(this).apply {
+            this.adapter = adapter
+            dividerHeight = dp(1)
+            setOnItemClickListener { _, _, position, _ ->
+                if (position in history.indices) currentWebView()?.loadUrl(history[position])
+            }
+            setOnScrollListener(object : android.widget.AbsListView.OnScrollListener {
+                override fun onScrollStateChanged(view: android.widget.AbsListView?, scrollState: Int) = Unit
+                override fun onScroll(
+                    view: android.widget.AbsListView?,
+                    firstVisibleItem: Int,
+                    visibleItemCount: Int,
+                    totalItemCount: Int
+                ) {
+                    if (loadedCount < history.size && firstVisibleItem + visibleItemCount >= totalItemCount - 5) {
+                        val nextCount = minOf(loadedCount + pageSize, history.size)
+                        if (nextCount > loadedCount) {
+                            adapter.addAll(history.subList(loadedCount, nextCount).map(::labelFor))
+                            loadedCount = nextCount
+                        }
+                    }
+                }
+            })
+        }
+
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Lịch sử", "History"))
+            .setView(list)
             .setPositiveButton(tr("Xóa lịch sử", "Clear history")) { _, _ ->
-                prefs.edit().remove("history").apply()
+                prefs.edit().remove("history").remove("history_timestamps").apply()
                 Toast.makeText(this, tr("Đã xóa lịch sử", "History cleared"), Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton(tr("Đóng", "Close"), null).show()
+            .setNegativeButton(tr("Đóng", "Close"), null)
+            .create()
+        dialog.show()
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.94f).toInt(),
+            (resources.displayMetrics.heightPixels * 0.8f).toInt()
+        )
     }
 
     private fun shareCurrentPage() {
