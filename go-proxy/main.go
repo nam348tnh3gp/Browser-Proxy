@@ -69,6 +69,9 @@ func proxyHandler() http.Handler {
 		if serveAndroidCompat(w, r) {
 			return
 		}
+		if serveNgrokRoot(w, r) {
+			return
+		}
 		if serveRemoteFetch(w, r) {
 			return
 		}
