@@ -29,8 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
-      - name: Checkout
+      - name: Checkout J2ME proxy
         uses: actions/checkout@v4
+        with:
+          ref: J2ME
 
       - name: Set up Go
         uses: actions/setup-go@v5
