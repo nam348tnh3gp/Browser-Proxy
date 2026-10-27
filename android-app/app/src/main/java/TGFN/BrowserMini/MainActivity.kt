@@ -314,7 +314,7 @@ class MainActivity : Activity() {
         }
         bottomBar.addView(bottomAction("‹", tr("Quay lại", "Back")) { currentWebView()?.let { if (it.canGoBack()) it.goBack() } })
         bottomBar.addView(bottomAction("›", tr("Tiến", "Forward")) { currentWebView()?.let { if (it.canGoForward()) it.goForward() } })
-        bottomBar.addView(bottomAction("⌂", tr("Trang chủ", "Home")) { currentWebView()?.let { loadNewTabPage(it) } })
+        bottomBar.addView(bottomAction("⌂", tr("Trang chủ", "Home")) { loadHome() })
         bottomBar.addView(bottomAction("☆", tr("Dấu trang", "Bookmarks")) { showBookmarks() })
         bottomBar.addView(bottomAction("▢", tr("Tab", "Tabs")) { showTabs() })
         root.addView(bottomBar)
@@ -1963,12 +1963,25 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
         }
         content.addView(proxyUrl)
+        val customHome = android.widget.CheckBox(this).apply {
+            text = tr("Dùng URL tùy chỉnh làm trang chủ", "Use a custom URL as the homepage")
+            isChecked = prefs.getBoolean("custom_home_enabled", false)
+        }
+        content.addView(customHome)
         val home = EditText(this).apply {
-            hint = tr("Trang chủ URL", "Homepage URL")
+            hint = tr("URL trang chủ (HTTP/HTTPS)", "Homepage URL (HTTP/HTTPS)")
             setSingleLine(true)
             setText(prefs.getString("home_url", "https://www.google.com") ?: "")
+            isEnabled = customHome.isChecked
         }
+        customHome.setOnCheckedChangeListener { _, checked -> home.isEnabled = checked }
         content.addView(home)
+        content.addView(TextView(this).apply {
+            text = tr("Mặc định, Trang chủ mở trang Tab mới tích hợp sẵn. Bật tùy chọn trên để dùng website riêng; Tab mới vẫn luôn mở trang Tab mới.", "By default, Home opens the built-in New Tab page. Enable the option above to use your own website; New Tab always opens the built-in page.")
+            textSize = 12f
+            setTextColor(muted)
+            setPadding(0, dp(4), 0, dp(8))
+        })
         content.addView(TextView(this).apply {
             text = tr("Khi bật, HTTP đi qua proxy và HTTPS dùng đường hầm CONNECT. Khi tắt, trình duyệt kết nối trực tiếp. Proxy cần hỗ trợ HTTP CONNECT để tải HTTPS.", "When enabled, HTTP uses the proxy and HTTPS uses CONNECT tunneling. When disabled, the browser connects directly. The proxy must support HTTP CONNECT for HTTPS.")
             textSize = 13f
@@ -1988,8 +2001,9 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             .create()
         dialog.setOnShowListener {
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val normalizedHome = normalizeHttpUrl(home.text.toString().trim())
-                if (normalizedHome == null) {
+                val rawHome = home.text.toString().trim()
+                val normalizedHome = if (rawHome.isBlank()) null else normalizeHttpUrl(rawHome)
+                if (customHome.isChecked && normalizedHome == null) {
                     home.error = tr("Nhập URL HTTP/HTTPS hợp lệ", "Enter a valid HTTP/HTTPS URL")
                     return@setOnClickListener
                 }
@@ -2007,7 +2021,10 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
                     .putBoolean("data_saver_enabled", dataSaver.isChecked)
                     .putBoolean("adblock_enabled", adblock.isChecked)
                     .putString("language", selectedLanguage)
-                    .putString("proxy_url", rawProxy).putString("home_url", normalizedHome).apply()
+                    .putString("proxy_url", rawProxy)
+                    .putBoolean("custom_home_enabled", customHome.isChecked)
+                    .putString("home_url", normalizedHome ?: prefs.getString("home_url", "https://www.google.com"))
+                    .apply()
                 tabs.forEach { tab ->
                     tab.webView.settings.userAgentString = if (desktop.isChecked) DESKTOP_USER_AGENT else null
                     applyDataSaverSettings(tab.webView.settings)
@@ -2222,8 +2239,18 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
     }
 
     private fun loadHome() {
-        val url = normalizeHttpUrl(prefs.getString("home_url", "https://www.google.com") ?: "https://www.google.com")
-        if (url == null) loadNewTabPage(currentWebView() ?: return) else currentWebView()?.loadUrl(url)
+        val web = currentWebView() ?: return
+        if (!prefs.getBoolean("custom_home_enabled", false)) {
+            loadNewTabPage(web)
+            return
+        }
+        val url = normalizeHttpUrl(prefs.getString("home_url", "") ?: "")
+        if (url == null) {
+            Toast.makeText(this, tr("URL trang chủ chưa hợp lệ. Hãy kiểm tra Cài đặt.", "Homepage URL is invalid. Check Settings."), Toast.LENGTH_LONG).show()
+            loadNewTabPage(web)
+        } else {
+            web.loadUrl(url)
+        }
     }
 
     private fun normalizeHttpUrl(raw: String): String? {
