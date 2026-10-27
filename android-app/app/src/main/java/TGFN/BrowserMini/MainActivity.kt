@@ -2,9 +2,12 @@ package TGFN.BrowserMini
 
 import android.app.Activity
 import android.app.DownloadManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -13,6 +16,9 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.webkit.JsPromptResult
+import android.webkit.JsResult
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -106,6 +112,7 @@ class MainActivity : Activity() {
     private var fullscreenView: View? = null
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
     private var previousSystemUiVisibility: Int = 0
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
 
     private val prefs by lazy { getSharedPreferences("browser_settings", Context.MODE_PRIVATE) }
     private val clientId: String by lazy {
@@ -470,6 +477,75 @@ class MainActivity : Activity() {
             }
         }
         web.webChromeClient = object : WebChromeClient() {
+            // Web platform file inputs use Android's system picker, like Chromium on Android.
+            override fun onShowFileChooser(
+                view: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                fileChooserCallback?.onReceiveValue(null)
+                fileChooserCallback = filePathCallback
+                val intent = try {
+                    fileChooserParams?.createIntent()
+                        ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                            type = "*/*"
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                        }
+                } catch (_: Exception) {
+                    Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "*/*"
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                    }
+                }
+                return try {
+                    startActivityForResult(intent, FILE_CHOOSER_REQUEST)
+                    true
+                } catch (_: Exception) {
+                    fileChooserCallback?.onReceiveValue(null)
+                    fileChooserCallback = null
+                    Toast.makeText(this@MainActivity, tr("Không thể mở trình chọn tệp", "Could not open file picker"), Toast.LENGTH_SHORT).show()
+                    false
+                }
+            }
+
+            // Handle JavaScript dialogs instead of silently leaving page scripts waiting.
+            override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+                android.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle(hostLabel(url))
+                    .setMessage(message.orEmpty())
+                    .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }
+                    .setOnCancelListener { result?.cancel() }
+                    .show()
+                return true
+            }
+
+            override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+                android.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle(hostLabel(url))
+                    .setMessage(message.orEmpty())
+                    .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }
+                    .setNegativeButton(android.R.string.cancel) { _, _ -> result?.cancel() }
+                    .setOnCancelListener { result?.cancel() }
+                    .show()
+                return true
+            }
+
+            override fun onJsPrompt(view: WebView?, url: String?, message: String?, defaultValue: String?, result: JsPromptResult?): Boolean {
+                val input = EditText(this@MainActivity).apply {
+                    setText(defaultValue.orEmpty())
+                    setSelection(text.length)
+                    setSingleLine(true)
+                }
+                android.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle(hostLabel(url))
+                    .setMessage(message.orEmpty())
+                    .setView(input)
+                    .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm(input.text.toString()) }
+                    .setNegativeButton(android.R.string.cancel) { _, _ -> result?.cancel() }
+                    .setOnCancelListener { result?.cancel() }
+                    .show()
+                return true
+            }
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 if (isSelected(tab)) {
                     progress.progress = newProgress
@@ -552,6 +628,23 @@ class MainActivity : Activity() {
         }
         web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
             enqueueDownload(url, userAgent, contentDisposition, mimeType)
+        }
+        // Chromium-style link actions: intercept long-presses only when the hit target is a link.
+        web.setOnLongClickListener { view ->
+            val hit = (view as? WebView)?.hitTestResult
+            val isLink = hit != null && hit.type in setOf(
+                WebView.HitTestResult.ANCHOR_TYPE,
+                WebView.HitTestResult.SRC_ANCHOR_TYPE,
+                WebView.HitTestResult.EMAIL_TYPE,
+                WebView.HitTestResult.PHONE_TYPE
+            )
+            val link = hit?.extra
+            if (isLink && !link.isNullOrBlank()) {
+                showLinkContextMenu(link)
+                true
+            } else {
+                false
+            }
         }
         if (select) selectTab(tabs.lastIndex)
         if (popupTransport != null) {
@@ -2329,6 +2422,50 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         )
     }
 
+    /** Show browser actions for a long-pressed web link, similar to Chromium's link menu. */
+    private fun showLinkContextMenu(rawUrl: String) {
+        val url = normalizeHttpUrl(rawUrl)
+        if (url == null) {
+            Toast.makeText(this, tr("Liên kết này chưa được hỗ trợ", "This link type is not supported"), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val actions = arrayOf(
+            tr("Mở liên kết", "Open link"),
+            tr("Mở trong tab mới", "Open in new tab"),
+            tr("Mở trong tab nền", "Open in background tab"),
+            tr("Sao chép địa chỉ liên kết", "Copy link address"),
+            tr("Chia sẻ liên kết", "Share link"),
+            tr("Tải liên kết xuống", "Download link")
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle(hostLabel(url))
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> currentWebView()?.loadUrl(url)
+                    1 -> createTab(url, true)
+                    2 -> {
+                        createTab(url, false)
+                        Toast.makeText(this, tr("Đã mở liên kết trong tab nền", "Opened link in background tab"), Toast.LENGTH_SHORT).show()
+                    }
+                    3 -> {
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
+                        Toast.makeText(this, tr("Đã sao chép liên kết", "Link copied"), Toast.LENGTH_SHORT).show()
+                    }
+                    4 -> {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, url)
+                        }
+                        startActivity(Intent.createChooser(send, tr("Chia sẻ liên kết bằng", "Share link using")))
+                    }
+                    5 -> enqueueDownload(url, currentWebView()?.settings?.userAgentString, null, null)
+                }
+            }
+            .setNegativeButton(tr("Hủy", "Cancel"), null)
+            .show()
+    }
+
     private fun shareCurrentPage() {
         val web = currentWebView() ?: return
         val url = web.url ?: return
@@ -2456,12 +2593,30 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         currentWebView()?.loadUrl(normalized)
     }
 
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != FILE_CHOOSER_REQUEST) return
+        val callback = fileChooserCallback ?: return
+        fileChooserCallback = null
+        val results = if (resultCode == Activity.RESULT_OK) {
+            try {
+                WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+                    ?: data?.data?.let { arrayOf(it) }
+            } catch (_: Exception) {
+                data?.data?.let { arrayOf(it) }
+            }
+        } else null
+        callback.onReceiveValue(results)
+    }
+
     private fun hostLabel(url: String?): String =
         try { URI(url ?: "").host ?: "TGFN Browser" } catch (_: Exception) { "TGFN Browser" }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     companion object {
+        private const val FILE_CHOOSER_REQUEST = 2301
         private const val NEW_TAB_SESSION_URL = "tgfn-internal://newtab"
         private const val READER_BASE_URL = "https://tgfn-reader.local/"
         private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -2515,6 +2670,8 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
     }
 
     override fun onDestroy() {
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
         hideFullscreenView()
         persistSession()
         tabs.forEach { tab ->
