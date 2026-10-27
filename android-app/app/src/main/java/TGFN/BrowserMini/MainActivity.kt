@@ -791,6 +791,11 @@ class MainActivity : Activity() {
         web.setOnLongClickListener { view ->
             val target = view as? WebView ?: return@setOnLongClickListener false
             val hit = target.hitTestResult ?: return@setOnLongClickListener false
+            // On the built-in new-tab page, let its own JavaScript manage long-press menus.
+            // CSS disables selection on built-in labels while leaving input fields editable.
+            if (tab.isNewTab && target.url?.startsWith("https://tgfn.browser/") == true) {
+                return@setOnLongClickListener false
+            }
             when (hit.type) {
                 WebView.HitTestResult.ANCHOR_TYPE,
                 WebView.HitTestResult.SRC_ANCHOR_TYPE,
