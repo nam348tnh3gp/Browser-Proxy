@@ -361,20 +361,13 @@ class MainActivity : Activity() {
             // A newly created background tab must not cover the currently selected page.
             visibility = if (select) View.VISIBLE else View.GONE
             setBackgroundColor(canvas)
-            settings.javaScriptEnabled = true
-            configureWebViewTheme(settings)
-            settings.domStorageEnabled = true
-            settings.loadsImagesAutomatically = true
-            applyDataSaverSettings(settings)
-            settings.useWideViewPort = true
-            settings.loadWithOverviewMode = true
-            settings.setSupportZoom(true)
-            settings.builtInZoomControls = true
-            settings.displayZoomControls = false
-            settings.userAgentString = if (isDesktopModeEnabled()) DESKTOP_USER_AGENT else null
-            settings.javaScriptCanOpenWindowsAutomatically = true
-            settings.setSupportMultipleWindows(true)
         }
+        LightweightBrowserEngine.configure(
+            web,
+            if (isDesktopModeEnabled()) DESKTOP_USER_AGENT else null,
+            ::configureWebViewTheme,
+            ::applyDataSaverSettings
+        )
         // Respect the persisted third-party-cookie privacy preference for every tab.
         android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(
             web, prefs.getBoolean("third_party_cookies_enabled", true)
@@ -766,10 +759,8 @@ class MainActivity : Activity() {
         selectedTab = index
         tabs.forEachIndexed { i, tab ->
             val selected = i == index
-            tab.webView.visibility = if (selected) View.VISIBLE else View.GONE
-            // Pause inactive tabs to reduce background WebView work without globally
-            // pausing timers used by the active tab.
-            if (selected) tab.webView.onResume() else tab.webView.onPause()
+            // Centralized lightweight engine pauses hidden tabs and yields their renderer priority.
+            LightweightBrowserEngine.setTabActive(tab.webView, selected)
         }
         val tab = tabs[index]
         loadDeferredRestore(tab)
