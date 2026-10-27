@@ -26,7 +26,7 @@ func main() {
 		IdleTimeout:       90 * time.Second,
 	}
 	log.Printf("TGFN.BrowserMini Go proxy listening on %s", addr)
-	log.Fatal(server.ListenAndServe())
+	log.Fatal(listenAndServe(server))
 }
 
 type requestTrackingTransport struct {
@@ -66,6 +66,9 @@ func proxyHandler() http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveAndroidCompat(w, r) {
+			return
+		}
 		if serveRemoteFetch(w, r) {
 			return
 		}
@@ -85,6 +88,7 @@ func proxyHandler() http.Handler {
 		}
 		logWriter := &statusLoggingWriter{ResponseWriter: w, status: http.StatusOK}
 		defer func() {
+			noteHTTP(r.RemoteAddr, int64(logWriter.bytes))
 			log.Printf("request method=%s client=%q target=%q status=%d duration=%s",
 				r.Method, r.RemoteAddr, safeLogValue(target), logWriter.status, time.Since(started).Round(time.Millisecond))
 		}()
@@ -107,6 +111,7 @@ func proxyHandler() http.Handler {
 type statusLoggingWriter struct {
 	http.ResponseWriter
 	status int
+	bytes  int
 }
 
 func (w *statusLoggingWriter) WriteHeader(status int) {
@@ -115,7 +120,9 @@ func (w *statusLoggingWriter) WriteHeader(status int) {
 }
 
 func (w *statusLoggingWriter) Write(p []byte) (int, error) {
-	return w.ResponseWriter.Write(p)
+	n, err := w.ResponseWriter.Write(p)
+	w.bytes += n
+	return n, err
 }
 
 func (w *statusLoggingWriter) Flush() {
@@ -197,6 +204,12 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("CONNECT established target=%q dial_duration=%s",
 		safeLogValue(host), dialDuration.Round(time.Millisecond))
+	proxyStats.connectTunnels.Add(1)
+	if id := clientIDFromRemoteAddr(r.RemoteAddr); id != "" {
+		if c := lookupClientCounters(id); c != nil {
+			c.connectTunnels.Add(1)
+		}
+	}
 	go tunnel(upstream, client, rw.Reader, host, time.Now())
 }
 
