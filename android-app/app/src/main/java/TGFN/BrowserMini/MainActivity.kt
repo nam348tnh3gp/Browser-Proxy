@@ -386,6 +386,18 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ))
         web.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val uri = request?.url ?: return false
+                if (!uri.host.equals("tgfn.browser", ignoreCase = true)) return false
+                when (uri.path) {
+                    "/__bookmarks" -> showBookmarks()
+                    "/__history" -> showHistory()
+                    "/__downloads" -> openDownloads()
+                    else -> return false
+                }
+                return true
+            }
+
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val url = request?.url?.toString()
                 if (isAdUrl(url)) {
@@ -577,18 +589,25 @@ class MainActivity : Activity() {
         .wrap{max-width:560px;margin:0 auto;padding:12vh 22px 32px}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:26px}
         .brand span{color:#188038}.search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
         input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:14px}
-        .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px 10px;margin-top:34px}.item{text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};text-align:center;font-size:12px}
-        .circle{width:52px;height:52px;border-radius:18px;background:${if (darkMode) "#303134" else "#f1f3f4"};margin:0 auto 9px;display:flex;align-items:center;justify-content:center;overflow:hidden}.circle img{width:32px;height:32px;object-fit:contain}
-        .note{text-align:center;color:#80868b;font-size:12px;margin-top:36px}
+        .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px 10px;margin-top:30px}.item{text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};text-align:center;font-size:12px;min-width:0}
+        .circle{width:52px;height:52px;border-radius:18px;background:${if (darkMode) "#303134" else "#f1f3f4"};margin:0 auto 9px;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:23px;font-weight:700;color:#1a73e8}
+        .quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:20px}.quick a{display:block;text-align:center;text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};background:${if (darkMode) "#303134" else "#f8f9fa"};border:1px solid ${if (darkMode) "#44464a" else "#e8eaed"};border-radius:14px;padding:11px 4px;font-size:12px}
+        .note{text-align:center;color:#80868b;font-size:12px;margin-top:28px}
+        @media(max-width:340px){.wrap{padding:8vh 14px 24px}.brand{font-size:29px}.grid{gap:18px 6px}.circle{width:46px;height:46px}.quick a{font-size:11px}}
         </style></head><body><div class="wrap"><div class="brand">TGFN <span>Browser</span></div>
         <form class="search" action="https://www.google.com/search" method="get"><input name="q" placeholder="${tr("Tìm kiếm trên Google", "Search Google")}" autofocus><button class="go" type="submit">${tr("Tìm", "Search")}</button></form>
+        <div class="quick">
+        <a href="https://tgfn.browser/__bookmarks">☆ ${tr("Dấu trang", "Bookmarks")}</a>
+        <a href="https://tgfn.browser/__history">◷ ${tr("Lịch sử", "History")}</a>
+        <a href="https://tgfn.browser/__downloads">↓ ${tr("Tải xuống", "Downloads")}</a>
+        </div>
         <div class="grid">
-        <a class="item" href="https://www.google.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.google.com&amp;sz=128" alt="Google"></div>Google</a>
-        <a class="item" href="https://www.youtube.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.youtube.com&amp;sz=128" alt="YouTube"></div>YouTube</a>
-        <a class="item" href="https://www.wikipedia.org"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.wikipedia.org&amp;sz=128" alt="Wikipedia"></div>Wikipedia</a>
-        <a class="item" href="https://github.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=github.com&amp;sz=128" alt="GitHub"></div>GitHub</a>
-        <a class="item" href="https://www.reddit.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.reddit.com&amp;sz=128" alt="Reddit"></div>Reddit</a>
-        <a class="item" href="https://www.bing.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.bing.com&amp;sz=128" alt="Bing"></div>Bing</a>
+        <a class="item" href="https://www.google.com"><div class="circle">G</div>Google</a>
+        <a class="item" href="https://www.youtube.com"><div class="circle" style="color:#e53935">▶</div>YouTube</a>
+        <a class="item" href="https://www.wikipedia.org"><div class="circle" style="color:${if (darkMode) "#e8eaed" else "#202124"}">W</div>Wikipedia</a>
+        <a class="item" href="https://github.com"><div class="circle" style="color:${if (darkMode) "#e8eaed" else "#202124"}">⌘</div>GitHub</a>
+        <a class="item" href="https://www.reddit.com"><div class="circle" style="color:#ff4500">r/</div>Reddit</a>
+        <a class="item" href="https://www.bing.com"><div class="circle" style="color:#008373">b</div>Bing</a>
         </div><div class="note">${tr("Tìm kiếm nhanh · Duyệt web theo cách của bạn", "Quick search · Browse your way")}</div></div></body></html>
     """.trimIndent()
 
@@ -1963,25 +1982,12 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
         }
         content.addView(proxyUrl)
-        val customHome = android.widget.CheckBox(this).apply {
-            text = tr("Dùng URL tùy chỉnh làm trang chủ", "Use a custom URL as the homepage")
-            isChecked = prefs.getBoolean("custom_home_enabled", false)
-        }
-        content.addView(customHome)
         val home = EditText(this).apply {
-            hint = tr("URL trang chủ (HTTP/HTTPS)", "Homepage URL (HTTP/HTTPS)")
+            hint = tr("Trang chủ URL", "Homepage URL")
             setSingleLine(true)
             setText(prefs.getString("home_url", "https://www.google.com") ?: "")
-            isEnabled = customHome.isChecked
         }
-        customHome.setOnCheckedChangeListener { _, checked -> home.isEnabled = checked }
         content.addView(home)
-        content.addView(TextView(this).apply {
-            text = tr("Mặc định, Trang chủ mở trang Tab mới tích hợp sẵn. Bật tùy chọn trên để dùng website riêng; Tab mới vẫn luôn mở trang Tab mới.", "By default, Home opens the built-in New Tab page. Enable the option above to use your own website; New Tab always opens the built-in page.")
-            textSize = 12f
-            setTextColor(muted)
-            setPadding(0, dp(4), 0, dp(8))
-        })
         content.addView(TextView(this).apply {
             text = tr("Khi bật, HTTP đi qua proxy và HTTPS dùng đường hầm CONNECT. Khi tắt, trình duyệt kết nối trực tiếp. Proxy cần hỗ trợ HTTP CONNECT để tải HTTPS.", "When enabled, HTTP uses the proxy and HTTPS uses CONNECT tunneling. When disabled, the browser connects directly. The proxy must support HTTP CONNECT for HTTPS.")
             textSize = 13f
@@ -2001,9 +2007,8 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             .create()
         dialog.setOnShowListener {
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val rawHome = home.text.toString().trim()
-                val normalizedHome = if (rawHome.isBlank()) null else normalizeHttpUrl(rawHome)
-                if (customHome.isChecked && normalizedHome == null) {
+                val normalizedHome = normalizeHttpUrl(home.text.toString().trim())
+                if (normalizedHome == null) {
                     home.error = tr("Nhập URL HTTP/HTTPS hợp lệ", "Enter a valid HTTP/HTTPS URL")
                     return@setOnClickListener
                 }
@@ -2021,10 +2026,7 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
                     .putBoolean("data_saver_enabled", dataSaver.isChecked)
                     .putBoolean("adblock_enabled", adblock.isChecked)
                     .putString("language", selectedLanguage)
-                    .putString("proxy_url", rawProxy)
-                    .putBoolean("custom_home_enabled", customHome.isChecked)
-                    .putString("home_url", normalizedHome ?: prefs.getString("home_url", "https://www.google.com"))
-                    .apply()
+                    .putString("proxy_url", rawProxy).putString("home_url", normalizedHome).apply()
                 tabs.forEach { tab ->
                     tab.webView.settings.userAgentString = if (desktop.isChecked) DESKTOP_USER_AGENT else null
                     applyDataSaverSettings(tab.webView.settings)
@@ -2239,18 +2241,8 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
     }
 
     private fun loadHome() {
-        val web = currentWebView() ?: return
-        if (!prefs.getBoolean("custom_home_enabled", false)) {
-            loadNewTabPage(web)
-            return
-        }
-        val url = normalizeHttpUrl(prefs.getString("home_url", "") ?: "")
-        if (url == null) {
-            Toast.makeText(this, tr("URL trang chủ chưa hợp lệ. Hãy kiểm tra Cài đặt.", "Homepage URL is invalid. Check Settings."), Toast.LENGTH_LONG).show()
-            loadNewTabPage(web)
-        } else {
-            web.loadUrl(url)
-        }
+        val url = normalizeHttpUrl(prefs.getString("home_url", "https://www.google.com") ?: "https://www.google.com")
+        if (url == null) loadNewTabPage(currentWebView() ?: return) else currentWebView()?.loadUrl(url)
     }
 
     private fun normalizeHttpUrl(raw: String): String? {
