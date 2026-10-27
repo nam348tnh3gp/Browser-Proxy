@@ -548,7 +548,7 @@ class MainActivity : Activity() {
         // Chromium-style link actions: intercept long-presses only when the hit target is a link.
         web.setOnLongClickListener { view ->
             val hit = (view as? WebView)?.hitTestResult
-            val isLink = hit?.type in setOf(
+            val isLink = hit != null && hit.type in setOf(
                 WebView.HitTestResult.ANCHOR_TYPE,
                 WebView.HitTestResult.SRC_ANCHOR_TYPE,
                 WebView.HitTestResult.EMAIL_TYPE,
