@@ -35,6 +35,7 @@ import java.util.concurrent.Executor
 
 class MainActivity : Activity() {
     private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false, var group: String = "Default")
+    private data class ClosedTab(val title: String, val url: String)
 
 
     private val adDomains = java.util.Collections.synchronizedSet(mutableSetOf<String>())
@@ -851,7 +852,8 @@ class MainActivity : Activity() {
             tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel,
             tr("Phân tích Data Saver", "Data Saver analytics"), tr("Tải xuống", "Downloads"),
             tr("Quản lý quyền riêng tư", "Privacy and site data"), tr("Chế độ đọc", "Reader mode"),
-            tr("Nhóm tab", "Tab groups"), tr("Thao tác nhanh", "Quick actions"), adBlockLabel
+            tr("Nhóm tab", "Tab groups"), tr("Thao tác nhanh", "Quick actions"), adBlockLabel,
+            tr("Tab đã đóng gần đây", "Recently closed tabs")
         )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("TGFN Browser · Tiện ích", "TGFN Browser · Tools"))
@@ -877,6 +879,7 @@ class MainActivity : Activity() {
                     17 -> manageTabGroups()
                     18 -> showQuickActions()
                     19 -> toggleAdBlock()
+                    20 -> showRecentlyClosedTabs()
                 }
             }
             .show()
@@ -906,15 +909,88 @@ class MainActivity : Activity() {
             .setNegativeButton(tr("Đóng", "Close"), null).show()
     }
 
+    private fun readRecentlyClosedTabs(): MutableList<ClosedTab> {
+        val result = mutableListOf<ClosedTab>()
+        try {
+            val stored = org.json.JSONArray(prefs.getString("recently_closed_tabs", "[]") ?: "[]")
+            for (i in 0 until stored.length()) {
+                val item = stored.optJSONObject(i) ?: continue
+                val url = item.optString("url").trim()
+                if (url.startsWith("http://", true) || url.startsWith("https://", true)) {
+                    result.add(ClosedTab(item.optString("title"), url))
+                }
+            }
+        } catch (_: Exception) { }
+        if (result.isEmpty()) {
+            val legacyUrl = prefs.getString("last_closed_tab_url", null)
+            if (!legacyUrl.isNullOrBlank() &&
+                (legacyUrl.startsWith("http://", true) || legacyUrl.startsWith("https://", true))) {
+                result.add(ClosedTab("", legacyUrl))
+            }
+        }
+        return result
+    }
+
+    private fun saveRecentlyClosedTabs(items: List<ClosedTab>) {
+        val json = org.json.JSONArray()
+        items.take(10).forEach { item ->
+            json.put(org.json.JSONObject().put("title", item.title).put("url", item.url))
+        }
+        prefs.edit().putString("recently_closed_tabs", json.toString()).apply()
+    }
+
+    private fun rememberClosedTab(title: String, url: String) {
+        val items = readRecentlyClosedTabs()
+        items.add(0, ClosedTab(title, url))
+        saveRecentlyClosedTabs(items.take(10))
+        lastClosedTabUrl = url
+        prefs.edit().putString("last_closed_tab_url", url).apply()
+    }
+
     private fun restoreLastClosedTab() {
-        val url = lastClosedTabUrl ?: prefs.getString("last_closed_tab_url", null)
-        if (url.isNullOrBlank()) {
+        val items = readRecentlyClosedTabs()
+        val item = items.firstOrNull()
+        if (item == null) {
             Toast.makeText(this, tr("Không có tab nào để khôi phục", "No recently closed tab to restore"), Toast.LENGTH_SHORT).show()
             return
         }
+        saveRecentlyClosedTabs(items.drop(1))
         lastClosedTabUrl = null
         prefs.edit().remove("last_closed_tab_url").apply()
-        createTab(url, true)
+        createTab(item.url, true)
+    }
+
+    private fun showRecentlyClosedTabs() {
+        val items = readRecentlyClosedTabs()
+        if (items.isEmpty()) {
+            Toast.makeText(this, tr("Không có tab nào để khôi phục", "No recently closed tabs"), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = items.map { item ->
+            val title = item.title.ifBlank {
+                try { java.net.URI(item.url).host ?: item.url } catch (_: Exception) { item.url }
+            }
+            "$title\n${item.url}"
+        }.toTypedArray()
+        android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Tab đã đóng gần đây", "Recently closed tabs"))
+            .setItems(labels) { _, which ->
+                val current = readRecentlyClosedTabs()
+                if (which in current.indices) {
+                    val item = current.removeAt(which)
+                    saveRecentlyClosedTabs(current)
+                    lastClosedTabUrl = null
+                    prefs.edit().remove("last_closed_tab_url").apply()
+                    createTab(item.url, true)
+                }
+            }
+            .setNegativeButton(tr("Đóng", "Close"), null)
+            .setNeutralButton(tr("Xóa danh sách", "Clear list")) { _, _ ->
+                saveRecentlyClosedTabs(emptyList())
+                lastClosedTabUrl = null
+                prefs.edit().remove("last_closed_tab_url").apply()
+            }
+            .show()
     }
 
     private fun closeOtherTabs(keep: BrowserTab) {
@@ -1322,8 +1398,7 @@ class MainActivity : Activity() {
         val removed = tabs.removeAt(index)
         val removedUrl = removed.webView.url ?: removed.url
         if (removedUrl.isNotBlank() && !removedUrl.equals("about:blank", ignoreCase = true) && !removed.isNewTab) {
-            lastClosedTabUrl = removedUrl
-            prefs.edit().putString("last_closed_tab_url", removedUrl).apply()
+            rememberClosedTab(removed.title, removedUrl)
         }
         (removed.webView.parent as? ViewGroup)?.removeView(removed.webView)
         removed.webView.stopLoading()
