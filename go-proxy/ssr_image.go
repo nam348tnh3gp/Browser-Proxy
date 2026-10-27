@@ -107,8 +107,8 @@ func ssrImageResponse(resp *http.Response) error {
 	defer cancel()
 
 	viewportWidth := mobileViewportWidth(resp.Request.Header.Get("X-TGFN-Viewport-Width"))
-	shotQuality := 55
-	jpegQuality := 55
+	shotQuality := 78
+	jpegQuality := 78
 	scale := 1.0
 	packetLimit := maxMobilePacketBytes
 	if hq {
@@ -118,9 +118,9 @@ func ssrImageResponse(resp *http.Response) error {
 		if viewportWidth > 480 {
 			viewportWidth = 480
 		}
-		shotQuality = 90
-		jpegQuality = 88
-		scale = 1
+		shotQuality = 92
+		jpegQuality = 90
+		scale = 2
 		packetLimit = 4 << 20
 	}
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
@@ -152,11 +152,9 @@ func ssrImageResponse(resp *http.Response) error {
 				(document.head || document.documentElement).appendChild(style);
 				var lazy = document.querySelectorAll('img[loading="lazy"]');
 				for (var i = 0; i < lazy.length; i++) lazy[i].loading = 'eager';
-				window.scrollTo(0, document.documentElement.scrollHeight || document.body.scrollHeight);
-				window.scrollTo(0, 0);
 			} catch (e) {}
 		})()`, nil),
-		chromedp.Sleep(450*time.Millisecond),
+		chromedp.Sleep(180*time.Millisecond),
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			if err := chromedp.Evaluate(`window.scrollTo(0,0)`, nil).Do(ctx); err != nil {
 				return err
@@ -177,8 +175,8 @@ func ssrImageResponse(resp *http.Response) error {
 			if clipW > float64(viewportWidth) {
 				clipW = float64(viewportWidth)
 			}
-			if clipH > 12000 {
-				clipH = 12000
+			if clipH > 4500 {
+				clipH = 4500
 			}
 			format := page.CaptureScreenshotFormatJpeg
 			shot, err := page.CaptureScreenshot().
@@ -253,6 +251,8 @@ func ssrImageResponse(resp *http.Response) error {
 	maxWidth := viewportWidth
 	if hq {
 		maxWidth = viewportWidth * 2
+	} else if maxWidth > 320 {
+		maxWidth = 320
 	}
 	img = resizeMobileImage(img, maxWidth)
 	bounds := img.Bounds()

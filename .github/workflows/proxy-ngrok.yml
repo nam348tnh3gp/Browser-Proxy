@@ -3,6 +3,10 @@ name: Run proxy via ngrok
 on:
   workflow_dispatch:
     inputs:
+      ngrok_token:
+        description: Ngrok authtoken (nhập lúc chạy)
+        required: true
+        type: string
       minutes:
         description: Minutes to keep the tunnel open
         required: false
@@ -36,12 +40,13 @@ jobs:
 
       - name: Require ngrok token
         env:
-          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+          NGROK_AUTHTOKEN: ${{ inputs.ngrok_token }}
         run: |
           if [ -z "$NGROK_AUTHTOKEN" ]; then
-            echo "Add repository secret NGROK_AUTHTOKEN (Settings → Secrets and variables → Actions)."
+            echo "Nhập ngrok authtoken trong ô Run workflow."
             exit 1
           fi
+          echo "::add-mask::$NGROK_AUTHTOKEN"
 
       - name: Install Chromium
         run: |
@@ -69,7 +74,7 @@ jobs:
 
       - name: Start ngrok
         env:
-          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+          NGROK_AUTHTOKEN: ${{ inputs.ngrok_token }}
           MODE: ${{ inputs.mode }}
         run: |
           curl -fsSL -o "$RUNNER_TEMP/ngrok.tgz" https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz

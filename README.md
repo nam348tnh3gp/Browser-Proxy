@@ -50,9 +50,7 @@ Android app blocks common ad/tracker domains via shouldInterceptRequest. Toggle 
 
 ## Public test proxy (GitHub Actions + ngrok)
 
-Add repository secret `NGROK_AUTHTOKEN` in Settings → Secrets and variables → Actions.
-
-Then run **Actions → Run proxy via ngrok → Run workflow**.
+Run **Actions → Run proxy via ngrok → Run workflow** and paste the ngrok authtoken into the form. The token is masked in logs.
 
 - `http`: free ngrok URL for curl/browser tests
 - `tcp`: `host:port` for the J2ME socket client (needs an ngrok plan that allows TCP)
