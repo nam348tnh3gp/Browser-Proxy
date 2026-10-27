@@ -109,7 +109,9 @@ class MainActivity : Activity() {
     private var pageLoading = false
     private var lastClosedTabUrl: String? = null
     private lateinit var webContainer: FrameLayout
+    private var browserTopBar: LinearLayout? = null
     private var browserBottomBar: LinearLayout? = null
+    private var browserStatusRow: LinearLayout? = null
     private lateinit var proxySummary: TextView
     private var browserRoot: View? = null
     private var fullscreenView: View? = null
@@ -300,6 +302,7 @@ class MainActivity : Activity() {
 
         val menuButton = smallAction("⋮", tr("Menu", "Menu")) { showBrowserMenu() }
         topBar.addView(menuButton, LinearLayout.LayoutParams(dp(34), dp(42)))
+        browserTopBar = topBar
         root.addView(topBar)
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -350,6 +353,7 @@ class MainActivity : Activity() {
             background = rounded(Color.rgb(232, 245, 233), dp(16))
         }
         statusRow.addView(proxySummary)
+        browserStatusRow = statusRow
         root.addView(statusRow)
         browserRoot = root
         setContentView(root)
@@ -420,11 +424,13 @@ class MainActivity : Activity() {
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 if (url?.startsWith(READER_BASE_URL) == true) return
-                // Only the built-in new-tab page is transparent over the app wallpaper.
-                // Keep both website content and the bottom toolbar opaque on real pages.
+                // Recompute transparency on every navigation, including Back/Forward.
+                // A WebView made opaque for a website must become transparent again
+                // when it returns to the built-in new-tab page.
                 val showWallpaper = url?.startsWith("https://tgfn.browser/", ignoreCase = true) == true
-                if (!showWallpaper) view?.setBackgroundColor(canvas)
-                if (isSelected(tab)) updateBottomBarBackground(showWallpaper)
+                val hasCustomBackground = !prefs.getString("app_background_uri", null).isNullOrBlank()
+                view?.setBackgroundColor(if (hasCustomBackground && showWallpaper) Color.TRANSPARENT else canvas)
+                if (isSelected(tab)) updateBrowserChromeBackground(showWallpaper)
                 if (!url.isNullOrBlank() && !url.equals("about:blank", ignoreCase = true)) {
                     tab.isNewTab = url == "https://tgfn.browser/"
                 }
@@ -461,7 +467,7 @@ class MainActivity : Activity() {
                 tab.url = if (tab.isNewTab) NEW_TAB_SESSION_URL else (url ?: tab.url)
                 tab.title = view?.title?.takeIf { it.isNotBlank() } ?: hostLabel(url)
                 if (isSelected(tab)) {
-                    updateBottomBarBackground(tab.isNewTab)
+                    updateBrowserChromeBackground(tab.isNewTab)
                     pageLoading = false
                     status.text = tr("Sẵn sàng", "Ready")
                     refreshButton.text = "↻"
@@ -703,14 +709,16 @@ class MainActivity : Activity() {
 
     /**
      * Show the custom wallpaper only on the built-in new-tab page.
-     * Real websites must have an opaque bottom toolbar so the wallpaper
-     * cannot bleed through while browsing or when navigating back/forward.
+     * All browser chrome and the WebView container are opaque on real sites,
+     * and become transparent again when returning to the new-tab page.
      */
-    private fun updateBottomBarBackground(showWallpaper: Boolean) {
+    private fun updateBrowserChromeBackground(showWallpaper: Boolean) {
         val hasCustomBackground = !prefs.getString("app_background_uri", null).isNullOrBlank()
-        browserBottomBar?.setBackgroundColor(
-            if (hasCustomBackground && showWallpaper) Color.TRANSPARENT else canvas
-        )
+        val color = if (hasCustomBackground && showWallpaper) Color.TRANSPARENT else canvas
+        browserTopBar?.setBackgroundColor(color)
+        browserBottomBar?.setBackgroundColor(color)
+        browserStatusRow?.setBackgroundColor(color)
+        if (::webContainer.isInitialized) webContainer.setBackgroundColor(color)
     }
 
     private fun loadNewTabPage(web: WebView) {
@@ -721,7 +729,7 @@ class MainActivity : Activity() {
         }
         val hasCustomBackground = !prefs.getString("app_background_uri", null).isNullOrBlank()
         web.setBackgroundColor(if (hasCustomBackground) Color.TRANSPARENT else canvas)
-        if (tabs.getOrNull(selectedTab)?.webView === web) updateBottomBarBackground(showWallpaper = true)
+        if (tabs.getOrNull(selectedTab)?.webView === web) updateBrowserChromeBackground(showWallpaper = true)
         web.loadDataWithBaseURL("https://tgfn.browser/", newTabHtml(), "text/html", "UTF-8", null)
     }
 
@@ -766,7 +774,7 @@ class MainActivity : Activity() {
         }
         val tab = tabs[index]
         loadDeferredRestore(tab)
-        updateBottomBarBackground(tab.isNewTab || tab.webView.url?.startsWith("https://tgfn.browser/", ignoreCase = true) == true)
+        updateBrowserChromeBackground(tab.isNewTab || tab.webView.url?.startsWith("https://tgfn.browser/", ignoreCase = true) == true)
         setAddress(tab.webView.url ?: tab.url)
         updateAddressSecurity(tab.webView.url ?: tab.url)
         pageLoading = tab.webView.progress in 1..99
