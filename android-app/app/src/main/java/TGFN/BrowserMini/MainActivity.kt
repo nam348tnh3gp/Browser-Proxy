@@ -652,7 +652,8 @@ class MainActivity : Activity() {
                     showImageContextMenu(hit.extra, target)
                     true
                 }
-                else -> false // Keep native WebView text selection and its copy/share menu.
+                WebView.HitTestResult.EDIT_TEXT_TYPE -> false // Keep native selection inside text fields.
+                else -> { showPageContextMenu(target); true }
             }
         }
         if (select) selectTab(tabs.lastIndex)
@@ -788,6 +789,36 @@ class MainActivity : Activity() {
                 if (currentHost == requestedHost) tab.favicon = icon
             }
         }.start()
+    }
+
+    private fun showPageContextMenu(web: WebView) {
+        val pageUrl = web.url?.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
+        val actions = arrayOf(
+            tr("Tải lại trang", "Reload page"),
+            tr("Quay lại", "Go back"),
+            tr("Tiến tới", "Go forward"),
+            tr("Mở trang trong tab mới", "Open page in new tab"),
+            tr("Sao chép địa chỉ trang", "Copy page address"),
+            tr("Chia sẻ trang", "Share page")
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle(web.title?.takeIf { it.isNotBlank() } ?: tr("Trang web", "Web page"))
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> web.reload()
+                    1 -> if (web.canGoBack()) web.goBack()
+                    2 -> if (web.canGoForward()) web.goForward()
+                    3 -> pageUrl?.let { createTab(it, true) }
+                    4 -> pageUrl?.let {
+                        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                            .setPrimaryClip(ClipData.newPlainText("Page URL", it))
+                        Toast.makeText(this, tr("Đã sao chép địa chỉ trang", "Page address copied"), Toast.LENGTH_SHORT).show()
+                    }
+                    5 -> shareCurrentPage()
+                }
+            }
+            .setNegativeButton(tr("Hủy", "Cancel"), null)
+            .show()
     }
 
     private fun showImageContextMenu(rawUrl: String?, web: WebView) {
