@@ -69,10 +69,15 @@ type pageLink struct {
 }
 
 func ssrImageResponse(resp *http.Response) error {
-	if resp == nil || resp.Request == nil || resp.Request.Header.Get("X-TGFN-Format") != ssrImageMode {
+	if resp == nil || resp.Request == nil {
 		return nil
 	}
-	fmt.Println("[SSRIMG] requested for", resp.Request.URL.String())
+	format := resp.Request.Header.Get("X-TGFN-Format")
+	if format != ssrImageMode && format != "SSRHQ" {
+		return nil
+	}
+	hq := format == "SSRHQ"
+	fmt.Println("[SSRIMG] requested for", resp.Request.URL.String(), "hq=", hq)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || resp.Body == nil {
 		return nil
@@ -94,6 +99,22 @@ func ssrImageResponse(resp *http.Response) error {
 	defer cancel()
 
 	viewportWidth := mobileViewportWidth(resp.Request.Header.Get("X-TGFN-Viewport-Width"))
+	shotQuality := 55
+	jpegQuality := 55
+	scale := 1.0
+	packetLimit := maxMobilePacketBytes
+	if hq {
+		if viewportWidth < 360 {
+			viewportWidth = 360
+		}
+		if viewportWidth > 480 {
+			viewportWidth = 480
+		}
+		shotQuality = 90
+		jpegQuality = 88
+		scale = 2
+		packetLimit = 4 << 20
+	}
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.ExecPath(chromePath),
 		chromedp.WindowSize(viewportWidth, 500),
@@ -111,7 +132,7 @@ func ssrImageResponse(resp *http.Response) error {
 	var buf []byte
 	var links []pageLink
 	err := chromedp.Run(chromeCtx,
-		emulation.SetDeviceMetricsOverride(int64(viewportWidth), 500, 1, true),
+		emulation.SetDeviceMetricsOverride(int64(viewportWidth), 500, scale, true),
 		emulation.SetTouchEmulationEnabled(true),
 		emulation.SetUserAgentOverride("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"),
 		chromedp.Navigate(pageURL),
@@ -127,7 +148,7 @@ func ssrImageResponse(resp *http.Response) error {
 			} catch (e) {}
 		})()`, nil),
 		chromedp.Sleep(450*time.Millisecond),
-		chromedp.FullScreenshot(&buf, 55),
+		chromedp.FullScreenshot(&buf, shotQuality),
 		chromedp.Evaluate(`
 			(function() {
 				var out = [];
@@ -146,7 +167,8 @@ func ssrImageResponse(resp *http.Response) error {
 					if (!r || r.width < 1 || r.height < 1) continue;
 					var sx = window.pageXOffset || document.documentElement.scrollLeft || 0;
 					var sy = window.pageYOffset || document.documentElement.scrollTop || 0;
-					out.push({text: t, url: href, x: Math.max(0, Math.round(r.left + sx)), y: Math.max(0, Math.round(r.top + sy)), w: Math.max(1, Math.round(r.width)), h: Math.max(1, Math.round(r.height))});
+					var s = window.devicePixelRatio || 1;
+					out.push({text: t, url: href, x: Math.max(0, Math.round((r.left + sx) * s)), y: Math.max(0, Math.round((r.top + sy) * s)), w: Math.max(1, Math.round(r.width * s)), h: Math.max(1, Math.round(r.height * s))});
 				}
 				return out;
 			})()
@@ -164,7 +186,11 @@ func ssrImageResponse(resp *http.Response) error {
 	if err != nil {
 		return err
 	}
-	img = resizeMobileImage(img, viewportWidth)
+	maxWidth := viewportWidth
+	if hq {
+		maxWidth = viewportWidth * 2
+	}
+	img = resizeMobileImage(img, maxWidth)
 	bounds := img.Bounds()
 	tileCount := (bounds.Dy() + mobileTileHeight - 1) / mobileTileHeight
 	if tileCount > maxMobileTiles {
@@ -183,7 +209,7 @@ func ssrImageResponse(resp *http.Response) error {
 		tile := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), endY-y))
 		draw.Draw(tile, tile.Bounds(), img, image.Point{X: bounds.Min.X, Y: bounds.Min.Y + y}, draw.Src)
 		var encoded bytes.Buffer
-		if err := jpeg.Encode(&encoded, tile, &jpeg.Options{Quality: 55}); err != nil {
+		if err := jpeg.Encode(&encoded, tile, &jpeg.Options{Quality: jpegQuality}); err != nil {
 			return err
 		}
 		tiles = append(tiles, encoded.Bytes())
@@ -192,6 +218,9 @@ func ssrImageResponse(resp *http.Response) error {
 	packet, err := encodeMobilePacket(tiles, links)
 	if err != nil {
 		return err
+	}
+	if len(packet) > packetLimit {
+		return fmt.Errorf("mobile packet too large: %d", len(packet))
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(packet))
 	resp.ContentLength = int64(len(packet))

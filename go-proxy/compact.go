@@ -117,7 +117,7 @@ func compactHTMLResponse(resp *http.Response) error {
 			return fullCompressResponse(resp)
 		case "SSR":
 			return ssrResponse(resp)
-		case "SSRIMG":
+		case "SSRIMG", "SSRHQ":
 			return ssrImageResponse(resp)
 		case "MOB1":
 			return mobileResponse(resp)

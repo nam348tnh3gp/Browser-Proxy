@@ -73,6 +73,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
     private TextField homeUrlField;
     private boolean loadImages = true;
     private boolean limitImageSize = true;
+    private boolean imageOnlyHQ;
     private int searchEngine = 0;
     private String homeUrl = "https://lite.duckduckgo.com/lite/";
     private final Command deleteBookmarkCommand = new Command("Delete", Command.ITEM, 2);
@@ -699,6 +700,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         browserMenu.append("Home", null);
         browserMenu.append("Forward", null);
         browserMenu.append("Proxy settings", null);
+        browserMenu.append(imageOnlyHQ ? "Image HQ: ON" : "Image HQ: OFF", null);
         browserMenu.append("Page info", null);
         browserMenu.append("Exit", null);
         browserMenu.addCommand(backCommand);
@@ -725,6 +727,12 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 historyIndex++; navigate((String)history.elementAt(historyIndex), false);
             } else showError("Forward", "There is no next page in history.");
         } else if ("Proxy settings".equals(item)) showProxySettings();
+        else if (item != null && item.startsWith("Image HQ:")) {
+            imageOnlyHQ = !imageOnlyHQ;
+            saveSettings();
+            if (currentUrl != null && currentUrl.length() > 0 && currentTitle != null && currentTitle.indexOf("Welcome") < 0) navigate(currentUrl, false);
+            else if (browserCanvas != null) display.setCurrent(browserCanvas);
+        }
         else if ("Page info".equals(item)) showPageInfo();
         else if ("Exit".equals(item)) notifyDestroyed();
     }
@@ -801,6 +809,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 loadImages = loadImagesChoice != null && loadImagesChoice.isSelected(0);
                 limitImageSize = loadImagesChoice != null && loadImagesChoice.isSelected(1);
                 if (searchChoice != null) searchEngine = searchChoice.getSelectedIndex();
+                imageOnlyHQ = loadImagesChoice != null && loadImagesChoice.isSelected(2);
                 String nextHome = trim(homeUrlField.getString());
                 if (nextHome.length() > 0) homeUrl = normalizeAddress(nextHome);
                 saveSettings();
@@ -887,8 +896,10 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         loadImagesChoice = new ChoiceGroup("Images", ChoiceGroup.MULTIPLE);
         loadImagesChoice.append("Load page images", null);
         loadImagesChoice.append("Limit image size", null);
+        loadImagesChoice.append("High quality image only", null);
         loadImagesChoice.setSelectedIndex(0, loadImages);
         loadImagesChoice.setSelectedIndex(1, limitImageSize);
+        loadImagesChoice.setSelectedIndex(2, imageOnlyHQ);
         proxyForm.append(loadImagesChoice);
         searchChoice = new ChoiceGroup("Search", ChoiceGroup.EXCLUSIVE);
         searchChoice.append("DuckDuckGo Lite", null);
@@ -948,6 +959,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             + "\nLinks: " + linkN
             + "\nImages: " + imageN + (loadImages ? " (load on)" : " (load off)")
             + "\nProxy: " + (proxyEnabled ? proxyHost + ":" + proxyPort : "off")
+            + "\nMode: " + (imageOnlyHQ ? "SSRHQ image" : "TBO1")
             + "\nHome: " + homeUrl;
         Alert alert = new Alert("Page info", msg, null, AlertType.INFO);
         alert.setTimeout(Alert.FOREVER);
@@ -1001,8 +1013,15 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                                         if (afterLimit.length() > 0) homeUrl = afterLimit;
                                     } else {
                                         try { searchEngine = Integer.parseInt(afterLimit.substring(0, sixth)); } catch (Exception ignoredEngine) {}
-                                        String savedHome = afterLimit.substring(sixth + 1);
-                                        if (savedHome.length() > 0) homeUrl = savedHome;
+                                        String afterSearch = afterLimit.substring(sixth + 1);
+                                        int seventh = afterSearch.indexOf('|');
+                                        if (seventh < 0) {
+                                            if (afterSearch.length() > 0) homeUrl = afterSearch;
+                                        } else {
+                                            imageOnlyHQ = afterSearch.substring(0, seventh).equals("1");
+                                            String savedHome = afterSearch.substring(seventh + 1);
+                                            if (savedHome.length() > 0) homeUrl = savedHome;
+                                        }
                                     }
                                 }
                             }
@@ -1034,6 +1053,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 .append('|').append(loadImages ? "1" : "0")
                 .append('|').append(limitImageSize ? "1" : "0")
                 .append('|').append(searchEngine)
+                .append('|').append(imageOnlyHQ ? "1" : "0")
                 .append('|').append(homeUrl).append('\n');
             for (int i = 0; i < bookmarks.size(); i++) saved.append((String)bookmarks.elementAt(i)).append('\n');
             byte[] data = saved.toString().getBytes("UTF-8");
@@ -1431,7 +1451,10 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             writer.write("Host: " + requestHost + "\r\n");
             writer.write("User-Agent: Mozilla/5.0 (compatible; TGFN BrowserMini; MIDP-2.0; CLDC-1.1)\r\n");
             writer.write("Accept: application/x-tgfn-obml,image/jpeg,image/*,text/html,text/plain,*/*\r\n");
-            if (!internalResource) writer.write("X-TGFN-Format: TBO1\r\n");
+            if (!internalResource) {
+                writer.write("X-TGFN-Format: " + (imageOnlyHQ ? "SSRHQ" : "TBO1") + "\r\n");
+                if (imageOnlyHQ) writer.write("X-TGFN-Viewport-Width: 480\r\n");
+            }
             writer.write("Connection: close\r\n\r\n");
             writer.flush();
             String status = readAsciiLine(input);
