@@ -479,6 +479,7 @@ class MainActivity : Activity() {
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                if (request?.isForMainFrame == true && fallbackProxyToFetch(view, error)) return
                 if (request?.isForMainFrame == true && isSelected(tab)) {
                     pageLoading = false
                     refreshButton.text = "↻"
@@ -2385,7 +2386,7 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         }
         content.addView(home)
         content.addView(TextView(this).apply {
-            text = tr("Proxy http:// dùng CONNECT. Proxy https:// (ngrok) tải trang qua /__tgfn/fetch, giống J2ME, vì ngrok HTTP free không chuyển CONNECT.", "When enabled, HTTP uses the proxy and HTTPS uses CONNECT tunneling. When disabled, the browser connects directly. The proxy must support HTTP CONNECT for HTTPS.")
+            text = tr("Thử CONNECT trước (Cloudflare tunnel thường chuyển được). Nếu proxy không chuyển CONNECT, app tự fallback sang /__tgfn/fetch như J2ME.", "When enabled, HTTP uses the proxy and HTTPS uses CONNECT tunneling. When disabled, the browser connects directly. The proxy must support HTTP CONNECT for HTTPS.")
             textSize = 13f
             setTextColor(muted)
             setPadding(0, dp(8), 0, dp(8))
@@ -2709,21 +2710,66 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             callback(false)
             return
         }
-        // ngrok HTTP free terminates TLS and cannot carry WebView CONNECT tunnels.
-        // HTTPS proxy URLs therefore use /__tgfn/fetch, the same path J2ME uses.
-        if (endpoint.scheme == "https") {
-            ProxyController.getInstance().clearProxyOverride(mainExecutor, Runnable {
-                registerClient(endpoint.host, endpoint.port, endpoint.scheme) { callback(true) }
-            })
-            return
-        }
+        proxyFetchFallback = false
         val config = ProxyConfig.Builder().addProxyRule(endpoint.rule()).build()
         ProxyController.getInstance().setProxyOverride(config, mainExecutor, Runnable {
-            registerClient(endpoint.host, endpoint.port, endpoint.scheme) {
-                // Registration is best-effort: browsing still works with older proxy versions.
-                callback(true)
-            }
+            Thread {
+                val connectOk = proxyConnectWorks(endpoint)
+                runOnUiThread {
+                    if (connectOk) {
+                        proxyFetchFallback = false
+                        registerClient(endpoint.host, endpoint.port, endpoint.scheme) { callback(true) }
+                    } else {
+                        proxyFetchFallback = true
+                        ProxyController.getInstance().clearProxyOverride(mainExecutor, Runnable {
+                            registerClient(endpoint.host, endpoint.port, endpoint.scheme) { callback(true) }
+                        })
+                    }
+                }
+            }.start()
         })
+    }
+
+    @Volatile private var proxyFetchFallback = false
+
+    private fun proxyConnectWorks(endpoint: ProxyEndpoint): Boolean {
+        return try {
+            if (endpoint.scheme == "https" || endpoint.scheme == "http") {
+                val socket = if (endpoint.scheme == "https") {
+                    javax.net.ssl.SSLSocketFactory.getDefault().createSocket(endpoint.host, endpoint.port)
+                } else {
+                    java.net.Socket(endpoint.host, endpoint.port)
+                }
+                socket.soTimeout = 6000
+                socket.getOutputStream().apply {
+                    write("CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\nProxy-Connection: keep-alive\r\n\r\n".toByteArray())
+                    flush()
+                }
+                val status = socket.getInputStream().bufferedReader().readLine() ?: ""
+                socket.close()
+                status.contains(" 200")
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun fallbackProxyToFetch(view: WebView?, error: WebResourceError?): Boolean {
+        if (proxyFetchFallback || !prefs.getBoolean("proxy_enabled", false)) return false
+        val desc = error?.description?.toString()?.lowercase() ?: ""
+        val code = error?.errorCode ?: 0
+        val tunnelFailed = code == WebViewClient.ERROR_CONNECT ||
+            code == WebViewClient.ERROR_PROXY_AUTHENTICATION ||
+            code == WebViewClient.ERROR_IO ||
+            code == WebViewClient.ERROR_TIMEOUT ||
+            code == WebViewClient.ERROR_FAILED_SSL_HANDSHAKE ||
+            desc.contains("empty") || desc.contains("proxy") || desc.contains("tunnel") || desc.contains("connect")
+        if (!tunnelFailed) return false
+        proxyFetchFallback = true
+        ProxyController.getInstance().clearProxyOverride(mainExecutor, Runnable { view?.reload() })
+        return true
     }
 
     private fun fetchViaHttpsProxy(target: String?): WebResourceResponse? {
@@ -2732,7 +2778,7 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         if (target.startsWith("https://tgfn.browser", ignoreCase = true)) return null
         if (!prefs.getBoolean("proxy_enabled", false)) return null
         val endpoint = parseProxyUrl(prefs.getString("proxy_url", "") ?: "") ?: return null
-        if (endpoint.scheme != "https") return null
+        if (!proxyFetchFallback) return null
         if (target.contains(endpoint.host) && target.contains("/__tgfn/")) return null
         return try {
             val base = if (endpoint.port == 443) "https://${endpoint.host}" else "https://${endpoint.host}:${endpoint.port}"
