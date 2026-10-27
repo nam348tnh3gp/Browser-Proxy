@@ -109,7 +109,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
 
     private void showHome() {
         currentTitle = "TGFN BrowserMini";
-        visibleBody = "Welcome to BrowserMini\n\nA lightweight browser for Java ME feature phones.\n\nChoose Address to open a website or search.\n\nUse Links to browse links on the current page.\n\nProxy: " + (proxyEnabled ? "ON - " + proxyHost + ":" + proxyPort : "OFF");
+        visibleBody = "Welcome to BrowserMini\n\nA lightweight browser for Java ME feature phones.\n\nChoose Address to open a website or search.\n\nKeys: 2/8 or Up/Down = next link, 4/6 or Left/Right = page, 5 = open.\n\nProxy: " + (proxyEnabled ? "ON - " + proxyHost + ":" + proxyPort : "OFF");
         if (browserCanvas == null) browserCanvas = new BrowserCanvas();
         browserCanvas.setContent(currentTitle, visibleBody);
         display.setCurrent(browserCanvas);
@@ -230,7 +230,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         try {
             connection = (HttpConnection)Connector.open(url, Connector.READ, true);
             connection.setRequestMethod(HttpConnection.GET);
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Java ME; TGFN BrowserMini)");
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (compatible; TGFN BrowserMini; MIDP-2.0; CLDC-1.1)");
             connection.setRequestProperty("Accept", "text/html,text/plain,*/*");
             connection.setRequestProperty("Connection", "close");
             int status = connection.getResponseCode();
@@ -1304,7 +1304,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             String requestHost = (remoteFetch || internalResource) ? proxyHost + ":" + proxyPort : hostPort;
             writer.write("GET " + requestTarget + " HTTP/1.1\r\n");
             writer.write("Host: " + requestHost + "\r\n");
-            writer.write("User-Agent: TGFN-BrowserMini-J2ME/2.1\r\n");
+            writer.write("User-Agent: Mozilla/5.0 (compatible; TGFN BrowserMini; MIDP-2.0; CLDC-1.1)\r\n");
             writer.write("Accept: application/x-tgfn-obml,image/jpeg,image/*,text/html,text/plain,*/*\r\n");
             if (!internalResource) writer.write("X-TGFN-Format: TBO1\r\n");
             writer.write("Connection: close\r\n\r\n");
@@ -1736,9 +1736,12 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             g.setColor(255, 255, 255); g.setFont(bold);
             g.drawString("Menu", 5, h - footerH + 3, Graphics.TOP | Graphics.LEFT);
             g.drawString("Back", w - 5, h - footerH + 3, Graphics.TOP | Graphics.RIGHT);
+            g.setFont(normal);
             if (loading) {
-                g.setFont(normal);
                 g.drawString("Loading...", w / 2, h - footerH + 3, Graphics.TOP | Graphics.HCENTER);
+            } else if (selectedLink >= 0) {
+                int total = linkCount();
+                g.drawString((selectedLink + 1) + "/" + total, w / 2, h - footerH + 3, Graphics.TOP | Graphics.HCENTER);
             }
         }
 
@@ -1816,89 +1819,69 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         }
 
         protected void keyPressed(int keyCode) {
-            // Opera Mini 4.x style zoom
+            // Opera Mini style zoom
             if (keyCode == KEY_STAR) { zoom = Math.max(50, zoom - 25); repaint(); return; }
             if (keyCode == KEY_POUND) { zoom = Math.min(200, zoom + 25); repaint(); return; }
             int action = getGameAction(keyCode);
-            if (lastPageResult != null && lastPageResult.mobileTiles &&
-                (action == UP || keyCode == KEY_NUM2)) {
-                moveMobileLink(-1);
-                return;
-            }
-            if (lastPageResult != null && lastPageResult.mobileTiles &&
-                (action == DOWN || keyCode == KEY_NUM8)) {
-                moveMobileLink(1);
-                return;
-            }
-            // On image-rendered pages, the center/5 key opens the focused on-page link.
-            if (keyCode == Canvas.KEY_NUM5 && lastPageResult != null && lastPageResult.mobileTiles) {
-                openSelectedLink();
-                return;
-            }
-            // PicoBrowser-style quick navigation for semantic pages.
-            if (keyCode == Canvas.KEY_NUM5 || keyCode == Canvas.KEY_NUM8) { // next link
-                moveLink(1);
-                return;
-            }
-            if (keyCode == Canvas.KEY_NUM2 || keyCode == Canvas.KEY_NUM4) { // prev link
-                moveLink(-1);
-                return;
-            }
-            if (keyCode == Canvas.KEY_NUM0 || keyCode == Canvas.FIRE) { // open selected
-                openSelectedLink();
-                return;
-            }
+            boolean tiles = lastPageResult != null && lastPageResult.mobileTiles;
 
+            // PicoBrowser / picomidp: up/down = previous/next link, left/right = page.
             if (action == UP || keyCode == KEY_NUM2) {
-                scrollY = Math.max(0, scrollY - 30);
-                repaint();
-            } else if (action == DOWN || keyCode == KEY_NUM8) {
-                int visible = Math.max(1, getHeight() - 90);
-                scrollY = Math.min(Math.max(0, totalBodyHeight - visible), scrollY + 30);
-                repaint();
-            } else if (action == FIRE || keyCode == KEY_NUM5) {
-                if (selectedLink >= 0 && lastPageResult != null && lastPageResult.blocks != null) {
-                    int seen = -1;
-                    for (int i = 0; i < lastPageResult.blocks.size(); i++) {
-                        RenderBlock b = (RenderBlock)lastPageResult.blocks.elementAt(i);
-                        if (b.url != null && ++seen == selectedLink) {
-                            openTarget(b.url, true);
-                            return;
-                        }
-                    }
-                    showAddress();
-                } else if (renderedLinkLines.size() > 0) {
-                    selectedLink = 0;
-                    int lineIndex = ((Integer)renderedLinkLines.elementAt(0)).intValue();
-                    scrollY = Math.max(0, lineIndex * 14);
-                    repaint();
-                } else {
-                    showAddress();
-                }
-            } else if (keyCode == KEY_NUM4) {
-                if (renderedLinkLines.size() > 0) {
-                    selectedLink = selectedLink <= 0 ? renderedLinkLines.size() - 1 : selectedLink - 1;
-                    int lineIndex = ((Integer)renderedLinkLines.elementAt(selectedLink)).intValue();
-                    scrollY = Math.max(0, lineIndex * 14);
-                    repaint();
-                } else if (historyIndex > 0) {
-                    historyIndex--;
-                    navigate((String)history.elementAt(historyIndex), false);
-                }
-            } else if (keyCode == KEY_NUM6) {
-                if (renderedLinkLines.size() > 0) {
-                    selectedLink = (selectedLink + 1) % renderedLinkLines.size();
-                    int lineIndex = ((Integer)renderedLinkLines.elementAt(selectedLink)).intValue();
-                    scrollY = Math.max(0, lineIndex * 14);
-                    repaint();
-                }
-            } else if (action == LEFT && historyIndex > 0) {
-                historyIndex--;
-                navigate((String)history.elementAt(historyIndex), false);
-            } else if (action == RIGHT && historyIndex >= 0 && historyIndex + 1 < history.size()) {
-                historyIndex++;
-                navigate((String)history.elementAt(historyIndex), false);
+                if (tiles) moveMobileLink(-1); else moveLink(-1);
+                return;
             }
+            if (action == DOWN || keyCode == KEY_NUM8) {
+                if (tiles) moveMobileLink(1); else moveLink(1);
+                return;
+            }
+            if (action == LEFT || keyCode == KEY_NUM4) {
+                pageUp();
+                return;
+            }
+            if (action == RIGHT || keyCode == KEY_NUM6) {
+                pageDown();
+                return;
+            }
+            if (action == FIRE || keyCode == KEY_NUM5 || keyCode == KEY_NUM0) {
+                openSelectedLink();
+                return;
+            }
+            // Fine scroll, picomidp KEY_NUM1 / KEY_NUM3
+            if (keyCode == KEY_NUM1) {
+                scrollBy(-24);
+                return;
+            }
+            if (keyCode == KEY_NUM3) {
+                scrollBy(24);
+                return;
+            }
+        }
+
+        private int linkCount() {
+            if (lastPageResult != null && lastPageResult.mobileTiles && lastPageResult.links != null) {
+                return lastPageResult.links.size();
+            }
+            return renderedLinkLines.size();
+        }
+
+        private void pageUp() {
+            int visible = Math.max(1, getHeight() - 90);
+            scrollY = scrollY < visible ? 0 : scrollY - visible;
+            repaint();
+        }
+
+        private void pageDown() {
+            int visible = Math.max(1, getHeight() - 90);
+            int maxScroll = Math.max(0, totalBodyHeight - visible);
+            scrollY = Math.min(maxScroll, scrollY + visible);
+            repaint();
+        }
+
+        private void scrollBy(int delta) {
+            int visible = Math.max(1, getHeight() - 90);
+            int maxScroll = Math.max(0, totalBodyHeight - visible);
+            scrollY = Math.max(0, Math.min(maxScroll, scrollY + delta));
+            repaint();
         }
 
         private void resetLinkFocus() {
