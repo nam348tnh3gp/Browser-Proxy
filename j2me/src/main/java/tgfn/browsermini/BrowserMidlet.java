@@ -1659,38 +1659,42 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             int y = contentY + 4 - scrollY;
             int zoomPct = zoom < 50 ? 100 : zoom;
             int mobileImageTop = y;
-            float mobileScale = (float)w / Math.max(1, lastPageResult == null ? 240 : lastPageResult.mobileViewportWidth);
+            int mobileSrcW = lastPageResult == null ? 240 : Math.max(1, lastPageResult.mobileViewportWidth);
+            float mobileScale = (float)w / mobileSrcW;
+            int[] tileSrcY = null;
+            int[] tileDrawY = null;
+            int[] tileSrcH = null;
+            int[] tileDrawH = null;
             totalBodyHeight = 0;
             if (lastPageResult != null && lastPageResult.images != null && lastPageResult.mobileTiles) {
-                for (int imageIndex = 0; imageIndex < lastPageResult.images.size() && (lastPageResult.mobileTiles || imageIndex < 8); imageIndex++) {
+                int n = lastPageResult.images.size();
+                tileSrcY = new int[n];
+                tileDrawY = new int[n];
+                tileSrcH = new int[n];
+                tileDrawH = new int[n];
+                int origin = 0;
+                int screen = mobileImageTop;
+                for (int imageIndex = 0; imageIndex < n; imageIndex++) {
                     ImageRef ref = (ImageRef)lastPageResult.images.elementAt(imageIndex);
-                    if (ref.image != null) {
-                        Image toDraw = ref.image;
-                        // Mobile page tiles fill the complete display width; ordinary images stay inset.
-                        int targetImageWidth = lastPageResult.mobileTiles ? w : w - 14;
-                        if (lastPageResult.mobileTiles) {
-                            // Cache scaled mobile tiles: paint() runs on every key/repaint and
-                            // per-pixel MIDP scaling on every frame causes severe keypad lag.
-                            if (ref.scaledImage == null || ref.scaledWidth != targetImageWidth) {
-                                int newH = ref.image.getHeight() * targetImageWidth / ref.image.getWidth();
-                                if (newH < 1) newH = 1;
-                                ref.scaledImage = targetImageWidth == ref.image.getWidth()
-                                    ? ref.image : scaleImage(ref.image, targetImageWidth, newH);
-                                ref.scaledWidth = targetImageWidth;
-                            }
-                            toDraw = ref.scaledImage;
-                        } else if (toDraw.getWidth() > targetImageWidth) {
-                            int newH = toDraw.getHeight() * targetImageWidth / toDraw.getWidth();
-                            if (newH < 1) newH = 1;
-                            toDraw = scaleImage(toDraw, targetImageWidth, newH);
-                        }
-                        if (y + toDraw.getHeight() > contentY && y < contentY + contentH) {
-                            g.drawImage(toDraw, lastPageResult.mobileTiles ? 0 : 7, y, Graphics.TOP | Graphics.LEFT);
-                        }
-                        int imageAdvance = toDraw.getHeight() + (lastPageResult.mobileTiles ? 0 : 4);
-                        y += imageAdvance;
-                        totalBodyHeight += imageAdvance;
+                    if (ref == null || ref.image == null) continue;
+                    int targetImageWidth = w;
+                    if (ref.scaledImage == null || ref.scaledWidth != targetImageWidth) {
+                        int newH = Math.max(1, ref.image.getHeight() * targetImageWidth / Math.max(1, ref.image.getWidth()));
+                        ref.scaledImage = targetImageWidth == ref.image.getWidth()
+                            ? ref.image : scaleImage(ref.image, targetImageWidth, newH);
+                        ref.scaledWidth = targetImageWidth;
                     }
+                    Image toDraw = ref.scaledImage;
+                    tileSrcY[imageIndex] = origin;
+                    tileDrawY[imageIndex] = screen;
+                    tileSrcH[imageIndex] = ref.image.getHeight();
+                    tileDrawH[imageIndex] = toDraw.getHeight();
+                    if (screen + toDraw.getHeight() > contentY && screen < contentY + contentH) {
+                        g.drawImage(toDraw, 0, screen, Graphics.TOP | Graphics.LEFT);
+                    }
+                    origin += ref.image.getHeight();
+                    screen += toDraw.getHeight();
+                    totalBodyHeight += toDraw.getHeight();
                 }
             }
             // IML2 keeps link hitboxes aligned with the captured page; underline links in blue
@@ -1699,10 +1703,11 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                 for (int li = 0; li < lastPageResult.links.size(); li++) {
                     LinkItem link = (LinkItem)lastPageResult.links.elementAt(li);
                     if (link.x < 0 || link.y < 0 || link.width <= 0 || link.height <= 0) continue;
-                    int lx = (int)(link.x * mobileScale);
-                    int ly = mobileLinkY(link.y, mobileImageTop, mobileScale);
-                    int lw = Math.max(2, (int)(link.width * mobileScale));
-                    int lh = Math.max(2, (int)(link.height * mobileScale));
+                    int[] box = mobileLinkBox(link, mobileImageTop, w, mobileSrcW, tileSrcY, tileDrawY, tileSrcH, tileDrawH);
+                    int lx = box[0];
+                    int ly = box[1];
+                    int lw = box[2];
+                    int lh = box[3];
                     if (ly + lh < contentY || ly > contentY + contentH) continue;
                     g.setColor(0, 82, 190);
                     g.drawLine(lx, ly + lh - 1, lx + lw, ly + lh - 1);
@@ -2044,6 +2049,26 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
         }
 
+        private int[] mobileLinkBox(LinkItem link, int imageTop, int screenW, int srcW, int[] tileSrcY, int[] tileDrawY, int[] tileSrcH, int[] tileDrawH) {
+            int lx = link.x * screenW / Math.max(1, srcW);
+            int lw = Math.max(2, link.width * screenW / Math.max(1, srcW));
+            int ly = imageTop + link.y * screenW / Math.max(1, srcW);
+            int lh = Math.max(2, link.height * screenW / Math.max(1, srcW));
+            if (tileSrcY != null) {
+                for (int i = 0; i < tileSrcY.length; i++) {
+                    if (tileSrcH[i] < 1) continue;
+                    if (link.y < tileSrcY[i] + tileSrcH[i] || i == tileSrcY.length - 1) {
+                        int local = link.y - tileSrcY[i];
+                        if (local < 0) local = 0;
+                        ly = tileDrawY[i] + local * tileDrawH[i] / tileSrcH[i];
+                        lh = Math.max(2, link.height * tileDrawH[i] / tileSrcH[i]);
+                        break;
+                    }
+                }
+            }
+            return new int[] { lx, ly, lw, lh };
+        }
+
         private int mobileLinkY(int imageY, int imageTop, float scale) {
             if (lastPageResult == null || lastPageResult.images == null) return imageTop + (int)(imageY * scale);
             int origin = 0;
@@ -2112,9 +2137,9 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
             LinkItem link = (LinkItem)lastPageResult.links.elementAt(selectedLink);
             if (link.y >= 0) {
-                float pageScale = (float)getWidth() / Math.max(1, lastPageResult.mobileViewportWidth);
-                int top = (int)(link.y * pageScale);
-                int bottom = top + Math.max(1, (int)(link.height * pageScale));
+                int srcW = Math.max(1, lastPageResult.mobileViewportWidth);
+                int top = link.y * getWidth() / srcW;
+                int bottom = top + Math.max(1, link.height * getWidth() / srcW);
                 int visible = Math.max(1, getHeight() - 90);
                 if (top < scrollY) scrollY = top;
                 else if (bottom > scrollY + visible) scrollY = Math.max(0, bottom - visible);

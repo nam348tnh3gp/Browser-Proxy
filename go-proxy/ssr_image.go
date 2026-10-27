@@ -272,6 +272,11 @@ func ssrImageResponse(resp *http.Response) error {
 	if docH < 1 {
 		docH = capture.DocH
 	}
+	tileCount := (bounds.Dy() + mobileTileHeight - 1) / mobileTileHeight
+	if tileCount > maxMobileTiles {
+		bounds = image.Rect(bounds.Min.X, bounds.Min.Y, bounds.Max.X, bounds.Min.Y+maxMobileTiles*mobileTileHeight)
+		tileCount = maxMobileTiles
+	}
 	links := scaleLinksToImage(capture.Links, docW, docH, bounds.Dx(), bounds.Dy())
 	sort.Slice(links, func(i, j int) bool {
 		if links[i].Y == links[j].Y {
@@ -279,16 +284,9 @@ func ssrImageResponse(resp *http.Response) error {
 		}
 		return links[i].Y < links[j].Y
 	})
-	links = padLinks(links, bounds.Dx(), bounds.Dy(), 3)
+	links = padLinks(links, bounds.Dx(), bounds.Dy(), 2)
 	links = thinLinks(links, 80)
 	fmt.Println("[SSRIMG] link map clip=", docW, "x", docH, "img=", bounds.Dx(), "x", bounds.Dy(), "links=", len(links))
-	tileCount := (bounds.Dy() + mobileTileHeight - 1) / mobileTileHeight
-	if tileCount > maxMobileTiles {
-		// Preserve the captured page scale and hitbox coordinates. Older MIDP
-		// devices cannot safely hold an unlimited number of decoded image tiles.
-		bounds = image.Rect(bounds.Min.X, bounds.Min.Y, bounds.Max.X, bounds.Min.Y+maxMobileTiles*mobileTileHeight)
-		tileCount = maxMobileTiles
-	}
 
 	var tiles [][]byte
 	for y := 0; y < bounds.Dy(); y += mobileTileHeight {
