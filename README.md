@@ -47,3 +47,15 @@ By default it listens on `127.0.0.1:8080`. To allow a phone to connect over a tr
 - Use only trusted proxies.
 ## AdBlock
 Android app blocks common ad/tracker domains via shouldInterceptRequest. Toggle in Settings.
+
+## Public test proxy (GitHub Actions + ngrok)
+
+Add repository secret `NGROK_AUTHTOKEN` in Settings → Secrets and variables → Actions.
+
+Then run **Actions → Run proxy via ngrok → Run workflow**.
+
+- `http`: free ngrok URL for curl/browser tests
+- `tcp`: `host:port` for the J2ME socket client (needs an ngrok plan that allows TCP)
+
+The job prints the public URL in the step summary and keeps the tunnel open for the chosen number of minutes. Do not leave an open proxy running longer than you need.
+

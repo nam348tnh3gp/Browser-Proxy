@@ -1,0 +1,127 @@
+name: Run proxy via ngrok
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: Minutes to keep the tunnel open
+        required: false
+        default: "30"
+      mode:
+        description: Tunnel mode. Use tcp for the J2ME socket client.
+        required: true
+        default: http
+        type: choice
+        options:
+          - http
+          - tcp
+
+permissions:
+  contents: read
+
+jobs:
+  proxy:
+    name: Proxy + ngrok
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: go-proxy/go.mod
+
+      - name: Require ngrok token
+        env:
+          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+        run: |
+          if [ -z "$NGROK_AUTHTOKEN" ]; then
+            echo "Add repository secret NGROK_AUTHTOKEN (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - name: Install Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
+
+      - name: Build proxy
+        working-directory: go-proxy
+        run: go build -o "$RUNNER_TEMP/tgfn-proxy" .
+
+      - name: Start proxy
+        run: |
+          chrome="$(command -v chromium-browser || command -v chromium || true)"
+          PROXY_LISTEN=127.0.0.1:8080 CHROME_PATH="$chrome" "$RUNNER_TEMP/tgfn-proxy" > "$RUNNER_TEMP/proxy.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/proxy.pid"
+          for _ in $(seq 1 30); do
+            if ss -ltn | grep -q ':8080'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Proxy did not listen on 8080"
+          cat "$RUNNER_TEMP/proxy.log"
+          exit 1
+
+      - name: Start ngrok
+        env:
+          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/ngrok.tgz" https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+          tar -xzf "$RUNNER_TEMP/ngrok.tgz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/ngrok" config add-authtoken "$NGROK_AUTHTOKEN"
+          if [ "$MODE" = "tcp" ]; then
+            "$RUNNER_TEMP/ngrok" tcp 8080 --log=stdout > "$RUNNER_TEMP/ngrok.log" 2>&1 &
+          else
+            "$RUNNER_TEMP/ngrok" http 8080 --log=stdout > "$RUNNER_TEMP/ngrok.log" 2>&1 &
+          fi
+          echo $! > "$RUNNER_TEMP/ngrok.pid"
+          url=""
+          for _ in $(seq 1 30); do
+            url="$(curl -sf http://127.0.0.1:4040/api/tunnels | python3 -c 'import sys,json; d=json.load(sys.stdin); print(next(t["public_url"] for t in d.get("tunnels", [])))' 2>/dev/null || true)"
+            if [ -n "$url" ]; then
+              break
+            fi
+            sleep 1
+          done
+          if [ -z "$url" ]; then
+            echo "ngrok did not publish a tunnel"
+            cat "$RUNNER_TEMP/ngrok.log"
+            exit 1
+          fi
+          echo "$url" | tee "$RUNNER_TEMP/ngrok.url"
+          {
+            echo "### TGFN proxy tunnel"
+            echo
+            echo "Mode: \`$MODE\`"
+            echo
+            echo '```'
+            echo "$url"
+            echo '```'
+            echo
+            if [ "$MODE" = "tcp" ]; then
+              hostport="${url#tcp://}"
+              echo "J2ME proxy host: \`${hostport%%:*}\`"
+              echo
+              echo "J2ME proxy port: \`${hostport##*:}\`"
+            else
+              echo "HTTP mode is for curl/browser tests of \`/__tgfn/fetch\`."
+              echo "The J2ME client opens a raw socket, so use **tcp** mode for the phone."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep tunnel open
+        run: |
+          minutes="${{ inputs.minutes }}"
+          case "$minutes" in
+            ''|*[!0-9]*) minutes=30 ;;
+          esac
+          if [ "$minutes" -lt 1 ]; then minutes=1; fi
+          if [ "$minutes" -gt 300 ]; then minutes=300; fi
+          echo "Tunnel stays open for ${minutes} minutes"
+          sleep $((minutes * 60))
