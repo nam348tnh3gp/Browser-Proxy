@@ -426,6 +426,15 @@ class MainActivity : Activity() {
                 updateTabButton()
             }
 
+            // WebView can display the first committed content before every resource finishes.
+            // Keep the normal streaming renderer; never buffer or truncate the page HTML here.
+            override fun onPageCommitVisible(view: WebView?, url: String?) {
+                if (url?.startsWith(READER_BASE_URL) == true) return
+                if (isSelected(tab)) {
+                    status.text = tr("Đã hiển thị nội dung — đang tải phần còn lại…", "Content visible — loading remaining resources…")
+                }
+            }
+
             override fun onPageFinished(view: WebView?, url: String?) {
                 if (url?.startsWith(READER_BASE_URL) == true) return
                 if (!url.isNullOrBlank() && !url.equals("about:blank", ignoreCase = true)) {
@@ -2122,54 +2131,22 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
 
     private fun rememberHistory(tab: BrowserTab) {
         if (tab.url.isBlank() || !tab.url.startsWith("http")) return
-
-        val now = System.currentTimeMillis()
         val history = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toMutableSet()
-        val timestamps = try {
-            org.json.JSONObject(prefs.getString("history_timestamps", "{}") ?: "{}")
-        } catch (_: Exception) {
-            org.json.JSONObject()
-        }
-
+        history.remove(tab.url)
         history.add(tab.url)
-        timestamps.put(tab.url, now)
-
-        // Keep the 100 most recently visited URLs, not an arbitrary StringSet slice.
-        val newest = history.sortedByDescending { timestamps.optLong(it, 0L) }.take(100)
-        val retainedTimestamps = org.json.JSONObject()
-        newest.forEach { url -> retainedTimestamps.put(url, timestamps.optLong(url, 0L)) }
-
-        prefs.edit()
-            .putStringSet("history", newest.toSet())
-            .putString("history_timestamps", retainedTimestamps.toString())
-            .apply()
+        prefs.edit().putStringSet("history", history.toList().takeLast(100).toSet()).apply()
     }
 
     private fun showHistory() {
-        val saved = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toList()
-        val timestamps = try {
-            org.json.JSONObject(prefs.getString("history_timestamps", "{}") ?: "{}")
-        } catch (_: Exception) {
-            org.json.JSONObject()
-        }
-        val history = saved.sortedWith(
-            compareByDescending<String> { timestamps.optLong(it, 0L) }.thenByDescending { it }
-        )
+        val history = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toList().sortedDescending()
         if (history.isEmpty()) {
             Toast.makeText(this, tr("Chưa có lịch sử duyệt web", "No browsing history yet"), Toast.LENGTH_SHORT).show()
             return
         }
-
-        val formatter = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
-        val labels = history.map { url ->
-            val visitedAt = timestamps.optLong(url, 0L)
-            if (visitedAt > 0L) "${formatter.format(java.util.Date(visitedAt))}  $url" else url
-        }.toTypedArray()
-
         android.app.AlertDialog.Builder(this).setTitle(tr("Lịch sử", "History"))
-            .setItems(labels) { _, which -> currentWebView()?.loadUrl(history[which]) }
+            .setItems(history.toTypedArray()) { _, which -> currentWebView()?.loadUrl(history[which]) }
             .setPositiveButton(tr("Xóa lịch sử", "Clear history")) { _, _ ->
-                prefs.edit().remove("history").remove("history_timestamps").apply()
+                prefs.edit().remove("history").apply()
                 Toast.makeText(this, tr("Đã xóa lịch sử", "History cleared"), Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton(tr("Đóng", "Close"), null).show()
