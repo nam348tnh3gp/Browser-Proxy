@@ -936,7 +936,7 @@ class MainActivity : Activity() {
                 if(action==='1'){
                   var url=prompt('${tr("Địa chỉ URL", "URL")}',item.url);if(!url)return;url=url.trim();
                   if(!/^https?:\/\//i.test(url)){alert('${tr("URL không hợp lệ", "Invalid URL")}');return}
-                  var title=prompt('${tr("Tên lối tắt", "Shortcut name')}',item.title)||url;
+                  var title=prompt('${tr("Tên lối tắt", "Shortcut name")}',item.title)||url;
                   items[index]={title:title.trim()||url,url:url};save();render();
                 }else if(action==='2'){if(confirm('${tr("Xóa lối tắt này?", "Remove this shortcut?")}')){items.splice(index,1);save();render()}}
               });
