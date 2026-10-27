@@ -716,24 +716,24 @@ class MainActivity : Activity() {
         .brand span{color:#188038}.search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
         input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:14px}
         .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px 10px;margin-top:30px}.item{text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};text-align:center;font-size:12px;min-width:0}
-        .circle{width:52px;height:52px;border-radius:18px;background:${if (darkMode) "#303134" else "#f1f3f4"};margin:0 auto 9px;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:23px;font-weight:700;color:#1a73e8}
-        .quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:20px}.quick a{display:block;text-align:center;text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};background:${if (darkMode) "#303134" else "#f8f9fa"};border:1px solid ${if (darkMode) "#44464a" else "#e8eaed"};border-radius:14px;padding:11px 4px;font-size:12px}
+        .circle{width:52px;height:52px;border-radius:18px;background:${if (darkMode) "#303134" else "#f1f3f4"};margin:0 auto 9px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+        .circle img{width:28px;height:28px;object-fit:contain}.quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:20px}.quick a{display:block;text-align:center;text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};background:${if (darkMode) "#303134" else "#f8f9fa"};border:1px solid ${if (darkMode) "#44464a" else "#e8eaed"};border-radius:14px;padding:11px 4px;font-size:12px}
         .note{text-align:center;color:#80868b;font-size:12px;margin-top:28px}
         @media(max-width:340px){.wrap{padding:8vh 14px 24px}.brand{font-size:29px}.grid{gap:18px 6px}.circle{width:46px;height:46px}.quick a{font-size:11px}}
         </style></head><body><div class="wrap"><div class="brand">TGFN <span>Browser</span></div>
         <form class="search" action="https://www.google.com/search" method="get"><input name="q" placeholder="${tr("Tìm kiếm trên Google", "Search Google")}" autofocus><button class="go" type="submit">${tr("Tìm", "Search")}</button></form>
         <div class="quick">
-        <a href="https://tgfn.browser/__bookmarks">☆ ${tr("Dấu trang", "Bookmarks")}</a>
-        <a href="https://tgfn.browser/__history">◷ ${tr("Lịch sử", "History")}</a>
-        <a href="https://tgfn.browser/__downloads">↓ ${tr("Tải xuống", "Downloads")}</a>
+        <a href="https://tgfn.browser/__bookmarks">${tr("Dấu trang", "Bookmarks")}</a>
+        <a href="https://tgfn.browser/__history">${tr("Lịch sử", "History")}</a>
+        <a href="https://tgfn.browser/__downloads">${tr("Tải xuống", "Downloads")}</a>
         </div>
         <div class="grid">
-        <a class="item" href="https://www.google.com"><div class="circle">G</div>Google</a>
-        <a class="item" href="https://www.youtube.com"><div class="circle" style="color:#e53935">▶</div>YouTube</a>
-        <a class="item" href="https://www.wikipedia.org"><div class="circle" style="color:${if (darkMode) "#e8eaed" else "#202124"}">W</div>Wikipedia</a>
-        <a class="item" href="https://github.com"><div class="circle" style="color:${if (darkMode) "#e8eaed" else "#202124"}">⌘</div>GitHub</a>
-        <a class="item" href="https://www.reddit.com"><div class="circle" style="color:#ff4500">r/</div>Reddit</a>
-        <a class="item" href="https://www.bing.com"><div class="circle" style="color:#008373">b</div>Bing</a>
+        <a class="item" href="https://www.google.com"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fwww.google.com%2F&amp;sz=64"></div>Google</a>
+        <a class="item" href="https://www.youtube.com"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fwww.youtube.com%2F&amp;sz=64"></div>YouTube</a>
+        <a class="item" href="https://www.wikipedia.org"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fwww.wikipedia.org%2F&amp;sz=64"></div>Wikipedia</a>
+        <a class="item" href="https://github.com"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fgithub.com%2F&amp;sz=64"></div>GitHub</a>
+        <a class="item" href="https://www.reddit.com"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fwww.reddit.com%2F&amp;sz=64"></div>Reddit</a>
+        <a class="item" href="https://www.bing.com"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fwww.bing.com%2F&amp;sz=64"></div>Bing</a>
         </div><div class="note">${tr("Tìm kiếm nhanh · Duyệt web theo cách của bạn", "Quick search · Browse your way")}</div></div></body></html>
     """.trimIndent()
 
@@ -1504,13 +1504,6 @@ class MainActivity : Activity() {
                                 scaleType = ImageView.ScaleType.FIT_CENTER
                                 contentDescription = tr("Biểu tượng website", "Website icon")
                             }, LinearLayout.LayoutParams(dp(22), dp(22)))
-                        } else {
-                            titleRow.addView(TextView(this).apply {
-                                text = "🌐"
-                                textSize = 15f
-                                gravity = Gravity.CENTER
-                                contentDescription = tr("Biểu tượng website", "Website icon")
-                            }, LinearLayout.LayoutParams(dp(22), dp(24)))
                         }
                         titleRow.addView(TextView(this).apply {
                             text = tr("Tab ", "Tab ") + (tabIndex + 1)
