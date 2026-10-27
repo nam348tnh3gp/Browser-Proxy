@@ -369,12 +369,12 @@ class MainActivity : Activity() {
             if (isVideoBackground) {
                 val player = android.widget.VideoView(this).apply {
                     setBackgroundColor(canvas)
-                    setVideoURI(Uri.parse(backgroundUri))
                     setOnPreparedListener { mediaPlayer ->
                         mediaPlayer.isLooping = true
                         mediaPlayer.setVolume(0f, 0f)
                         start()
                     }
+                    setVideoURI(Uri.parse(backgroundUri))
                     setOnErrorListener { _, _, _ -> true }
                 }
                 videoBackground = player
@@ -777,7 +777,15 @@ class MainActivity : Activity() {
         }
         if (::webContainer.isInitialized) webContainer.setBackgroundColor(color)
         mediaBackgroundHost?.setBackgroundColor(if (showWallpaper && isMedia) Color.TRANSPARENT else canvas)
-        videoBackground?.visibility = if (showWallpaper && isVideo) View.VISIBLE else View.GONE
+        videoBackground?.let { player ->
+            if (showWallpaper && isVideo) {
+                player.visibility = View.VISIBLE
+                if (!player.isPlaying) player.start()
+            } else {
+                if (player.isPlaying) player.pause()
+                player.visibility = View.GONE
+            }
+        }
         gifBackground?.visibility = if (showWallpaper && isGif) View.VISIBLE else View.GONE
     }
 
