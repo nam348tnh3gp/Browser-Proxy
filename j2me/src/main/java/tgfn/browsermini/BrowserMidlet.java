@@ -2213,7 +2213,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             } catch (Exception ignored) {}
         }
         int linkCount = in.readUnsignedShort();
-        if (linkCount > 100) throw new IOException("Too many image links");
+        if (linkCount > 150) throw new IOException("Too many image links");
         for (int i = 0; i < linkCount; i++) {
             int tLen = in.readUnsignedShort();
             byte[] tb = new byte[tLen];

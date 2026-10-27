@@ -68,6 +68,12 @@ type pageLink struct {
 	H    int    `json:"h"`
 }
 
+type pageLinkCapture struct {
+	Links []pageLink `json:"links"`
+	DocW  int        `json:"docW"`
+	DocH  int        `json:"docH"`
+}
+
 func ssrImageResponse(resp *http.Response) error {
 	if resp == nil || resp.Request == nil {
 		return nil
@@ -130,7 +136,7 @@ func ssrImageResponse(resp *http.Response) error {
 	defer chromeCancel()
 
 	var buf []byte
-	var links []pageLink
+	var capture pageLinkCapture
 	err := chromedp.Run(chromeCtx,
 		emulation.SetDeviceMetricsOverride(int64(viewportWidth), 500, scale, true),
 		emulation.SetTouchEmulationEnabled(true),
@@ -152,27 +158,40 @@ func ssrImageResponse(resp *http.Response) error {
 		chromedp.Evaluate(`
 			(function() {
 				var out = [];
-				var seen = {};
 				var as = document.querySelectorAll('a[href]');
-				for (var i = 0; i < as.length && out.length < 60; i++) {
+				var docW = window.innerWidth || document.documentElement.clientWidth || 1;
+				var docH = Math.max(document.documentElement.scrollHeight || 0, document.body ? document.body.scrollHeight : 0, 1);
+				for (var i = 0; i < as.length && out.length < 120; i++) {
 					var a = as[i];
 					var href = a.href || '';
 					if (!href || href.indexOf('javascript:') === 0) continue;
-					var t = (a.innerText || a.textContent || a.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
-					if (t.length < 2 || t.length > 100) continue;
-					var key = t + '|' + href;
-					if (seen[key]) continue;
-					seen[key] = true;
-					var r = a.getBoundingClientRect();
-					if (!r || r.width < 1 || r.height < 1) continue;
+					var t = (a.innerText || a.textContent || a.getAttribute('title') || a.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
+					if (!t) {
+						var img = a.querySelector('img');
+						t = img ? (img.getAttribute('alt') || img.getAttribute('title') || 'image') : 'link';
+					}
+					if (t.length > 80) t = t.substring(0, 80);
+					var rects = a.getClientRects();
 					var sx = window.pageXOffset || document.documentElement.scrollLeft || 0;
 					var sy = window.pageYOffset || document.documentElement.scrollTop || 0;
-					var s = window.devicePixelRatio || 1;
-					out.push({text: t, url: href, x: Math.max(0, Math.round((r.left + sx) * s)), y: Math.max(0, Math.round((r.top + sy) * s)), w: Math.max(1, Math.round(r.width * s)), h: Math.max(1, Math.round(r.height * s))});
+					var added = 0;
+					for (var r = 0; r < rects.length && out.length < 120 && added < 4; r++) {
+						var box = rects[r];
+						if (!box || box.width < 2 || box.height < 2) continue;
+						out.push({
+							text: t,
+							url: href,
+							x: Math.max(0, Math.round(box.left + sx)),
+							y: Math.max(0, Math.round(box.top + sy)),
+							w: Math.max(1, Math.round(box.width)),
+							h: Math.max(1, Math.round(box.height))
+						});
+						added++;
+					}
 				}
-				return out;
+				return {links: out, docW: docW, docH: docH};
 			})()
-		`, &links),
+		`, &capture),
 	)
 	if err != nil {
 		fmt.Println("[SSRIMG] chromedp error:", err)
@@ -192,6 +211,8 @@ func ssrImageResponse(resp *http.Response) error {
 	}
 	img = resizeMobileImage(img, maxWidth)
 	bounds := img.Bounds()
+	links := scaleLinksToImage(capture.Links, capture.DocW, capture.DocH, bounds.Dx(), bounds.Dy())
+	fmt.Println("[SSRIMG] link map doc=", capture.DocW, "x", capture.DocH, "img=", bounds.Dx(), "x", bounds.Dy(), "links=", len(links))
 	tileCount := (bounds.Dy() + mobileTileHeight - 1) / mobileTileHeight
 	if tileCount > maxMobileTiles {
 		// Preserve the captured page scale and hitbox coordinates. Older MIDP
@@ -246,13 +267,53 @@ func mobileViewportWidth(value string) int {
 	return width
 }
 
+// scaleLinksToImage maps CSS document coordinates onto the captured screenshot.
+func scaleLinksToImage(links []pageLink, docW, docH, imgW, imgH int) []pageLink {
+	if docW < 1 {
+		docW = 1
+	}
+	if docH < 1 {
+		docH = 1
+	}
+	if imgW < 1 || imgH < 1 || len(links) == 0 {
+		return links
+	}
+	sx := float64(imgW) / float64(docW)
+	sy := float64(imgH) / float64(docH)
+	out := make([]pageLink, 0, len(links))
+	for _, l := range links {
+		x := int(float64(l.X)*sx + 0.5)
+		y := int(float64(l.Y)*sy + 0.5)
+		w := int(float64(l.W)*sx + 0.5)
+		h := int(float64(l.H)*sy + 0.5)
+		if w < 1 {
+			w = 1
+		}
+		if h < 1 {
+			h = 1
+		}
+		if x >= imgW || y >= imgH {
+			continue
+		}
+		if x+w > imgW {
+			w = imgW - x
+		}
+		if y+h > imgH {
+			h = imgH - y
+		}
+		l.X, l.Y, l.W, l.H = x, y, w, h
+		out = append(out, l)
+	}
+	return out
+}
+
 // encodeMobilePacket serializes the IML2 image tiles and their on-page link hitboxes.
 func encodeMobilePacket(tiles [][]byte, links []pageLink) ([]byte, error) {
 	if len(tiles) < 1 || len(tiles) > maxMobileTiles {
 		return nil, fmt.Errorf("invalid mobile tile count: %d", len(tiles))
 	}
-	if len(links) > 60 {
-		links = links[:60]
+	if len(links) > 120 {
+		links = links[:120]
 	}
 	var packet bytes.Buffer
 	packet.WriteString(imglMagic)
