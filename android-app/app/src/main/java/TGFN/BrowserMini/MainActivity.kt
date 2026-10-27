@@ -310,7 +310,7 @@ class MainActivity : Activity() {
         }
         root.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)))
 
-        webContainer = FrameLayout(this).apply { setBackgroundColor(canvas) }
+        webContainer = FrameLayout(this).apply { setBackgroundColor(if (hasCustomBackground) Color.TRANSPARENT else canvas) }
         root.addView(webContainer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val bottomBar = LinearLayout(this).apply {
@@ -389,6 +389,7 @@ class MainActivity : Activity() {
                 if (shouldShowNewTab) NEW_TAB_SESSION_URL else requestedUrl.takeIf { it.isNotBlank() }
             } else null
         )
+        web.setBackgroundColor(if (shouldShowNewTab && !prefs.getString("app_background_uri", null).isNullOrBlank()) Color.TRANSPARENT else canvas)
         tabs.add(tab)
         tabGroups.add(tab.group)
         // Update the visible tab counter immediately, before WebView callbacks run.
@@ -423,6 +424,7 @@ class MainActivity : Activity() {
                     tab.isNewTab = url == "https://tgfn.browser/"
                 }
                 tab.url = if (tab.isNewTab) NEW_TAB_SESSION_URL else (url ?: tab.url)
+                if (!tab.isNewTab && !url.isNullOrBlank() && (url.startsWith("https://") || url.startsWith("http://"))) loadRemoteFavicon(tab, url)
                 tab.title = "Đang tải…"
                 if (isSelected(tab)) {
                     pageLoading = true
@@ -635,19 +637,22 @@ class MainActivity : Activity() {
         }
         // Chromium-style link actions: intercept long-presses only when the hit target is a link.
         web.setOnLongClickListener { view ->
-            val hit = (view as? WebView)?.hitTestResult
-            val isLink = hit != null && hit.type in setOf(
+            val target = view as? WebView ?: return@setOnLongClickListener false
+            val hit = target.hitTestResult ?: return@setOnLongClickListener false
+            when (hit.type) {
                 WebView.HitTestResult.ANCHOR_TYPE,
                 WebView.HitTestResult.SRC_ANCHOR_TYPE,
                 WebView.HitTestResult.EMAIL_TYPE,
-                WebView.HitTestResult.PHONE_TYPE
-            )
-            val link = hit?.extra
-            if (isLink && !link.isNullOrBlank()) {
-                showLinkContextMenu(link)
-                true
-            } else {
-                false
+                WebView.HitTestResult.PHONE_TYPE -> {
+                    val link = hit.extra
+                    if (link.isNullOrBlank()) false else { showLinkContextMenu(link); true }
+                }
+                WebView.HitTestResult.IMAGE_TYPE,
+                WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
+                    showImageContextMenu(hit.extra, target)
+                    true
+                }
+                else -> false // Keep native WebView text selection and its copy/share menu.
             }
         }
         if (select) selectTab(tabs.lastIndex)
@@ -694,13 +699,15 @@ class MainActivity : Activity() {
             tab.url = NEW_TAB_SESSION_URL
             tab.title = tr("Tab mới", "New tab")
         }
+        val hasCustomBackground = !prefs.getString("app_background_uri", null).isNullOrBlank()
+        web.setBackgroundColor(if (hasCustomBackground) Color.TRANSPARENT else canvas)
         web.loadDataWithBaseURL("https://tgfn.browser/", newTabHtml(), "text/html", "UTF-8", null)
     }
 
     private fun newTabHtml(): String = """
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
         <style>
-        *{box-sizing:border-box}body{margin:0;background:${if (darkMode) "#202124" else "#fff"};color:${if (darkMode) "#e8eaed" else "#202124"};font:16px Roboto,'Arial',sans-serif}
+        *{box-sizing:border-box}body{margin:0;background:${if (!prefs.getString("app_background_uri", null).isNullOrBlank()) "transparent" else if (darkMode) "#202124" else "#fff"};color:${if (darkMode) "#e8eaed" else "#202124"};font:16px Roboto,'Arial',sans-serif}
         .wrap{max-width:560px;margin:0 auto;padding:12vh 22px 32px}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:26px}
         .brand span{color:#188038}.search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
         input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:14px}
@@ -760,6 +767,59 @@ class MainActivity : Activity() {
         } else if (restoreUrl.startsWith("https://", true) || restoreUrl.startsWith("http://", true)) {
             tab.webView.loadUrl(restoreUrl)
         }
+    }
+
+    private fun loadRemoteFavicon(tab: BrowserTab, pageUrl: String) {
+        val requestedHost = try { URI(pageUrl).host?.lowercase() } catch (_: Exception) { null } ?: return
+        Thread {
+            var bitmap: android.graphics.Bitmap? = null
+            try {
+                val iconUrl = "https://www.google.com/s2/favicons?domain_url=" + android.net.Uri.encode(pageUrl) + "&sz=64"
+                val connection = java.net.URL(iconUrl).openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 5000
+                connection.readTimeout = 5000
+                connection.setRequestProperty("User-Agent", "TGFN-BrowserMini")
+                connection.inputStream.use { bitmap = BitmapFactory.decodeStream(it) }
+                connection.disconnect()
+            } catch (_: Exception) { }
+            val icon = bitmap ?: return@Thread
+            runOnUiThread {
+                val currentHost = try { URI(tab.webView.url ?: tab.url).host?.lowercase() } catch (_: Exception) { null }
+                if (currentHost == requestedHost) tab.favicon = icon
+            }
+        }.start()
+    }
+
+    private fun showImageContextMenu(rawUrl: String?, web: WebView) {
+        val imageUrl = rawUrl?.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
+        val actions = if (imageUrl == null) arrayOf(tr("Tải lại trang", "Reload page"), tr("Chia sẻ trang", "Share page")) else arrayOf(
+            tr("Mở hình ảnh", "Open image"), tr("Mở hình ảnh trong tab mới", "Open image in new tab"),
+            tr("Sao chép địa chỉ hình ảnh", "Copy image address"), tr("Chia sẻ hình ảnh", "Share image"),
+            tr("Tải hình ảnh xuống", "Download image"), tr("Tải lại trang", "Reload page")
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Hình ảnh", "Image"))
+            .setItems(actions) { _, which ->
+                if (imageUrl == null) {
+                    if (which == 0) web.reload() else shareCurrentPage()
+                } else when (which) {
+                    0 -> web.loadUrl(imageUrl)
+                    1 -> createTab(imageUrl, true)
+                    2 -> {
+                        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                            .setPrimaryClip(ClipData.newPlainText("Image URL", imageUrl))
+                        Toast.makeText(this, tr("Đã sao chép địa chỉ ảnh", "Image address copied"), Toast.LENGTH_SHORT).show()
+                    }
+                    3 -> {
+                        val send = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, imageUrl) }
+                        startActivity(Intent.createChooser(send, tr("Chia sẻ hình ảnh", "Share image")))
+                    }
+                    4 -> enqueueDownload(imageUrl, web.settings.userAgentString, null, "image/*")
+                    5 -> web.reload()
+                }
+            }
+            .setNegativeButton(tr("Hủy", "Cancel"), null)
+            .show()
     }
 
     private fun updateTabButton() {
