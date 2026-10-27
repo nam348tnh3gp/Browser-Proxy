@@ -263,11 +263,6 @@ class MainActivity : Activity() {
             }
         }
         addressCard.addView(address, LinearLayout.LayoutParams(0, dp(44), 1f))
-        val clearAddress = smallAction("×", tr("Xóa địa chỉ", "Clear address")) {
-            address.text.clear()
-            address.requestFocus()
-        }.apply { textSize = 22f }
-        addressCard.addView(clearAddress, LinearLayout.LayoutParams(dp(28), dp(42)))
         refreshButton = smallAction("↻", tr("Tải lại", "Reload")) {
             val web = currentWebView() ?: return@smallAction
             if (pageLoading) web.stopLoading() else web.reload()
