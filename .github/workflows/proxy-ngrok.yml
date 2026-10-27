@@ -59,6 +59,20 @@ jobs:
         working-directory: go-proxy
         run: go build -o "$RUNNER_TEMP/tgfn-proxy" .
 
+      - name: Set DNS to 1.1.1.1
+        run: |
+          sudo rm -f /etc/resolv.conf
+          printf 'nameserver 1.1.1.1\nnameserver 1.0.0.1\n' | sudo tee /etc/resolv.conf
+          if command -v resolvectl >/dev/null; then
+            iface="$(ip route show default | awk '{print $5; exit}')"
+            if [ -n "$iface" ]; then
+              sudo resolvectl dns "$iface" 1.1.1.1 1.0.0.1 || true
+            fi
+          fi
+          echo "DNS now:"
+          cat /etc/resolv.conf
+          getent hosts example.com || true
+
       - name: Start proxy
         run: |
           chrome="$(command -v chromium-browser || command -v chromium || true)"
