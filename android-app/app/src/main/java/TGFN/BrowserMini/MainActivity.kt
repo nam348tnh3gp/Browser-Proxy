@@ -420,6 +420,9 @@ class MainActivity : Activity() {
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 if (url?.startsWith(READER_BASE_URL) == true) return
+                // Only the built-in new-tab page is transparent over the app wallpaper.
+                // Real websites keep an opaque WebView background so the wallpaper does not bleed into page content.
+                if (url?.startsWith("https://tgfn.browser/", ignoreCase = true) != true) view?.setBackgroundColor(canvas)
                 if (!url.isNullOrBlank() && !url.equals("about:blank", ignoreCase = true)) {
                     tab.isNewTab = url == "https://tgfn.browser/"
                 }
