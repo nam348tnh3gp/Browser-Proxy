@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/emulation"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
 
@@ -137,8 +138,9 @@ func ssrImageResponse(resp *http.Response) error {
 
 	var buf []byte
 	var capture pageLinkCapture
+	var clipW, clipH float64
 	err := chromedp.Run(chromeCtx,
-		emulation.SetDeviceMetricsOverride(int64(viewportWidth), 500, scale, true),
+		emulation.SetDeviceMetricsOverride(int64(viewportWidth), 800, scale, true),
 		emulation.SetTouchEmulationEnabled(true),
 		emulation.SetUserAgentOverride("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"),
 		chromedp.Navigate(pageURL),
@@ -154,14 +156,47 @@ func ssrImageResponse(resp *http.Response) error {
 			} catch (e) {}
 		})()`, nil),
 		chromedp.Sleep(450*time.Millisecond),
-		chromedp.FullScreenshot(&buf, shotQuality),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			_, _, _, _, _, cssContent, err := page.GetLayoutMetrics().Do(ctx)
+			if err != nil {
+				return err
+			}
+			clipW, clipH = float64(viewportWidth), 800
+			if cssContent != nil {
+				if cssContent.Width > 1 {
+					clipW = cssContent.Width
+				}
+				if cssContent.Height > 1 {
+					clipH = cssContent.Height
+				}
+			}
+			if clipH > 12000 {
+				clipH = 12000
+			}
+			format := page.CaptureScreenshotFormatPng
+			if shotQuality != 100 {
+				format = page.CaptureScreenshotFormatJpeg
+			}
+			shot, err := page.CaptureScreenshot().
+				WithFormat(format).
+				WithQuality(int64(shotQuality)).
+				WithCaptureBeyondViewport(true).
+				WithFromSurface(true).
+				WithClip(&page.Viewport{X: 0, Y: 0, Width: clipW, Height: clipH, Scale: scale}).
+				Do(ctx)
+			if err != nil {
+				return err
+			}
+			buf = shot
+			return nil
+		}),
 		chromedp.Evaluate(`
 			(function() {
 				var out = [];
 				var as = document.querySelectorAll('a[href]');
 				var docW = window.innerWidth || document.documentElement.clientWidth || 1;
 				var docH = Math.max(document.documentElement.scrollHeight || 0, document.body ? document.body.scrollHeight : 0, 1);
-				for (var i = 0; i < as.length && out.length < 120; i++) {
+				for (var i = 0; i < as.length && out.length < 200; i++) {
 					var a = as[i];
 					var href = a.href || '';
 					if (!href || href.indexOf('javascript:') === 0) continue;
@@ -175,7 +210,7 @@ func ssrImageResponse(resp *http.Response) error {
 					var sx = window.pageXOffset || document.documentElement.scrollLeft || 0;
 					var sy = window.pageYOffset || document.documentElement.scrollTop || 0;
 					var added = 0;
-					for (var r = 0; r < rects.length && out.length < 120 && added < 4; r++) {
+					for (var r = 0; r < rects.length && out.length < 200 && added < 2; r++) {
 						var box = rects[r];
 						if (!box || box.width < 2 || box.height < 2) continue;
 						out.push({
@@ -211,8 +246,17 @@ func ssrImageResponse(resp *http.Response) error {
 	}
 	img = resizeMobileImage(img, maxWidth)
 	bounds := img.Bounds()
-	links := scaleLinksToImage(capture.Links, capture.DocW, capture.DocH, bounds.Dx(), bounds.Dy())
-	fmt.Println("[SSRIMG] link map doc=", capture.DocW, "x", capture.DocH, "img=", bounds.Dx(), "x", bounds.Dy(), "links=", len(links))
+	docW := int(clipW + 0.5)
+	docH := int(clipH + 0.5)
+	if docW < 1 {
+		docW = capture.DocW
+	}
+	if docH < 1 {
+		docH = capture.DocH
+	}
+	links := scaleLinksToImage(capture.Links, docW, docH, bounds.Dx(), bounds.Dy())
+	links = thinLinks(links, 80)
+	fmt.Println("[SSRIMG] link map clip=", docW, "x", docH, "img=", bounds.Dx(), "x", bounds.Dy(), "links=", len(links))
 	tileCount := (bounds.Dy() + mobileTileHeight - 1) / mobileTileHeight
 	if tileCount > maxMobileTiles {
 		// Preserve the captured page scale and hitbox coordinates. Older MIDP
@@ -267,6 +311,31 @@ func mobileViewportWidth(value string) int {
 	return width
 }
 
+// thinLinks keeps hitboxes spread down the page instead of only the first DOM links.
+func thinLinks(links []pageLink, max int) []pageLink {
+	if len(links) <= max || max < 1 {
+		return links
+	}
+	out := make([]pageLink, 0, max)
+	step := float64(len(links)) / float64(max)
+	used := map[int]bool{}
+	for i := 0; i < max; i++ {
+		idx := int(float64(i) * step)
+		if idx >= len(links) {
+			idx = len(links) - 1
+		}
+		for used[idx] && idx+1 < len(links) {
+			idx++
+		}
+		if used[idx] {
+			continue
+		}
+		used[idx] = true
+		out = append(out, links[idx])
+	}
+	return out
+}
+
 // scaleLinksToImage maps CSS document coordinates onto the captured screenshot.
 func scaleLinksToImage(links []pageLink, docW, docH, imgW, imgH int) []pageLink {
 	if docW < 1 {
@@ -312,8 +381,8 @@ func encodeMobilePacket(tiles [][]byte, links []pageLink) ([]byte, error) {
 	if len(tiles) < 1 || len(tiles) > maxMobileTiles {
 		return nil, fmt.Errorf("invalid mobile tile count: %d", len(tiles))
 	}
-	if len(links) > 120 {
-		links = links[:120]
+	if len(links) > 80 {
+		links = links[:80]
 	}
 	var packet bytes.Buffer
 	packet.WriteString(imglMagic)

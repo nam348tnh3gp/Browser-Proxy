@@ -1661,7 +1661,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
                     LinkItem link = (LinkItem)lastPageResult.links.elementAt(li);
                     if (link.x < 0 || link.y < 0 || link.width <= 0 || link.height <= 0) continue;
                     int lx = (int)(link.x * mobileScale);
-                    int ly = mobileImageTop + (int)(link.y * mobileScale);
+                    int ly = mobileLinkY(link.y, mobileImageTop, mobileScale);
                     int lw = Math.max(2, (int)(link.width * mobileScale));
                     int lh = Math.max(2, (int)(link.height * mobileScale));
                     if (ly + lh < contentY || ly > contentY + contentH) continue;
@@ -2005,6 +2005,27 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             }
         }
 
+        private int mobileLinkY(int imageY, int imageTop, float scale) {
+            if (lastPageResult == null || lastPageResult.images == null) return imageTop + (int)(imageY * scale);
+            int origin = 0;
+            int screen = imageTop;
+            for (int i = 0; i < lastPageResult.images.size(); i++) {
+                ImageRef ref = (ImageRef)lastPageResult.images.elementAt(i);
+                if (ref == null || ref.image == null) continue;
+                int srcH = ref.image.getHeight();
+                int drawH = ref.scaledImage != null ? ref.scaledImage.getHeight() : Math.max(1, (int)(srcH * scale));
+                if (imageY < origin + srcH || i == lastPageResult.images.size() - 1) {
+                    int local = imageY - origin;
+                    if (local < 0) local = 0;
+                    if (srcH < 1) srcH = 1;
+                    return screen + local * drawH / srcH;
+                }
+                origin += srcH;
+                screen += drawH;
+            }
+            return imageTop + (int)(imageY * scale);
+        }
+
         private int linkCount() {
             if (lastPageResult != null && lastPageResult.mobileTiles && lastPageResult.links != null) {
                 return lastPageResult.links.size();
@@ -2213,7 +2234,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             } catch (Exception ignored) {}
         }
         int linkCount = in.readUnsignedShort();
-        if (linkCount > 150) throw new IOException("Too many image links");
+        int keepLinks = linkCount > 200 ? 200 : linkCount;
         for (int i = 0; i < linkCount; i++) {
             int tLen = in.readUnsignedShort();
             byte[] tb = new byte[tLen];
@@ -2227,7 +2248,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             int linkY = tiled ? in.readUnsignedShort() : -1;
             int linkW = tiled ? in.readUnsignedShort() : 0;
             int linkH = tiled ? in.readUnsignedShort() : 0;
-            if (text.length() > 0 && link.length() > 0) {
+            if (i < keepLinks && text.length() > 0 && link.length() > 0) {
                 result.links.addElement(new LinkItem(text, link, linkX, linkY, linkW, linkH));
                 if (!tiled) result.blocks.addElement(new RenderBlock(text, 4, link));
             }
