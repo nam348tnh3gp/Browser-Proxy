@@ -25,6 +25,8 @@ A lightweight Android browser prototype with a Kotlin/WebView client and a stand
 - Chrome-inspired address/search bar, reload, back/forward and home controls.
 - New-tab page with Google search and quick links to popular sites.
 - Multiple WebView tabs with an animated, bottom-sheet-style tab overview, two-column tab cards, active-tab highlight, one-tap close controls, and a quick new-tab action.
+- Managed popup links (`target="_blank"` and `window.open()`), tab groups, close-other-tabs actions, and recently closed-tab restore.
+- Built-in download manager with progress/status, opening completed files, retrying failed downloads, and a shortcut to Android's system download manager.
 - Bookmarks, browsing history, page sharing, and close-tab controls.
 - In-page text search with result counts.
 - Page zoom controls and pinch-to-zoom without permanent on-screen zoom buttons.
@@ -32,6 +34,7 @@ A lightweight Android browser prototype with a Kotlin/WebView client and a stand
 - In-page translation to Vietnamese, English, Japanese, Korean, French, or Spanish without navigating away; the user can restore the original text. Translation uses Google's online translation endpoint and is not offline.
 - Optional HTTP proxy configuration; direct browsing remains available when the proxy is disabled.
 - Optional Data Saver toggle that keeps images and network access enabled, uses WebView cache validation, and persists across launches. The Go proxy can gzip eligible small text responses when the client advertises gzip. The **Menu → Data Saver analytics** screen shows this installation's measured counters and whole-proxy totals for response bytes, HTTPS tunnel bytes, gzip savings, and registered client IDs. The Go proxy periodically persists counters to `proxy-stats.json` by default (or `PROXY_STATS_FILE` if set), so counters can survive a restart when that file remains available and writable. The client ID is generated once and persisted, not generated per request. Per-device attribution now normalizes IP formats and handles a single registered client across address changes; if multiple clients share one source IP, the UI reports that attribution is ambiguous rather than silently assigning traffic to the wrong device.
+- Privacy and site-data controls for clearing WebView cache, cookies/sign-in sessions, website storage, browsing history, or all browsing data. Third-party cookies can be allowed or blocked and the choice is applied to existing and newly created tabs.
 - Settings for the home page, proxy endpoint, and desktop-site preference.
 
 The browser uses Android System WebView; it is not the full Chromium desktop/mobile browser and does not provide Chrome account sync or extensions.
