@@ -941,7 +941,6 @@ class MainActivity : Activity() {
 
     private fun rememberClosedTab(title: String, url: String) {
         val items = readRecentlyClosedTabs()
-        items.removeAll { it.url == url }
         items.add(0, ClosedTab(title, url))
         saveRecentlyClosedTabs(items.take(10))
         lastClosedTabUrl = url
