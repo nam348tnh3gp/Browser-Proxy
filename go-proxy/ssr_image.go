@@ -156,7 +156,11 @@ func ssrImageResponse(resp *http.Response) error {
 		})()`, nil),
 		chromedp.Sleep(180*time.Millisecond),
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			if err := chromedp.Evaluate(`window.scrollTo(0,0)`, nil).Do(ctx); err != nil {
+			if err := chromedp.Evaluate(`(function(){
+				var h = Math.min(document.documentElement.scrollHeight || 0, 8000);
+				window.scrollTo(0, h);
+				window.scrollTo(0, 0);
+			})()`, nil).Do(ctx); err != nil {
 				return err
 			}
 			_, _, _, _, _, cssContent, err := page.GetLayoutMetrics().Do(ctx)
@@ -175,8 +179,12 @@ func ssrImageResponse(resp *http.Response) error {
 			if clipW > float64(viewportWidth) {
 				clipW = float64(viewportWidth)
 			}
-			if clipH > 4500 {
-				clipH = 4500
+			maxClip := 12000.0
+			if hq {
+				maxClip = 8000
+			}
+			if clipH > maxClip {
+				clipH = maxClip
 			}
 			format := page.CaptureScreenshotFormatJpeg
 			shot, err := page.CaptureScreenshot().
