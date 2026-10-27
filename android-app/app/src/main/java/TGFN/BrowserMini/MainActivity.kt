@@ -109,6 +109,7 @@ class MainActivity : Activity() {
     private var pageLoading = false
     private var lastClosedTabUrl: String? = null
     private lateinit var webContainer: FrameLayout
+    private var browserBottomBar: LinearLayout? = null
     private lateinit var proxySummary: TextView
     private var browserRoot: View? = null
     private var fullscreenView: View? = null
@@ -320,6 +321,7 @@ class MainActivity : Activity() {
             setBackgroundColor(if (hasCustomBackground) Color.TRANSPARENT else canvas)
             elevation = dp(8).toFloat()
         }
+        browserBottomBar = bottomBar
         bottomBar.addView(bottomAction("‹", tr("Quay lại", "Back")) { currentWebView()?.let { if (it.canGoBack()) it.goBack() } })
         bottomBar.addView(bottomAction("›", tr("Tiến", "Forward")) { currentWebView()?.let { if (it.canGoForward()) it.goForward() } })
         bottomBar.addView(bottomAction("⌂", tr("Trang chủ", "Home")) { loadHome() })
@@ -421,8 +423,10 @@ class MainActivity : Activity() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 if (url?.startsWith(READER_BASE_URL) == true) return
                 // Only the built-in new-tab page is transparent over the app wallpaper.
-                // Real websites keep an opaque WebView background so the wallpaper does not bleed into page content.
-                if (url?.startsWith("https://tgfn.browser/", ignoreCase = true) != true) view?.setBackgroundColor(canvas)
+                // Keep both website content and the bottom toolbar opaque on real pages.
+                val showWallpaper = url?.startsWith("https://tgfn.browser/", ignoreCase = true) == true
+                if (!showWallpaper) view?.setBackgroundColor(canvas)
+                if (isSelected(tab)) updateBottomBarBackground(showWallpaper)
                 if (!url.isNullOrBlank() && !url.equals("about:blank", ignoreCase = true)) {
                     tab.isNewTab = url == "https://tgfn.browser/"
                 }
@@ -459,6 +463,7 @@ class MainActivity : Activity() {
                 tab.url = if (tab.isNewTab) NEW_TAB_SESSION_URL else (url ?: tab.url)
                 tab.title = view?.title?.takeIf { it.isNotBlank() } ?: hostLabel(url)
                 if (isSelected(tab)) {
+                    updateBottomBarBackground(tab.isNewTab)
                     pageLoading = false
                     status.text = tr("Sẵn sàng", "Ready")
                     refreshButton.text = "↻"
@@ -697,6 +702,18 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * Show the custom wallpaper only on the built-in new-tab page.
+     * Real websites must have an opaque bottom toolbar so the wallpaper
+     * cannot bleed through while browsing or when navigating back/forward.
+     */
+    private fun updateBottomBarBackground(showWallpaper: Boolean) {
+        val hasCustomBackground = !prefs.getString("app_background_uri", null).isNullOrBlank()
+        browserBottomBar?.setBackgroundColor(
+            if (hasCustomBackground && showWallpaper) Color.TRANSPARENT else canvas
+        )
+    }
+
     private fun loadNewTabPage(web: WebView) {
         tabs.firstOrNull { it.webView === web }?.let { tab ->
             tab.isNewTab = true
@@ -705,6 +722,7 @@ class MainActivity : Activity() {
         }
         val hasCustomBackground = !prefs.getString("app_background_uri", null).isNullOrBlank()
         web.setBackgroundColor(if (hasCustomBackground) Color.TRANSPARENT else canvas)
+        if (tabs.getOrNull(selectedTab)?.webView === web) updateBottomBarBackground(showWallpaper = true)
         web.loadDataWithBaseURL("https://tgfn.browser/", newTabHtml(), "text/html", "UTF-8", null)
     }
 
@@ -751,6 +769,7 @@ class MainActivity : Activity() {
         }
         val tab = tabs[index]
         loadDeferredRestore(tab)
+        updateBottomBarBackground(tab.isNewTab || tab.webView.url?.startsWith("https://tgfn.browser/", ignoreCase = true) == true)
         setAddress(tab.webView.url ?: tab.url)
         updateAddressSecurity(tab.webView.url ?: tab.url)
         pageLoading = tab.webView.progress in 1..99
