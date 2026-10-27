@@ -390,6 +390,18 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ))
         web.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val uri = request?.url ?: return false
+                if (!uri.host.equals("tgfn.browser", ignoreCase = true)) return false
+                when (uri.path) {
+                    "/__bookmarks" -> showBookmarks()
+                    "/__history" -> showHistory()
+                    "/__downloads" -> openDownloads()
+                    else -> return false
+                }
+                return true
+            }
+
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val url = request?.url?.toString()
                 if (isAdUrl(url)) {
@@ -416,6 +428,15 @@ class MainActivity : Activity() {
                     progress.visibility = View.VISIBLE
                 }
                 updateTabButton()
+            }
+
+            // WebView can display the first committed content before every resource finishes.
+            // Keep the normal streaming renderer; never buffer or truncate the page HTML here.
+            override fun onPageCommitVisible(view: WebView?, url: String?) {
+                if (url?.startsWith(READER_BASE_URL) == true) return
+                if (isSelected(tab)) {
+                    status.text = tr("Đã hiển thị nội dung — đang tải phần còn lại…", "Content visible — loading remaining resources…")
+                }
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -583,18 +604,25 @@ class MainActivity : Activity() {
         .wrap{max-width:560px;margin:0 auto;padding:12vh 22px 32px}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:26px}
         .brand span{color:#188038}.search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
         input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:14px}
-        .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px 10px;margin-top:34px}.item{text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};text-align:center;font-size:12px}
-        .circle{width:52px;height:52px;border-radius:18px;background:${if (darkMode) "#303134" else "#f1f3f4"};margin:0 auto 9px;display:flex;align-items:center;justify-content:center;overflow:hidden}.circle img{width:32px;height:32px;object-fit:contain}
-        .note{text-align:center;color:#80868b;font-size:12px;margin-top:36px}
+        .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px 10px;margin-top:30px}.item{text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};text-align:center;font-size:12px;min-width:0}
+        .circle{width:52px;height:52px;border-radius:18px;background:${if (darkMode) "#303134" else "#f1f3f4"};margin:0 auto 9px;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:23px;font-weight:700;color:#1a73e8}
+        .quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:20px}.quick a{display:block;text-align:center;text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};background:${if (darkMode) "#303134" else "#f8f9fa"};border:1px solid ${if (darkMode) "#44464a" else "#e8eaed"};border-radius:14px;padding:11px 4px;font-size:12px}
+        .note{text-align:center;color:#80868b;font-size:12px;margin-top:28px}
+        @media(max-width:340px){.wrap{padding:8vh 14px 24px}.brand{font-size:29px}.grid{gap:18px 6px}.circle{width:46px;height:46px}.quick a{font-size:11px}}
         </style></head><body><div class="wrap"><div class="brand">TGFN <span>Browser</span></div>
         <form class="search" action="https://www.google.com/search" method="get"><input name="q" placeholder="${tr("Tìm kiếm trên Google", "Search Google")}" autofocus><button class="go" type="submit">${tr("Tìm", "Search")}</button></form>
+        <div class="quick">
+        <a href="https://tgfn.browser/__bookmarks">☆ ${tr("Dấu trang", "Bookmarks")}</a>
+        <a href="https://tgfn.browser/__history">◷ ${tr("Lịch sử", "History")}</a>
+        <a href="https://tgfn.browser/__downloads">↓ ${tr("Tải xuống", "Downloads")}</a>
+        </div>
         <div class="grid">
-        <a class="item" href="https://www.google.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.google.com&amp;sz=128" alt="Google"></div>Google</a>
-        <a class="item" href="https://www.youtube.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.youtube.com&amp;sz=128" alt="YouTube"></div>YouTube</a>
-        <a class="item" href="https://www.wikipedia.org"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.wikipedia.org&amp;sz=128" alt="Wikipedia"></div>Wikipedia</a>
-        <a class="item" href="https://github.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=github.com&amp;sz=128" alt="GitHub"></div>GitHub</a>
-        <a class="item" href="https://www.reddit.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.reddit.com&amp;sz=128" alt="Reddit"></div>Reddit</a>
-        <a class="item" href="https://www.bing.com"><div class="circle"><img src="https://www.google.com/s2/favicons?domain=www.bing.com&amp;sz=128" alt="Bing"></div>Bing</a>
+        <a class="item" href="https://www.google.com"><div class="circle">G</div>Google</a>
+        <a class="item" href="https://www.youtube.com"><div class="circle" style="color:#e53935">▶</div>YouTube</a>
+        <a class="item" href="https://www.wikipedia.org"><div class="circle" style="color:${if (darkMode) "#e8eaed" else "#202124"}">W</div>Wikipedia</a>
+        <a class="item" href="https://github.com"><div class="circle" style="color:${if (darkMode) "#e8eaed" else "#202124"}">⌘</div>GitHub</a>
+        <a class="item" href="https://www.reddit.com"><div class="circle" style="color:#ff4500">r/</div>Reddit</a>
+        <a class="item" href="https://www.bing.com"><div class="circle" style="color:#008373">b</div>Bing</a>
         </div><div class="note">${tr("Tìm kiếm nhanh · Duyệt web theo cách của bạn", "Quick search · Browse your way")}</div></div></body></html>
     """.trimIndent()
 
@@ -2199,25 +2227,89 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
 
     private fun rememberHistory(tab: BrowserTab) {
         if (tab.url.isBlank() || !tab.url.startsWith("http")) return
+
         val history = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toMutableSet()
-        history.remove(tab.url)
         history.add(tab.url)
-        prefs.edit().putStringSet("history", history.toList().takeLast(100).toSet()).apply()
+        val timestamps = try {
+            org.json.JSONObject(prefs.getString("history_timestamps", "{}") ?: "{}")
+        } catch (_: Exception) {
+            org.json.JSONObject()
+        }
+        timestamps.put(tab.url, System.currentTimeMillis())
+
+        // Keep the complete browsing history. The history UI pages through it as the user scrolls.
+        prefs.edit()
+            .putStringSet("history", history)
+            .putString("history_timestamps", timestamps.toString())
+            .apply()
     }
 
     private fun showHistory() {
-        val history = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toList().sortedDescending()
+        val savedHistory = (prefs.getStringSet("history", emptySet()) ?: emptySet()).toList()
+        val timestamps = try {
+            org.json.JSONObject(prefs.getString("history_timestamps", "{}") ?: "{}")
+        } catch (_: Exception) {
+            org.json.JSONObject()
+        }
+        val history = savedHistory.sortedWith(
+            compareByDescending<String> { timestamps.optLong(it, 0L) }.thenByDescending { it }
+        )
         if (history.isEmpty()) {
             Toast.makeText(this, tr("Chưa có lịch sử duyệt web", "No browsing history yet"), Toast.LENGTH_SHORT).show()
             return
         }
-        android.app.AlertDialog.Builder(this).setTitle(tr("Lịch sử", "History"))
-            .setItems(history.toTypedArray()) { _, which -> currentWebView()?.loadUrl(history[which]) }
+
+        val pageSize = 50
+        var loadedCount = minOf(pageSize, history.size)
+        val formatter = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        fun labelFor(url: String): String {
+            val visitedAt = timestamps.optLong(url, 0L)
+            return if (visitedAt > 0L) "${formatter.format(java.util.Date(visitedAt))}\n$url" else url
+        }
+
+        val adapter = android.widget.ArrayAdapter<String>(
+            this, android.R.layout.simple_list_item_1,
+            history.take(loadedCount).map(::labelFor)
+        )
+        val list = android.widget.ListView(this).apply {
+            this.adapter = adapter
+            dividerHeight = dp(1)
+            setOnItemClickListener { _, _, position, _ ->
+                if (position in history.indices) currentWebView()?.loadUrl(history[position])
+            }
+            setOnScrollListener(object : android.widget.AbsListView.OnScrollListener {
+                override fun onScrollStateChanged(view: android.widget.AbsListView?, scrollState: Int) = Unit
+                override fun onScroll(
+                    view: android.widget.AbsListView?,
+                    firstVisibleItem: Int,
+                    visibleItemCount: Int,
+                    totalItemCount: Int
+                ) {
+                    if (loadedCount < history.size && firstVisibleItem + visibleItemCount >= totalItemCount - 5) {
+                        val nextCount = minOf(loadedCount + pageSize, history.size)
+                        if (nextCount > loadedCount) {
+                            adapter.addAll(history.subList(loadedCount, nextCount).map(::labelFor))
+                            loadedCount = nextCount
+                        }
+                    }
+                }
+            })
+        }
+
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Lịch sử", "History"))
+            .setView(list)
             .setPositiveButton(tr("Xóa lịch sử", "Clear history")) { _, _ ->
-                prefs.edit().remove("history").apply()
+                prefs.edit().remove("history").remove("history_timestamps").apply()
                 Toast.makeText(this, tr("Đã xóa lịch sử", "History cleared"), Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton(tr("Đóng", "Close"), null).show()
+            .setNegativeButton(tr("Đóng", "Close"), null)
+            .create()
+        dialog.show()
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.94f).toInt(),
+            (resources.displayMetrics.heightPixels * 0.8f).toInt()
+        )
     }
 
     private fun shareCurrentPage() {
