@@ -37,7 +37,7 @@ internal object LightweightBrowserEngine {
 
         // Avoid rasterizing invisible tab contents ahead of time; this saves
         // memory/GPU work when the user has several tabs open.
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.OFFSCREEN_PRERASTER)) {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.OFF_SCREEN_PRERASTER)) {
             WebSettingsCompat.setOffscreenPreRaster(settings, false)
         }
 
