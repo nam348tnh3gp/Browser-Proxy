@@ -34,7 +34,7 @@ import java.net.URI
 import java.util.concurrent.Executor
 
 class MainActivity : Activity() {
-    private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false, var group: String = "Default")
+    private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false, var group: String = "Default", var pendingRestoreUrl: String? = null)
     private data class ClosedTab(val title: String, val url: String)
 
 
@@ -145,7 +145,7 @@ class MainActivity : Activity() {
                 val knownGroups = try { org.json.JSONArray(prefs.getString("tab_group_names", org.json.JSONArray().put("Default").toString())) } catch (_: Exception) { org.json.JSONArray() }
                 for (i in 0 until knownGroups.length()) knownGroups.optString(i).takeIf { it.isNotBlank() }?.let { tabGroups.add(it) }
                 savedUrls.forEachIndexed { index, url ->
-                    createTab(url, index == restoreIndex)
+                    createTab(url, index == restoreIndex, deferLoad = index != restoreIndex)
                     val group = savedGroups.optString(index, "Default").ifBlank { "Default" }
                     tabs.lastOrNull()?.group = group
                     tabGroups.add(group)
@@ -347,7 +347,7 @@ class MainActivity : Activity() {
         loadAdHosts()
     }
 
-    private fun createTab(url: String?, select: Boolean, popupTransport: Message? = null) {
+    private fun createTab(url: String?, select: Boolean, popupTransport: Message? = null, deferLoad: Boolean = false) {
         val web = WebView(this).apply {
             // A newly created background tab must not cover the currently selected page.
             visibility = if (select) View.VISIBLE else View.GONE
@@ -377,7 +377,10 @@ class MainActivity : Activity() {
             webView = web,
             title = tr("Tab mới", "New tab"),
             url = if (shouldShowNewTab) NEW_TAB_SESSION_URL else requestedUrl.ifBlank { "about:blank" },
-            isNewTab = shouldShowNewTab
+            isNewTab = shouldShowNewTab,
+            pendingRestoreUrl = if (deferLoad) {
+                if (shouldShowNewTab) NEW_TAB_SESSION_URL else requestedUrl.takeIf { it.isNotBlank() }
+            } else null
         )
         tabs.add(tab)
         tabGroups.add(tab.group)
@@ -535,6 +538,8 @@ class MainActivity : Activity() {
             }
             transport.webView = web
             popupTransport.sendToTarget()
+        } else if (deferLoad) {
+            // Keep restored background tabs dormant until the user selects them.
         } else if (shouldShowNewTab) {
             loadNewTabPage(web)
         } else if (requestedUrl.isNotBlank()) {
@@ -606,6 +611,7 @@ class MainActivity : Activity() {
             if (selected) tab.webView.onResume() else tab.webView.onPause()
         }
         val tab = tabs[index]
+        loadDeferredRestore(tab)
         setAddress(tab.webView.url ?: tab.url)
         updateAddressSecurity(tab.webView.url ?: tab.url)
         pageLoading = tab.webView.progress in 1..99
@@ -616,6 +622,16 @@ class MainActivity : Activity() {
         status.text = if (pageLoading) tr("Đang tải trang…", "Loading page…") else tab.title
         updateTabButton()
         persistSession()
+    }
+
+    private fun loadDeferredRestore(tab: BrowserTab) {
+        val restoreUrl = tab.pendingRestoreUrl ?: return
+        tab.pendingRestoreUrl = null
+        if (restoreUrl == NEW_TAB_SESSION_URL || tab.isNewTab) {
+            loadNewTabPage(tab.webView)
+        } else if (restoreUrl.startsWith("https://", true) || restoreUrl.startsWith("http://", true)) {
+            tab.webView.loadUrl(restoreUrl)
+        }
     }
 
     private fun updateTabButton() {
@@ -2143,11 +2159,15 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
     private fun loadPersistedSessionUrls(): ArrayList<String> {
         val raw = prefs.getString("session_tab_urls", null) ?: return arrayListOf()
         return try {
+            // Session snapshots are versioned so malformed or incompatible data safely
+            // falls back to a fresh tab instead of crashing browser startup.
+            val version = prefs.getInt("session_snapshot_version", 1)
+            if (version !in 1..1) return arrayListOf()
             val array = org.json.JSONArray(raw)
             ArrayList<String>(array.length()).apply {
                 for (i in 0 until array.length()) {
-                    val url = array.optString(i, "")
-                    if (url.isNotBlank()) add(url)
+                    val url = array.optString(i, "").trim()
+                    if (url == NEW_TAB_SESSION_URL || url.startsWith("https://", true) || url.startsWith("http://", true)) add(url)
                 }
             }
         } catch (_: Exception) {
@@ -2169,6 +2189,7 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             urls.put(savedUrl)
         }
         prefs.edit()
+            .putInt("session_snapshot_version", 1)
             .putString("session_tab_urls", urls.toString())
             .putString("session_tab_groups", org.json.JSONArray().apply { tabs.forEach { put(it.group) } }.toString())
             .putString("tab_group_names", org.json.JSONArray().apply { tabGroups.forEach { put(it) } }.toString())
