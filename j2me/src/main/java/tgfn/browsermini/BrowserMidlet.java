@@ -889,7 +889,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         proxyEnabledChoice = new ChoiceGroup("Use proxy", ChoiceGroup.MULTIPLE);
         proxyEnabledChoice.append("Enable proxy", null);
         proxyEnabledChoice.setSelectedIndex(0, proxyEnabled);
-        proxyForm.append(new StringItem("Note", "HTTP and HTTPS pages use the configured proxy. HTTPS is fetched by the server and converted to compact page data; use a proxy you trust."));
+        proxyForm.append(new StringItem("Note", "Port 443 uses HTTPS, for ngrok free. Example host: abc.ngrok-free.app port: 443. Other ports use a raw socket."));
         proxyForm.append(proxyHostField);
         proxyForm.append(proxyPortField);
         proxyForm.append(proxyEnabledChoice);
@@ -1412,6 +1412,44 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
         return new String(data, "UTF-8");
     }
 
+
+    private byte[] fetchProxyHttps(String url, int maxBytes) throws IOException {
+        String host = proxyHost;
+        if (host.startsWith("https://")) host = host.substring(8);
+        if (host.startsWith("http://")) host = host.substring(7);
+        int slash = host.indexOf('/');
+        if (slash >= 0) host = host.substring(0, slash);
+        String path = url.startsWith("/__tgfn/") ? url : "/__tgfn/fetch?url=" + encodeURLComponent(url);
+        String endpoint = "https://" + host + path;
+        HttpConnection connection = null;
+        InputStream input = null;
+        try {
+            connection = (HttpConnection)Connector.open(endpoint, Connector.READ, true);
+            connection.setRequestMethod(HttpConnection.GET);
+            connection.setRequestProperty("User-Agent", "TGFN-BrowserMini");
+            connection.setRequestProperty("ngrok-skip-browser-warning", "1");
+            connection.setRequestProperty("Accept", "application/x-tgfn-obml,image/jpeg,image/*,text/html,*/*");
+            if (!url.startsWith("/__tgfn/img?")) {
+                connection.setRequestProperty("X-TGFN-Format", imageOnlyHQ ? "SSRHQ" : "TBO1");
+                if (imageOnlyHQ) connection.setRequestProperty("X-TGFN-Viewport-Width", "480");
+            }
+            int code = connection.getResponseCode();
+            if (code < 200 || code >= 400) throw new IOException("Proxy HTTPS status " + code);
+            input = connection.openInputStream();
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            byte[] buffer = new byte[512];
+            int count;
+            while (bytes.size() < maxBytes && (count = input.read(buffer)) != -1) {
+                int allowed = maxBytes - bytes.size();
+                bytes.write(buffer, 0, count > allowed ? allowed : count);
+            }
+            return bytes.toByteArray();
+        } finally {
+            if (input != null) try { input.close(); } catch (IOException ignored) {}
+            if (connection != null) try { connection.close(); } catch (IOException ignored) {}
+        }
+    }
+
     private byte[] fetchProxyBytes(String url, int maxBytes) throws IOException {
         boolean internalResource = url.startsWith("/__tgfn/img?");
         boolean remoteFetch = url.startsWith("https://");
@@ -1435,6 +1473,7 @@ public final class BrowserMidlet extends MIDlet implements CommandListener, Item
             if (hostPort.indexOf('@') >= 0) throw new IOException("URL userinfo is not allowed");
         }
         if (proxyHost.length() == 0 || proxyPort.length() == 0) throw new IOException("Proxy host/port is empty");
+        if ("443".equals(proxyPort) || proxyHost.startsWith("https://")) return fetchProxyHttps(url, maxBytes);
         SocketConnection socket = null;
         InputStream input = null;
         OutputStream output = null;
