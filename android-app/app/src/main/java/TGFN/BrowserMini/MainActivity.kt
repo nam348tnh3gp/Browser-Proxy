@@ -913,32 +913,86 @@ class MainActivity : Activity() {
     }
 
     private fun newTabHtml(): String = """
-        <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+        <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
         <style>
         *{box-sizing:border-box}body{margin:0;background:${if (!prefs.getString("app_background_uri", null).isNullOrBlank()) "transparent" else if (darkMode) "#202124" else "#fff"};color:${if (darkMode) "#e8eaed" else "#202124"};font:16px Roboto,'Arial',sans-serif}
-        .wrap{max-width:560px;margin:0 auto;padding:12vh 22px 32px}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:26px}
-        .brand span{color:#188038}.search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
-        input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:14px}
-        .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px 10px;margin-top:30px}.item{text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};text-align:center;font-size:12px;min-width:0}
+        .wrap{max-width:560px;margin:0 auto;padding:10vh 22px 32px}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:24px}.brand span{color:#188038}
+        .search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
+        input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go,.tool{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:13px}
+        .tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:20px}.tools label{font-size:12px;color:#80868b}.tools select{max-width:145px;background:${if (darkMode) "#303134" else "#f8f9fa"};color:inherit;border:1px solid ${if (darkMode) "#555" else "#dadce0"};border-radius:10px;padding:8px}
+        .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px 10px;margin-top:22px}.item{position:relative;text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};text-align:center;font-size:12px;min-width:0;touch-action:pan-y;user-select:none}.item.dragging{opacity:.45}.item.over{outline:2px dashed #1a73e8;outline-offset:4px;border-radius:12px}
         .circle{width:52px;height:52px;border-radius:18px;background:${if (darkMode) "#303134" else "#f1f3f4"};margin:0 auto 9px;display:flex;align-items:center;justify-content:center;overflow:hidden}
-        .circle img{width:28px;height:28px;object-fit:contain}.quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:20px}.quick a{display:block;text-align:center;text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};background:${if (darkMode) "#303134" else "#f8f9fa"};border:1px solid ${if (darkMode) "#44464a" else "#e8eaed"};border-radius:14px;padding:11px 4px;font-size:12px}
-        .note{text-align:center;color:#80868b;font-size:12px;margin-top:28px}
-        @media(max-width:340px){.wrap{padding:8vh 14px 24px}.brand{font-size:29px}.grid{gap:18px 6px}.circle{width:46px;height:46px}.quick a{font-size:11px}}
+        .circle img{width:28px;height:28px;object-fit:contain}.circle .letter{font-size:22px;font-weight:700;color:#1a73e8}.item .name{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 3px}
+        .quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:22px}.quick a{display:block;text-align:center;text-decoration:none;color:${if (darkMode) "#e8eaed" else "#3c4043"};background:${if (darkMode) "#303134" else "#f8f9fa"};border:1px solid ${if (darkMode) "#44464a" else "#e8eaed"};border-radius:14px;padding:11px 4px;font-size:12px}
+        .note{text-align:center;color:#80868b;font-size:12px;margin-top:24px}.empty{grid-column:1/-1;text-align:center;padding:22px 8px;color:#80868b;font-size:13px;border:1px dashed #9aa0a6;border-radius:14px}
+        @media(max-width:340px){.wrap{padding:7vh 14px 24px}.brand{font-size:29px}.grid{gap:18px 6px}.circle{width:46px;height:46px}.quick a{font-size:11px}}
         </style></head><body><div class="wrap"><div class="brand">TGFN <span>Browser</span></div>
         <form class="search" action="https://www.google.com/search" method="get"><input name="q" placeholder="${tr("Tìm kiếm trên Google", "Search Google")}" autofocus><button class="go" type="submit">${tr("Tìm", "Search")}</button></form>
+        <div id="grid" class="grid" aria-label="Shortcuts"></div>
         <div class="quick">
         <a href="https://tgfn.browser/__bookmarks">${tr("Dấu trang", "Bookmarks")}</a>
         <a href="https://tgfn.browser/__history">${tr("Lịch sử", "History")}</a>
         <a href="https://tgfn.browser/__downloads">${tr("Tải xuống", "Downloads")}</a>
-        </div>
-        <div class="grid">
-        <a class="item" href="https://www.google.com"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fwww.google.com%2F&amp;sz=64"></div>Google</a>
-        <a class="item" href="https://www.youtube.com"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fwww.youtube.com%2F&amp;sz=64"></div>YouTube</a>
-        <a class="item" href="https://www.wikipedia.org"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fwww.wikipedia.org%2F&amp;sz=64"></div>Wikipedia</a>
-        <a class="item" href="https://github.com"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fgithub.com%2F&amp;sz=64"></div>GitHub</a>
-        <a class="item" href="https://www.reddit.com"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fwww.reddit.com%2F&amp;sz=64"></div>Reddit</a>
-        <a class="item" href="https://www.bing.com"><div class="circle"><img alt="" src="https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fwww.bing.com%2F&amp;sz=64"></div>Bing</a>
-        </div><div class="note">${tr("Tìm kiếm nhanh · Duyệt web theo cách của bạn", "Quick search · Browse your way")}</div></div></body></html>
+        </div><div class="note">${tr("Nhấn giữ lối tắt hoặc vùng trống để tùy chỉnh", "Hold a shortcut or empty space to customize")}</div></div>
+        <script>
+        (function(){
+          var KEY='tgfn_shortcuts_v1', LAYOUT='tgfn_shortcuts_layout_v1';
+          var defaults=[
+            {title:'Google',url:'https://www.google.com'},
+            {title:'YouTube',url:'https://www.youtube.com'},
+            {title:'Wikipedia',url:'https://www.wikipedia.org'},
+            {title:'GitHub',url:'https://github.com'},
+            {title:'Reddit',url:'https://www.reddit.com'},
+            {title:'Bing',url:'https://www.bing.com'}
+          ];
+          var grid=document.getElementById('grid'), layout={value:'default'}, dragIndex=-1;
+          function read(key,fallback){try{var v=JSON.parse(localStorage.getItem(key));return v===null?fallback:v}catch(e){return fallback}}
+          function save(){try{localStorage.setItem(KEY,JSON.stringify(items));localStorage.setItem(LAYOUT,layout.value)}catch(e){}}
+          var items=read(KEY,null); if(!Array.isArray(items)) items=defaults.slice();
+          items=items.filter(function(x){return x&&typeof x.url==='string'&&/^https?:\/\//i.test(x.url)}).map(function(x){return {title:String(x.title||x.url),url:x.url}});
+          layout.value=read(LAYOUT,'default')==='custom'?'custom':'default';
+          function addShortcut(){
+            var url=prompt('${tr("Nhập địa chỉ URL (https://...)", "Enter shortcut URL (https://...)")}','https://');
+            if(!url)return; url=url.trim(); if(!/^https?:\/\//i.test(url)){alert('${tr("URL phải bắt đầu bằng http:// hoặc https://", "URL must start with http:// or https://")}');return}
+            var title=prompt('${tr("Tên lối tắt", "Shortcut name")}',url.replace(/^https?:\/\//i,'').split('/')[0])||url;
+            items.push({title:title.trim()||url,url:url});save();render();
+          }
+          function render(){
+            grid.innerHTML='';
+            items.forEach(function(item,index){
+              var a=document.createElement('a');a.className='item';a.href=item.url;a.dataset.index=index;
+              a.draggable=layout.value==='custom';
+              var circle=document.createElement('div');circle.className='circle';
+              var img=document.createElement('img');img.alt='';img.loading='lazy';img.src='https://www.google.com/s2/favicons?domain_url='+encodeURIComponent(item.url)+'&sz=64';
+              img.onerror=function(){this.remove();var letter=document.createElement('span');letter.className='letter';letter.textContent=(item.title||'?').charAt(0).toUpperCase();circle.appendChild(letter)};
+              circle.appendChild(img);
+              var name=document.createElement('span');name.className='name';name.textContent=item.title;
+              a.appendChild(circle);a.appendChild(name);
+              a.addEventListener('contextmenu',function(e){
+                e.preventDefault();e.stopPropagation();
+                var action=prompt('${tr("Tùy chọn lối tắt", "Shortcut options")}\n1 = ${tr("Sửa", "Edit")}\n2 = ${tr("Xóa", "Remove")}\n3 = ${tr("Thêm lối tắt", "Add shortcut")}\n4 = ${tr("Đổi kiểu bố cục", "Change layout")}','');
+                if(action==='1'){
+                  var url=prompt('${tr("Địa chỉ URL", "URL")}',item.url);if(!url)return;url=url.trim();
+                  if(!/^https?:\/\//i.test(url)){alert('${tr("URL không hợp lệ", "Invalid URL")}');return}
+                  var title=prompt('${tr("Tên lối tắt", "Shortcut name")}',item.title)||url;
+                  items[index]={title:title.trim()||url,url:url};save();render();
+                }else if(action==='2'){if(confirm('${tr("Xóa lối tắt này?", "Remove this shortcut?")}')){items.splice(index,1);save();render()}}
+                else if(action==='3'){addShortcut()}
+                else if(action==='4'){layout.value=layout.value==='custom'?'default':'custom';save();render()}
+              });
+              a.addEventListener('dragstart',function(e){if(layout.value!=='custom'){e.preventDefault();return}dragIndex=index;a.classList.add('dragging');if(e.dataTransfer)e.dataTransfer.setData('text/plain',String(index))});
+              a.addEventListener('dragover',function(e){if(layout.value==='custom'){e.preventDefault();a.classList.add('over')}});
+              a.addEventListener('dragleave',function(){a.classList.remove('over')});
+              a.addEventListener('drop',function(e){if(layout.value!=='custom')return;e.preventDefault();var from=dragIndex,to=Number(a.dataset.index);if(from>=0&&from!==to){var moved=items.splice(from,1)[0];items.splice(to,0,moved);save();render()}});
+              a.addEventListener('dragend',function(){dragIndex=-1;render()});
+              grid.appendChild(a);
+            });
+            if(items.length===0){var empty=document.createElement('div');empty.className='empty';empty.textContent='${tr("Chưa có lối tắt. Nhấn giữ vùng này để thêm.", "No shortcuts. Hold this area to add one.")}';grid.appendChild(empty)}
+          }
+          grid.addEventListener('contextmenu',function(e){if(e.target===grid||e.target.classList.contains('empty')){e.preventDefault();var action=prompt('${tr("Tùy chỉnh tab mới", "Customize new tab")}\n1 = ${tr("Thêm lối tắt", "Add shortcut")}\n2 = ${tr("Đổi kiểu bố cục", "Change layout")}\n3 = ${tr("Xóa tất cả lối tắt", "Remove all shortcuts")}','1');if(action==='1')addShortcut();else if(action==='2'){layout.value=layout.value==='custom'?'default':'custom';save();render()}else if(action==='3'&&confirm('${tr("Xóa tất cả lối tắt?", "Remove all shortcuts?")}')){items=[];save();render()}}});
+          render();
+        })();
+        </script></body></html>
     """.trimIndent()
 
     private fun isSelected(tab: BrowserTab): Boolean = tabs.getOrNull(selectedTab) === tab
