@@ -238,9 +238,8 @@ class MainActivity : Activity() {
         val isMediaBackground = isGifBackground || isVideoBackground
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(if (isMediaBackground) Color.TRANSPARENT else canvas)
+            setBackgroundColor(if (hasCustomBackground) Color.TRANSPARENT else canvas)
         }
-        if (hasCustomBackground && !isMediaBackground) applyCustomAppBackground(root)
 
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -363,10 +362,35 @@ class MainActivity : Activity() {
         browserStatusRow = statusRow
         root.addView(statusRow)
         browserRoot = root
-        if (isMediaBackground && backgroundUri != null) {
-            val host = FrameLayout(this)
+        if (hasCustomBackground && backgroundUri != null) {
+            val host = FrameLayout(this).apply { setBackgroundColor(canvas) }
             mediaBackgroundHost = host
-            if (isVideoBackground) {
+            if (!isMediaBackground) {
+                // Static images use the same contain-and-center rule as animated wallpapers.
+                // Decode with sampling so very large photos do not consume excessive memory.
+                val image = ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    setBackgroundColor(Color.TRANSPARENT)
+                    try {
+                        val uri = Uri.parse(backgroundUri)
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        contentResolver.openInputStream(uri)?.use {
+                            BitmapFactory.decodeStream(it, null, bounds)
+                        }
+                        var sample = 1
+                        while (bounds.outWidth / sample > 1600 || bounds.outHeight / sample > 1600) sample *= 2
+                        val options = BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) }
+                        contentResolver.openInputStream(uri)?.use {
+                            setImageBitmap(BitmapFactory.decodeStream(it, null, options))
+                        }
+                    } catch (_: Exception) {
+                        setBackgroundColor(canvas)
+                    }
+                }
+                host.addView(image, FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                ))
+            } else if (isVideoBackground) {
                 // VideoView streams through Android's media stack; avoid decoding the whole file into app memory.
                 val player = android.widget.VideoView(this).apply {
                     setZOrderMediaOverlay(true)
@@ -374,6 +398,25 @@ class MainActivity : Activity() {
                     setOnPreparedListener { mediaPlayer ->
                         mediaPlayer.isLooping = true
                         mediaPlayer.setVolume(0f, 0f)
+                        // Measure the video and fit its view inside the real available host bounds.
+                        // This preserves the source aspect ratio instead of stretching/cropping it.
+                        val videoWidth = mediaPlayer.videoWidth
+                        val videoHeight = mediaPlayer.videoHeight
+                        host.post {
+                            val hostWidth = host.width
+                            val hostHeight = host.height
+                            if (videoWidth > 0 && videoHeight > 0 && hostWidth > 0 && hostHeight > 0) {
+                                val scale = minOf(
+                                    hostWidth.toFloat() / videoWidth,
+                                    hostHeight.toFloat() / videoHeight
+                                )
+                                val fittedWidth = (videoWidth * scale).toInt().coerceAtLeast(1)
+                                val fittedHeight = (videoHeight * scale).toInt().coerceAtLeast(1)
+                                player.layoutParams = FrameLayout.LayoutParams(
+                                    fittedWidth, fittedHeight, Gravity.CENTER
+                                )
+                            }
+                        }
                         start()
                     }
                     setOnErrorListener { _, _, _ ->
