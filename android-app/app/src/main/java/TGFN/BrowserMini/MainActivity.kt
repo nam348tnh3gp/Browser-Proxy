@@ -916,6 +916,8 @@ class MainActivity : Activity() {
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
         <style>
         *{box-sizing:border-box}body{margin:0;background:${if (!prefs.getString("app_background_uri", null).isNullOrBlank()) "transparent" else if (darkMode) "#202124" else "#fff"};color:${if (darkMode) "#e8eaed" else "#202124"};font:16px Roboto,'Arial',sans-serif}
+        body.tgfn-dragging,body.tgfn-dragging *{user-select:none!important;-webkit-user-select:none!important;-webkit-touch-callout:none!important;-webkit-tap-highlight-color:transparent!important}
+        body.tgfn-dragging input,body.tgfn-dragging textarea{user-select:text!important;-webkit-user-select:text!important}
         .wrap{max-width:560px;margin:0 auto;padding:10vh 22px 32px}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:24px}.brand span{color:#188038}
         .search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
         input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go,.tool{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:13px}
@@ -946,6 +948,10 @@ class MainActivity : Activity() {
             {title:'Bing',url:'https://www.bing.com'}
           ];
           var grid=document.getElementById('grid'), layout={value:'default'}, dragIndex=-1;
+          // Prevent accidental text selection/copy while dragging shortcut tiles.
+          var DISABLE_TEXT_SELECTION_DURING_DRAG=true;
+          document.addEventListener('dragend',function(){if(DISABLE_TEXT_SELECTION_DURING_DRAG)document.body.classList.remove('tgfn-dragging')});
+          document.addEventListener('drop',function(){if(DISABLE_TEXT_SELECTION_DURING_DRAG)document.body.classList.remove('tgfn-dragging')});
           function read(key,fallback){try{var v=JSON.parse(localStorage.getItem(key));return v===null?fallback:v}catch(e){return fallback}}
           function save(){try{localStorage.setItem(KEY,JSON.stringify(items));localStorage.setItem(LAYOUT,layout.value)}catch(e){}}
           var items=read(KEY,null); if(!Array.isArray(items)) items=defaults.slice();
@@ -980,11 +986,11 @@ class MainActivity : Activity() {
                 else if(action==='3'){addShortcut()}
                 else if(action==='4'){layout.value=layout.value==='custom'?'default':'custom';save();render()}
               });
-              a.addEventListener('dragstart',function(e){if(layout.value!=='custom'){e.preventDefault();return}dragIndex=index;a.classList.add('dragging');if(e.dataTransfer)e.dataTransfer.setData('text/plain',String(index))});
+              a.addEventListener('dragstart',function(e){if(layout.value!=='custom'){e.preventDefault();return}dragIndex=index;a.classList.add('dragging');if(DISABLE_TEXT_SELECTION_DURING_DRAG)document.body.classList.add('tgfn-dragging');if(e.dataTransfer)e.dataTransfer.setData('text/plain',String(index))});
               a.addEventListener('dragover',function(e){if(layout.value==='custom'){e.preventDefault();a.classList.add('over')}});
               a.addEventListener('dragleave',function(){a.classList.remove('over')});
               a.addEventListener('drop',function(e){if(layout.value!=='custom')return;e.preventDefault();var from=dragIndex,to=Number(a.dataset.index);if(from>=0&&from!==to){var moved=items.splice(from,1)[0];items.splice(to,0,moved);save();render()}});
-              a.addEventListener('dragend',function(){dragIndex=-1;render()});
+              a.addEventListener('dragend',function(){dragIndex=-1;if(DISABLE_TEXT_SELECTION_DURING_DRAG)document.body.classList.remove('tgfn-dragging');render()});
               grid.appendChild(a);
             });
             if(items.length===0){var empty=document.createElement('div');empty.className='empty';empty.textContent='${tr("Chưa có lối tắt. Nhấn giữ vùng này để thêm.", "No shortcuts. Hold this area to add one.")}';grid.appendChild(empty)}
