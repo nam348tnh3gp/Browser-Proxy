@@ -915,9 +915,12 @@ class MainActivity : Activity() {
     private fun newTabHtml(): String = """
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
         <style>
-        *{box-sizing:border-box}body{margin:0;background:${if (!prefs.getString("app_background_uri", null).isNullOrBlank()) "transparent" else if (darkMode) "#202124" else "#fff"};color:${if (darkMode) "#e8eaed" else "#202124"};font:16px Roboto,'Arial',sans-serif}
-        body.tgfn-dragging,body.tgfn-dragging *{user-select:none!important;-webkit-user-select:none!important;-webkit-touch-callout:none!important;-webkit-tap-highlight-color:transparent!important}
-        body.tgfn-dragging input,body.tgfn-dragging textarea{user-select:text!important;-webkit-user-select:text!important}
+        *{box-sizing:border-box}body{margin:0;background:${if (!prefs.getString("app_background_uri", null).isNullOrBlank()) "transparent" else if (darkMode) "#202124" else "#fff"};color:${if (darkMode) "#e8eaed" else "#202124"};font:16px Roboto,'Arial',sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+        /* Built-in new-tab labels must not trigger Android's copy/select toolbar. Keep search input selectable. */
+        body *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+        input,textarea{ -webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default }
+        body.tgfn-dragging,body.tgfn-dragging *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;-webkit-tap-highlight-color:transparent!important}
+        body.tgfn-dragging input,body.tgfn-dragging textarea{-webkit-user-select:text!important;user-select:text!important}
         .wrap{max-width:560px;margin:0 auto;padding:10vh 22px 32px}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:24px}.brand span{color:#188038}
         .search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
         input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go,.tool{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:13px}
