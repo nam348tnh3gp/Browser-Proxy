@@ -368,6 +368,8 @@ class MainActivity : Activity() {
             mediaBackgroundHost = host
             if (isVideoBackground) {
                 val player = android.widget.VideoView(this).apply {
+                    // Keep the video surface behind the browser controls and WebView.
+                    setZOrderMediaOverlay(true)
                     setBackgroundColor(canvas)
                     setOnPreparedListener { mediaPlayer ->
                         mediaPlayer.isLooping = true
