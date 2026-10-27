@@ -375,6 +375,10 @@ class MainActivity : Activity() {
             settings.javaScriptCanOpenWindowsAutomatically = true
             settings.setSupportMultipleWindows(true)
         }
+        // Respect the persisted third-party-cookie privacy preference for every tab.
+        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(
+            web, prefs.getBoolean("third_party_cookies_enabled", true)
+        )
         val requestedUrl = url?.trim().orEmpty()
         val shouldShowNewTab = popupTransport == null && (
             requestedUrl.isBlank() ||
@@ -1270,11 +1274,29 @@ class MainActivity : Activity() {
             tr("Xóa cookie và phiên đăng nhập", "Clear cookies and sign-in sessions"),
             tr("Xóa dữ liệu website (local storage)", "Clear website data (local storage)"),
             tr("Xóa lịch sử duyệt web", "Clear browsing history"),
-            tr("Xóa toàn bộ dữ liệu duyệt web", "Clear all browsing data")
+            tr("Xóa toàn bộ dữ liệu duyệt web", "Clear all browsing data"),
+            if (prefs.getBoolean("third_party_cookies_enabled", true))
+                tr("Cookie bên thứ ba: Đang cho phép", "Third-party cookies: Allowed")
+            else
+                tr("Cookie bên thứ ba: Đang chặn", "Third-party cookies: Blocked")
         )
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("Quyền riêng tư và dữ liệu website", "Privacy and site data"))
             .setItems(choices) { _, which ->
+                if (which == 5) {
+                    val enabled = !prefs.getBoolean("third_party_cookies_enabled", true)
+                    prefs.edit().putBoolean("third_party_cookies_enabled", enabled).apply()
+                    tabs.forEach { tab ->
+                        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(tab.webView, enabled)
+                    }
+                    Toast.makeText(
+                        this,
+                        if (enabled) tr("Đã cho phép cookie bên thứ ba", "Third-party cookies allowed")
+                        else tr("Đã chặn cookie bên thứ ba", "Third-party cookies blocked"),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@setItems
+                }
                 android.app.AlertDialog.Builder(this)
                     .setTitle(tr("Xác nhận xóa dữ liệu?", "Confirm data deletion?"))
                     .setMessage(tr(
