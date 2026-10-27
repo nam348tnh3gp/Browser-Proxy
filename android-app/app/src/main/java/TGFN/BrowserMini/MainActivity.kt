@@ -2010,6 +2010,11 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             isChecked = darkMode
         }
         content.addView(dark)
+        val restoreSession = android.widget.CheckBox(this).apply {
+            text = tr("Khôi phục các tab khi mở lại trình duyệt", "Restore tabs when reopening the browser")
+            isChecked = prefs.getBoolean("restore_session_enabled", true)
+        }
+        content.addView(restoreSession)
         content.addView(TextView(this).apply {
             text = tr("Ngôn ngữ / Language", "Language / Ngôn ngữ")
             textSize = 14f
