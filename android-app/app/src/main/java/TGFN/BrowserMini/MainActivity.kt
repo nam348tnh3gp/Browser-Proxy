@@ -22,6 +22,7 @@ import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
@@ -34,7 +35,7 @@ import java.net.URI
 import java.util.concurrent.Executor
 
 class MainActivity : Activity() {
-    private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false, var group: String = "Default", var pendingRestoreUrl: String? = null)
+    private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false, var group: String = "Default", var pendingRestoreUrl: String? = null, var favicon: android.graphics.Bitmap? = null)
     private data class ClosedTab(val title: String, val url: String)
 
 
@@ -476,6 +477,13 @@ class MainActivity : Activity() {
                     refreshButton.text = if (pageLoading) "×" else "↻"
                     refreshButton.contentDescription = if (pageLoading) tr("Dừng tải", "Stop loading") else tr("Tải lại", "Reload")
                     progress.visibility = if (pageLoading) View.VISIBLE else View.GONE
+                }
+            }
+
+            override fun onReceivedIcon(view: WebView?, icon: android.graphics.Bitmap?) {
+                if (icon != null) {
+                    tab.favicon = icon
+                    updateTabButton()
                 }
             }
 
@@ -1298,12 +1306,21 @@ class MainActivity : Activity() {
                             orientation = LinearLayout.HORIZONTAL
                             gravity = Gravity.CENTER_VERTICAL
                         }
-                        titleRow.addView(TextView(this).apply {
-                            text = if (selected) "●" else "○"
-                            textSize = 14f
-                            setTextColor(if (selected) accent else muted)
-                            gravity = Gravity.CENTER
-                        }, LinearLayout.LayoutParams(dp(20), dp(24)))
+                        val siteIcon = tab.favicon
+                        if (siteIcon != null) {
+                            titleRow.addView(ImageView(this).apply {
+                                setImageBitmap(siteIcon)
+                                scaleType = ImageView.ScaleType.FIT_CENTER
+                                contentDescription = tr("Biểu tượng website", "Website icon")
+                            }, LinearLayout.LayoutParams(dp(22), dp(22)))
+                        } else {
+                            titleRow.addView(TextView(this).apply {
+                                text = "🌐"
+                                textSize = 15f
+                                gravity = Gravity.CENTER
+                                contentDescription = tr("Biểu tượng website", "Website icon")
+                            }, LinearLayout.LayoutParams(dp(22), dp(24)))
+                        }
                         titleRow.addView(TextView(this).apply {
                             text = tr("Tab ", "Tab ") + (tabIndex + 1)
                             textSize = 11f
