@@ -771,7 +771,11 @@ class MainActivity : Activity() {
                     showImageContextMenu(hit.extra, target)
                     true
                 }
-                WebView.HitTestResult.EDIT_TEXT_TYPE -> false // Keep native selection inside text fields.
+                // Keep Android's native text selection and editing behavior for text/input
+                // targets. WebView reports ordinary text as UNKNOWN_TYPE on many versions,
+                // so let its native long-press handler process unknown targets as well.
+                WebView.HitTestResult.EDIT_TEXT_TYPE,
+                WebView.HitTestResult.UNKNOWN_TYPE -> false
                 else -> { showPageContextMenu(target); true }
             }
         }
