@@ -99,7 +99,8 @@ jobs:
           if [ "$MODE" = "tcp" ]; then
             "$RUNNER_TEMP/ngrok" tcp 8080 --log=stdout > "$RUNNER_TEMP/ngrok.log" 2>&1 &
           else
-            "$RUNNER_TEMP/ngrok" http 8080 --log=stdout > "$RUNNER_TEMP/ngrok.log" 2>&1 &
+            # Pin IPv4. "localhost:8080" can resolve to ::1 and ngrok then returns ERR_EMPTY_RESPONSE.
+            "$RUNNER_TEMP/ngrok" http http://127.0.0.1:8080 --request-header-add "ngrok-skip-browser-warning:1" --log=stdout > "$RUNNER_TEMP/ngrok.log" 2>&1 &
           fi
           echo $! > "$RUNNER_TEMP/ngrok.pid"
           url=""
@@ -138,7 +139,9 @@ jobs:
               echo
               echo "J2ME proxy port: \`443\`"
               echo
-              echo "Bật proxy, dán host trên và port 443. App sẽ nối HTTPS."
+              echo "J2ME: host trên, port 443. Mở \`https://$host/__tgfn/fetch?url=https://example.com\` để thử."
+              echo
+              echo "Android WebView không gửi được CONNECT qua ngrok HTTP free. Dùng URL fetch ở trên, hoặc TCP nếu có gói ngrok."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
