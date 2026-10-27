@@ -545,6 +545,23 @@ class MainActivity : Activity() {
         web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
             enqueueDownload(url, userAgent, contentDisposition, mimeType)
         }
+        // Chromium-style link actions: intercept long-presses only when the hit target is a link.
+        web.setOnLongClickListener { view ->
+            val hit = (view as? WebView)?.hitTestResult
+            val isLink = hit?.type in setOf(
+                WebView.HitTestResult.ANCHOR_TYPE,
+                WebView.HitTestResult.SRC_ANCHOR_TYPE,
+                WebView.HitTestResult.EMAIL_TYPE,
+                WebView.HitTestResult.PHONE_TYPE
+            )
+            val link = hit?.extra
+            if (isLink && !link.isNullOrBlank()) {
+                showLinkContextMenu(link)
+                true
+            } else {
+                false
+            }
+        }
         if (select) selectTab(tabs.lastIndex)
         if (popupTransport != null) {
             val transport = popupTransport.obj as? WebView.WebViewTransport
@@ -2310,6 +2327,50 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             (resources.displayMetrics.widthPixels * 0.94f).toInt(),
             (resources.displayMetrics.heightPixels * 0.8f).toInt()
         )
+    }
+
+    /** Show browser actions for a long-pressed web link, similar to Chromium's link menu. */
+    private fun showLinkContextMenu(rawUrl: String) {
+        val url = normalizeHttpUrl(rawUrl)
+        if (url == null) {
+            Toast.makeText(this, tr("Liên kết này chưa được hỗ trợ", "This link type is not supported"), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val actions = arrayOf(
+            tr("Mở liên kết", "Open link"),
+            tr("Mở trong tab mới", "Open in new tab"),
+            tr("Mở trong tab nền", "Open in background tab"),
+            tr("Sao chép địa chỉ liên kết", "Copy link address"),
+            tr("Chia sẻ liên kết", "Share link"),
+            tr("Tải liên kết xuống", "Download link")
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle(hostLabel(url))
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> currentWebView()?.loadUrl(url)
+                    1 -> createTab(url, true)
+                    2 -> {
+                        createTab(url, false)
+                        Toast.makeText(this, tr("Đã mở liên kết trong tab nền", "Opened link in background tab"), Toast.LENGTH_SHORT).show()
+                    }
+                    3 -> {
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
+                        Toast.makeText(this, tr("Đã sao chép liên kết", "Link copied"), Toast.LENGTH_SHORT).show()
+                    }
+                    4 -> {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, url)
+                        }
+                        startActivity(Intent.createChooser(send, tr("Chia sẻ liên kết bằng", "Share link using")))
+                    }
+                    5 -> enqueueDownload(url, currentWebView()?.settings?.userAgentString, null, null)
+                }
+            }
+            .setNegativeButton(tr("Hủy", "Cancel"), null)
+            .show()
     }
 
     private fun shareCurrentPage() {
