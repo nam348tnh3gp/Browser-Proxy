@@ -10,8 +10,6 @@ import android.graphics.Color
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
-import android.provider.OpenableColumns
-import android.media.MediaMetadataRetriever
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -116,7 +114,7 @@ class MainActivity : Activity() {
     private var browserStatusRow: LinearLayout? = null
     private var mediaBackgroundHost: FrameLayout? = null
     private var videoBackground: android.widget.VideoView? = null
-    private var gifBackground: GifBackgroundView? = null
+    private var gifBackgroundRenderer: WebView? = null
     private lateinit var proxySummary: TextView
     private var browserRoot: View? = null
     private var fullscreenView: View? = null
@@ -233,18 +231,9 @@ class MainActivity : Activity() {
     }
 
     private fun buildUi() {
-        var backgroundUri = prefs.getString("app_background_uri", null)
-        var isGifBackground = backgroundUri?.let { isGifUri(Uri.parse(it)) } == true
-        var isVideoBackground = backgroundUri?.let { isMp4Uri(Uri.parse(it)) } == true
-        if (backgroundUri != null &&
-            ((isGifBackground && !isSafeGifWallpaper(Uri.parse(backgroundUri))) ||
-             (isVideoBackground && !isSafeMp4Wallpaper(Uri.parse(backgroundUri))))) {
-            prefs.edit().remove("app_background_uri").apply()
-            Toast.makeText(this, tr("Tệp nền quá lớn hoặc độ phân giải quá cao; đã tắt nền media.", "Wallpaper file is too large or high-resolution; media background disabled."), Toast.LENGTH_LONG).show()
-            backgroundUri = null
-            isGifBackground = false
-            isVideoBackground = false
-        }
+        val backgroundUri = prefs.getString("app_background_uri", null)
+        val isGifBackground = backgroundUri?.let { isGifUri(Uri.parse(it)) } == true
+        val isVideoBackground = backgroundUri?.let { isMp4Uri(Uri.parse(it)) } == true
         val hasCustomBackground = !backgroundUri.isNullOrBlank()
         val isMediaBackground = isGifBackground || isVideoBackground
         val root = LinearLayout(this).apply {
@@ -378,26 +367,48 @@ class MainActivity : Activity() {
             val host = FrameLayout(this)
             mediaBackgroundHost = host
             if (isVideoBackground) {
+                // VideoView streams through Android's media stack; avoid decoding the whole file into app memory.
                 val player = android.widget.VideoView(this).apply {
-                    // Keep the video surface behind the browser controls and WebView.
                     setZOrderMediaOverlay(true)
-                    setBackgroundColor(canvas)
+                    setBackgroundColor(Color.TRANSPARENT)
                     setOnPreparedListener { mediaPlayer ->
                         mediaPlayer.isLooping = true
                         mediaPlayer.setVolume(0f, 0f)
                         start()
                     }
+                    setOnErrorListener { _, _, _ ->
+                        runOnUiThread {
+                            Toast.makeText(this@MainActivity, tr("Không thể phát video nền này.", "Unable to play this video wallpaper."), Toast.LENGTH_LONG).show()
+                        }
+                        true
+                    }
                     setVideoURI(Uri.parse(backgroundUri))
-                    setOnErrorListener { _, _, _ -> true }
                 }
                 videoBackground = player
                 host.addView(player, FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
                 ))
             } else if (isGifBackground) {
-                val gif = GifBackgroundView(this, Uri.parse(backgroundUri))
-                gifBackground = gif
-                host.addView(gif, FrameLayout.LayoutParams(
+                // Chromium renders animated GIFs in its renderer process rather than decoding via Movie in the Activity.
+                val gifRenderer = WebView(this).apply {
+                    setBackgroundColor(Color.TRANSPARENT)
+                    settings.javaScriptEnabled = false
+                    settings.domStorageEnabled = false
+                    settings.allowContentAccess = true
+                    settings.allowFileAccess = false
+                    isVerticalScrollBarEnabled = false
+                    isHorizontalScrollBarEnabled = false
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    loadDataWithBaseURL(
+                        "https://tgfn.browser/",
+                        "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}img{width:100%;height:100%;object-fit:cover;display:block}</style></head><body><img src=\"" + android.text.TextUtils.htmlEncode(backgroundUri) + "\" alt=\"\"></body></html>",
+                        "text/html",
+                        "UTF-8",
+                        null
+                    )
+                }
+                gifBackgroundRenderer = gifRenderer
+                host.addView(gifRenderer, FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
                 ))
             }
@@ -775,65 +786,6 @@ class MainActivity : Activity() {
             uri.lastPathSegment.orEmpty().substringBefore('?').endsWith(".mp4", ignoreCase = true)
     }
 
-    private companion object {
-        // GIFs are decoded by android.graphics.Movie; strict limits avoid large allocations.
-        const val MAX_GIF_BYTES = 8L * 1024 * 1024
-        const val MAX_GIF_PIXELS = 2_073_600L
-        // VideoView streams media, but very large files/resolutions can overwhelm device decoders.
-        const val MAX_MP4_BYTES = 250L * 1024 * 1024
-        const val MAX_MP4_PIXELS = 2_073_600L
-    }
-
-    private fun uriSize(uri: Uri): Long? {
-        return try {
-            contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val index = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    if (index >= 0 && !cursor.isNull(index)) cursor.getLong(index) else null
-                } else null
-            }
-        } catch (_: Exception) { null }
-    }
-
-    private fun isSafeGifWallpaper(uri: Uri): Boolean {
-        val size = uriSize(uri) ?: return false
-        if (size <= 0L || size > MAX_GIF_BYTES) return false
-        return try {
-            contentResolver.openInputStream(uri)?.use { input ->
-                val header = ByteArray(10)
-                var offset = 0
-                while (offset < header.size) {
-                    val count = input.read(header, offset, header.size - offset)
-                    if (count <= 0) return@use false
-                    offset += count
-                }
-                val signature = String(header, 0, 6, Charsets.US_ASCII)
-                if (signature != "GIF87a" && signature != "GIF89a") return@use false
-                val width = (header[6].toInt() and 0xff) or ((header[7].toInt() and 0xff) shl 8)
-                val height = (header[8].toInt() and 0xff) or ((header[9].toInt() and 0xff) shl 8)
-                width > 0 && height > 0 && width.toLong() * height.toLong() <= MAX_GIF_PIXELS
-            } ?: false
-        } catch (_: Exception) { false }
-    }
-
-    private fun isSafeMp4Wallpaper(uri: Uri): Boolean {
-        val size = uriSize(uri) ?: return false
-        if (size <= 0L || size > MAX_MP4_BYTES) return false
-        val retriever = MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(this, uri)
-            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toLongOrNull()
-                ?: return false
-            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toLongOrNull()
-                ?: return false
-            width > 0L && height > 0L && width * height <= MAX_MP4_PIXELS
-        } catch (_: Exception) {
-            false
-        } finally {
-            try { retriever.release() } catch (_: Exception) { }
-        }
-    }
-
     private fun updateBrowserChromeBackground(showWallpaper: Boolean) {
         val rawUri = prefs.getString("app_background_uri", null)
         val hasCustomBackground = !rawUri.isNullOrBlank()
@@ -858,33 +810,7 @@ class MainActivity : Activity() {
                 player.visibility = View.GONE
             }
         }
-        gifBackground?.visibility = if (showWallpaper && isGif) View.VISIBLE else View.GONE
-    }
-
-    /**
-     * Minimal animated GIF renderer for app wallpaper. It decodes the GIF from the
-     * persisted document URI and scales/crops it to fill the available view.
-     */
-    private class GifBackgroundView(context: Context, uri: Uri) : View(context) {
-        private val movie: android.graphics.Movie? = try {
-            context.contentResolver.openInputStream(uri)?.use { android.graphics.Movie.decodeStream(it) }
-        } catch (_: Exception) { null }
-        private val startedAt = android.os.SystemClock.uptimeMillis()
-
-        override fun onDraw(canvas: android.graphics.Canvas) {
-            super.onDraw(canvas)
-            val gif = movie ?: return
-            val duration = gif.duration().takeIf { it > 0 } ?: 1000
-            gif.setTime(((android.os.SystemClock.uptimeMillis() - startedAt) % duration).toInt())
-            val sourceWidth = gif.width().toFloat().coerceAtLeast(1f)
-            val sourceHeight = gif.height().toFloat().coerceAtLeast(1f)
-            val scale = maxOf(width / sourceWidth, height / sourceHeight)
-            val save = canvas.save()
-            canvas.scale(scale, scale)
-            gif.draw(canvas, (width / scale - sourceWidth) / 2f, (height / scale - sourceHeight) / 2f)
-            canvas.restoreToCount(save)
-            if (visibility == View.VISIBLE) postInvalidateDelayed(33)
-        }
+        gifBackgroundRenderer?.visibility = if (showWallpaper && isGif) View.VISIBLE else View.GONE
     }
 
     private fun loadNewTabPage(web: WebView) {
@@ -3045,10 +2971,6 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         val supported = mime?.startsWith("image/") == true || isMp4 || isGif
         if (!supported) {
             Toast.makeText(this, tr("Chỉ hỗ trợ ảnh, GIF và video MP4", "Only images, GIF, and MP4 video are supported"), Toast.LENGTH_LONG).show()
-            return
-        }
-        if ((isGif && !isSafeGifWallpaper(uri)) || (isMp4 && !isSafeMp4Wallpaper(uri))) {
-            Toast.makeText(this, tr("Tệp GIF tối đa 8 MB và 2 MP; MP4 tối đa 250 MB và 2 MP. Hãy chọn tệp nhỏ hơn.", "Wallpaper limits: GIF up to 8 MB / 2 MP; MP4 up to 250 MB / 2 MP. Please choose a smaller file."), Toast.LENGTH_LONG).show()
             return
         }
         try {
