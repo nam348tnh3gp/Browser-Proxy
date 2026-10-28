@@ -927,7 +927,7 @@ class MainActivity : Activity() {
         body.tgfn-dragging,body.tgfn-dragging *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;-webkit-tap-highlight-color:transparent!important}
         body.tgfn-dragging input,body.tgfn-dragging textarea{-webkit-user-select:text!important;user-select:text!important}
         .wrap{max-width:560px;margin:0 auto;padding:10vh 22px 32px;position:relative;min-height:100vh}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:24px}.brand span{color:#188038}
-        .component{max-width:100%}.wrap.layout-editing .component{outline:1px dashed #1a73e8;outline-offset:4px;touch-action:none;cursor:move}.wrap.layout-editing .component.dragging-component{z-index:50;opacity:.92;box-shadow:0 4px 18px #0003}.component[hidden]{display:none!important}
+        .component{max-width:100%}.wrap.layout-editing .component{outline:1px dashed #1a73e8;outline-offset:4px;touch-action:none;cursor:move}.wrap.layout-editing .component.dragging-component{z-index:50;opacity:.92;box-shadow:0 4px 18px #0003}.component[hidden]{display:none!important}.wrap.positioned .component{margin:0!important}.wrap.layout-editing .component a,.wrap.layout-editing .search input,.wrap.layout-editing .search .go{pointer-events:none}.wrap.layout-editing .component{transition:left .2s cubic-bezier(.2,.8,.2,1),top .2s cubic-bezier(.2,.8,.2,1);-webkit-tap-highlight-color:transparent}.wrap.layout-editing .component.dragging-component{transition:none;will-change:transform;box-shadow:0 10px 26px #0004;outline-color:#1a73e8;outline-style:solid}.grid.reorder .circle{box-shadow:0 0 0 2px #1a73e855}.item.lifting{z-index:60;opacity:.97;filter:drop-shadow(0 8px 14px #0005);will-change:transform;transition:none!important}@media(prefers-reduced-motion:reduce){.wrap.layout-editing .component{transition:none}}
         .layout-controls{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:8px 0}.layout-controls button{border:1px solid #dadce0;border-radius:18px;padding:7px 10px;background:#f8f9fa;color:inherit;font-size:12px}
         .search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
         input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go,.tool{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:13px}
@@ -959,57 +959,290 @@ class MainActivity : Activity() {
             {title:'Bing',url:'https://www.bing.com'}
           ];
           var grid=document.getElementById('grid'), layout={value:'default'}, dragIndex=-1;
-          var stage=document.getElementById('layoutStage'), editComponents=false;
+          var stage=document.getElementById('layoutStage'), editComponents=false, lastDragEnd=0, drag=null, sd=null, lastShortcutDrag=0, seq=0;
           var POSITIONS='tgfn_newtab_component_positions_v1', HIDDEN='tgfn_newtab_hidden_components_v1';
+          var GAP=12, SNAP=10, LIFT_MS=220;
           var DISABLE_TEXT_SELECTION_DURING_DRAG=true;
-          document.addEventListener('dragend',function(){if(DISABLE_TEXT_SELECTION_DURING_DRAG)document.body.classList.remove('tgfn-dragging')});
-          document.addEventListener('drop',function(){if(DISABLE_TEXT_SELECTION_DURING_DRAG)document.body.classList.remove('tgfn-dragging')});
+          document.addEventListener('dragend',function(){if(DISABLE_TEXT_SELECTION_DURING_DRAG&&!editComponents)document.body.classList.remove('tgfn-dragging')});
+          document.addEventListener('drop',function(){if(DISABLE_TEXT_SELECTION_DURING_DRAG&&!editComponents)document.body.classList.remove('tgfn-dragging')});
           function components(){return Array.prototype.slice.call(stage.querySelectorAll('[data-component]'))}
+          function visibleComponents(){return components().filter(function(el){return !el.hidden})}
+          function byKey(k){return stage.querySelector('[data-component="'+k+'"]')}
           function readObject(key){var v=read(key,{});return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}
           function savePositions(pos){try{localStorage.setItem(POSITIONS,JSON.stringify(pos))}catch(e){}}
           function applyHidden(){var hidden=readObject(HIDDEN);components().forEach(function(el){el.hidden=!!hidden[el.dataset.component]})}
+          function clamp(v,lo,hi){return Math.min(Math.max(v,lo),Math.max(lo,hi))}
+          /* Xep cac khoi khong chong len nhau. fixedKey giu nguyen vi tri (khoi dang keo/vua tha),
+             cac khoi con lai bi day xuong duoi khi va cham. Ham thuan: khong dung DOM. */
+          function packRects(rects,fixedKey,gap){
+            var placed=[],rest=[],i;
+            for(i=0;i<rects.length;i++){var r={key:rects[i].key,x:rects[i].x,y:rects[i].y,w:rects[i].w,h:rects[i].h};(r.key===fixedKey?placed:rest).push(r)}
+            rest.sort(function(a,b){return a.y-b.y||a.x-b.x});
+            rest.forEach(function(o){
+              for(var guard=0;guard<500;guard++){
+                var hit=null;
+                for(var j=0;j<placed.length;j++){var p=placed[j];
+                  if(o.x<p.x+p.w&&p.x<o.x+o.w&&o.y<p.y+p.h&&p.y<o.y+o.h){if(!hit||p.y+p.h>hit.y+hit.h)hit=p}}
+                if(!hit)break;
+                o.y=hit.y+hit.h+gap;
+              }
+              placed.push(o);
+            });
+            return placed;
+          }
+          function vibrate(ms){try{if(navigator.vibrate)navigator.vibrate(ms)}catch(e){}}
+          /* Keo sat mep tren/duoi man hinh thi trang tu cuon (toc do tang dan theo do sat mep). */
+          function edgeScroll(y){var z=72,h=window.innerHeight;if(y<z)return -Math.min(18,(z-y)/3);if(y>h-z)return Math.min(18,(y-(h-z))/3);return 0}
+          /* Nam cham: hut mep khoi dang keo vao le trang / mep cac khoi khac khi o gan (<=thr px). Ham thuan. */
+          function snapRect(r,others,cb,thr){
+            var xs=[cb.x,cb.x+cb.w-r.w],ys=[],i,o,bx=null,by=null,bdx=thr+1,bdy=thr+1,d;
+            for(i=0;i<others.length;i++){o=others[i];xs.push(o.x,o.x+o.w-r.w);ys.push(o.y,o.y+o.h+GAP,o.y-r.h-GAP)}
+            xs.forEach(function(c){d=Math.abs(c-r.x);if(d<bdx){bdx=d;bx=c}});
+            ys.forEach(function(c){d=Math.abs(c-r.y);if(d<bdy){bdy=d;by=c}});
+            if(bx!==null&&bdx<=thr)r.x=bx;
+            if(by!==null&&bdy<=thr)r.y=by;
+            r.y=Math.max(0,r.y);
+          }
+          /* O gan diem tha nhat (diem nam trong o thi chon o do). Ham thuan. */
+          function nearestIndex(rects,x,y){
+            var best=-1,bd=Infinity,i;
+            for(i=0;i<rects.length;i++){var r=rects[i];
+              if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h)return i;
+              var dx=x-(r.x+r.w/2),dy=y-(r.y+r.h/2),d=dx*dx+dy*dy;if(d<bd){bd=d;best=i}}
+            return best;
+          }
+          function isPositioned(){return stage.classList.contains('positioned')}
+          function contentBox(){
+            var pl=0,pr=0;
+            try{var cs=window.getComputedStyle(stage);pl=parseFloat(cs.paddingLeft)||0;pr=parseFloat(cs.paddingRight)||0}catch(e){}
+            return {x:pl,w:Math.max(80,stage.clientWidth-pl-pr)};
+          }
+          function measureComp(el){return {key:el.dataset.component,x:parseFloat(el.style.left)||0,y:parseFloat(el.style.top)||0,w:el.offsetWidth,h:el.offsetHeight}}
+          function placeComp(el,x,y,w){el.style.position='absolute';el.style.left=x+'px';el.style.top=y+'px';el.style.width=w+'px'}
+          function fitStage(){
+            var bottom=0;
+            visibleComponents().forEach(function(el){bottom=Math.max(bottom,(parseFloat(el.style.top)||0)+el.offsetHeight)});
+            stage.style.minHeight=Math.max(window.innerHeight,bottom+48)+'px';
+          }
+          function bottomOf(skip){
+            var b=0;
+            visibleComponents().forEach(function(el){if(el===skip||el.style.position!=='absolute')return;b=Math.max(b,(parseFloat(el.style.top)||0)+el.offsetHeight)});
+            return b;
+          }
+          function placeAtBottom(el){
+            var cb=contentBox();el.style.position='absolute';el.style.left=cb.x+'px';el.style.width=cb.w+'px';
+            el.style.top=(bottomOf(el)+GAP)+'px';
+          }
+          /* Tinh lai toan bo bo cuc: cat theo be rong man hinh va tach cac khoi dang chong nhau. */
+          function relayout(fixedKey){
+            if(!isPositioned())return;
+            var sw=stage.clientWidth,cb=contentBox();
+            var rects=visibleComponents().map(function(el){var r=measureComp(el);r.w=Math.min(r.w,cb.w);r.x=clamp(r.x,0,sw-r.w);r.y=Math.max(0,r.y);return r});
+            packRects(rects,fixedKey,GAP).forEach(function(r){var el=byKey(r.key);if(el){el.style.left=r.x+'px';el.style.top=r.y+'px';el.style.width=r.w+'px'}});
+            fitStage();
+          }
+          function persist(){
+            if(!isPositioned())return;
+            var pos=readObject(POSITIONS);
+            visibleComponents().forEach(function(el){pos[el.dataset.component]={x:Math.round(parseFloat(el.style.left)||0),y:Math.round(parseFloat(el.style.top)||0),w:Math.round(el.offsetWidth)}});
+            savePositions(pos);
+          }
           function applyPositions(){
-            var pos=readObject(POSITIONS), maxBottom=window.innerHeight;
-            components().forEach(function(el){var p=pos[el.dataset.component];if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))return;
-              el.style.position='absolute';el.style.left=Math.max(0,p.x)+'px';el.style.top=Math.max(0,p.y)+'px';
-              if(Number.isFinite(p.w)&&p.w>0)el.style.width=Math.min(p.w,stage.clientWidth)+'px';maxBottom=Math.max(maxBottom,p.y+el.offsetHeight+48)});
-            if(Object.keys(pos).length)stage.style.minHeight=maxBottom+'px';
+            var pos=readObject(POSITIONS);
+            if(!Object.keys(pos).length)return;
+            var sw=stage.clientWidth,cb=contentBox(),missing=[];
+            stage.classList.add('positioned');
+            visibleComponents().forEach(function(el){
+              var p=pos[el.dataset.component];
+              if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)){missing.push(el);return}
+              var w=(Number.isFinite(p.w)&&p.w>0)?Math.min(p.w,cb.w):cb.w;
+              placeComp(el,clamp(p.x,0,sw-w),Math.max(0,p.y),w);
+            });
+            missing.forEach(placeAtBottom);
+            relayout(null);
           }
           function enterComponentEdit(){
-            var pos=readObject(POSITIONS),sr=stage.getBoundingClientRect();
-            components().forEach(function(el){var key=el.dataset.component;if(!pos[key]){var r=el.getBoundingClientRect();pos[key]={x:Math.max(0,r.left-sr.left),y:Math.max(0,r.top-sr.top),w:r.width}}
-              el.style.position='absolute';el.style.left=pos[key].x+'px';el.style.top=pos[key].y+'px';el.style.width=Math.min(pos[key].w,stage.clientWidth)+'px'});
-            savePositions(pos);editComponents=true;stage.classList.add('layout-editing');document.body.classList.add('tgfn-dragging');
+            var vis=visibleComponents();
+            if(!isPositioned()){
+              /* Luot 1: do tat ca khi con nam trong luong trang. Luot 2: moi chuyen sang absolute.
+                 (Ban cu vua do vua chuyen tung khoi nen cac khoi sau bi doi len va chong nhau.) */
+              var sr=stage.getBoundingClientRect();
+              var nat=vis.map(function(el){var r=el.getBoundingClientRect();return {el:el,x:Math.max(0,r.left-sr.left),y:Math.max(0,r.top-sr.top),w:r.width}});
+              stage.classList.add('positioned');
+              var cbw=contentBox().w;nat.forEach(function(n){placeComp(n.el,n.x,n.y,Math.min(n.w,cbw))});
+            }else{
+              vis.forEach(function(el){if(el.style.position!=='absolute')placeAtBottom(el)});
+            }
+            editComponents=true;stage.classList.add('layout-editing');document.body.classList.add('tgfn-dragging');
             document.getElementById('layoutToggle').textContent='${tr("Xong", "Done")}';
+            render();relayout(null);persist();
           }
-          function exitComponentEdit(){editComponents=false;stage.classList.remove('layout-editing');document.body.classList.remove('tgfn-dragging');document.getElementById('layoutToggle').textContent='${tr("Tùy chỉnh bố cục", "Customize layout")}'}
-          function resetPositions(){try{localStorage.removeItem(POSITIONS)}catch(e){}components().forEach(function(el){el.style.position='';el.style.left='';el.style.top='';el.style.width=''});stage.style.minHeight='100vh';exitComponentEdit()}
+          function exitComponentEdit(){
+            editComponents=false;stage.classList.remove('layout-editing');document.body.classList.remove('tgfn-dragging');
+            document.getElementById('layoutToggle').textContent='${tr("Tùy chỉnh bố cục", "Customize layout")}';
+            render();relayout(null);persist();
+          }
+          function resetPositions(){
+            try{localStorage.removeItem(POSITIONS)}catch(e){}
+            components().forEach(function(el){el.style.position='';el.style.left='';el.style.top='';el.style.width='';el.style.zIndex=''});
+            stage.classList.remove('positioned');stage.style.minHeight='';exitComponentEdit();
+          }
           function restoreComponent(){
             var hidden=readObject(HIDDEN), keys=Object.keys(hidden).filter(function(k){return hidden[k]});
             if(!keys.length){alert('${tr("Không có thành phần nào bị ẩn.", "No hidden components to restore.")}');return}
             var choice=prompt('${tr("Nhập số để khôi phục thành phần:", "Enter number to restore a component:")}\n'+keys.map(function(k,i){return (i+1)+' = '+k}).join('\n'));
-            var index=Number(choice)-1;if(index>=0&&index<keys.length){delete hidden[keys[index]];try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(e){}applyHidden()}
+            var index=Number(choice)-1;
+            if(index>=0&&index<keys.length){
+              delete hidden[keys[index]];try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(e){}
+              applyHidden();
+              var el=byKey(keys[index]);
+              if(el&&isPositioned()){placeAtBottom(el);relayout(null);persist()}
+            }
           }
           function moveComponent(el){
             el.addEventListener('pointerdown',function(e){
-              if(!editComponents||e.target.closest('button,input,a'))return;if(e.button!==undefined&&e.button!==0)return;
-              e.preventDefault();e.stopPropagation();var sx=e.clientX,sy=e.clientY,l=parseFloat(el.style.left)||0,t=parseFloat(el.style.top)||0,pid=e.pointerId;
+              if(!editComponents||drag||e.target.closest('button,input,textarea,select'))return;
+              if(e.pointerType==='mouse'&&e.button!==0)return;
+              e.preventDefault();e.stopPropagation();
+              var key=el.dataset.component,pid=e.pointerId,sw=stage.clientWidth,cb=contentBox();
+              var base=visibleComponents().map(measureComp),me=null;
+              base.forEach(function(r){if(r.key===key)me=r});
+              if(!me)return;
+              var st={sx:e.clientX,sy:e.clientY,cx:e.clientX,cy:e.clientY,sScroll:window.pageYOffset,raf:0,moved:false,x:me.x,y:me.y};
+              drag=st;
               el.classList.add('dragging-component');document.body.classList.add('tgfn-dragging');try{el.setPointerCapture(pid)}catch(_){}
-              function move(ev){if(ev.pointerId!==pid)return;ev.preventDefault();var x=Math.max(0,l+ev.clientX-sx),y=Math.max(0,t+ev.clientY-sy);el.style.left=x+'px';el.style.top=y+'px';stage.style.minHeight=Math.max(window.innerHeight,y+el.offsetHeight+48)+'px'}
-              function finish(ev){if(ev.pointerId!==pid)return;el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',finish);el.removeEventListener('pointercancel',finish);el.classList.remove('dragging-component');var pos=readObject(POSITIONS);components().forEach(function(n){pos[n.dataset.component]={x:parseFloat(n.style.left)||0,y:parseFloat(n.style.top)||0,w:n.getBoundingClientRect().width}});savePositions(pos);document.body.classList.remove('tgfn-dragging')}
+              function schedule(){if(!st.raf)st.raf=requestAnimationFrame(frame)}
+              /* Moi khung hinh: khoi dang keo di chuyen bang transform (muot, khong reflow);
+                 cac khoi khac tinh lai tu anh chup luc bat dau keo nen nhuong cho va tu tro ve cho cu. */
+              function frame(){
+                st.raf=0;
+                var sc=edgeScroll(st.cy);if(sc)window.scrollBy(0,sc);
+                var dx=st.cx-st.sx,dy=(st.cy+window.pageYOffset)-(st.sy+st.sScroll);
+                if(!st.moved){if(Math.abs(dx)+Math.abs(dy)<4){if(sc)schedule();return}st.moved=true;vibrate(12)}
+                var rects=base.map(function(r){return {key:r.key,x:r.x,y:r.y,w:r.w,h:r.h}}),mine=null;
+                rects.forEach(function(r){if(r.key===key)mine=r});
+                mine.x=clamp(me.x+dx,0,sw-mine.w);mine.y=Math.max(0,me.y+dy);
+                snapRect(mine,rects.filter(function(r){return r!==mine}),cb,SNAP);
+                mine.x=clamp(mine.x,0,sw-mine.w);
+                st.x=mine.x;st.y=mine.y;
+                el.style.transform='translate('+(mine.x-me.x)+'px,'+(mine.y-me.y)+'px)';
+                packRects(rects,key,GAP).forEach(function(r){if(r.key===key)return;var n=byKey(r.key);if(n){n.style.left=r.x+'px';n.style.top=r.y+'px'}});
+                fitStage();
+                if(sc)schedule();
+              }
+              function move(ev){if(ev.pointerId!==pid)return;ev.preventDefault();st.cx=ev.clientX;st.cy=ev.clientY;schedule()}
+              function finish(ev){
+                if(ev.pointerId!==pid)return;
+                el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',finish);el.removeEventListener('pointercancel',finish);
+                if(st.raf){cancelAnimationFrame(st.raf);st.raf=0}
+                frame();if(st.raf){cancelAnimationFrame(st.raf);st.raf=0}      /* ap dung toa do cuoi cung */
+                try{el.releasePointerCapture(pid)}catch(_){}
+                if(st.moved){el.style.left=st.x+'px';el.style.top=st.y+'px';el.style.transform='';void el.offsetWidth}   /* chot vi tri khi transition con dang tat */
+                el.classList.remove('dragging-component');
+                drag=null;
+                if(!editComponents)document.body.classList.remove('tgfn-dragging');
+                if(st.moved){lastDragEnd=Date.now();relayout(key);persist()}
+              }
               el.addEventListener('pointermove',move);el.addEventListener('pointerup',finish);el.addEventListener('pointercancel',finish);
+              vibrate(6);
             });
-            el.addEventListener('contextmenu',function(e){if(editComponents&&el.dataset.component!=='note'){e.preventDefault();e.stopPropagation();var action=prompt('${tr("Thành phần", "Component")}: '+el.dataset.component+'\n1 = ${tr("Ẩn thành phần", "Hide component")}\n2 = ${tr("Hủy", "Cancel")}','1');if(action==='1'){var hidden=readObject(HIDDEN);hidden[el.dataset.component]=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden()}}});
+            el.addEventListener('contextmenu',function(e){if(editComponents&&el.dataset.component!=='note'){e.preventDefault();e.stopPropagation();if(drag||Date.now()-lastDragEnd<700)return;var action=prompt('${tr("Thành phần", "Component")}: '+el.dataset.component+'\n1 = ${tr("Ẩn thành phần", "Hide component")}\n2 = ${tr("Hủy", "Cancel")}','1');if(action==='1'){var hidden=readObject(HIDDEN);hidden[el.dataset.component]=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden();if(isPositioned())fitStage()}}});
+          }
+          function setOver(i){Array.prototype.forEach.call(grid.querySelectorAll('.item'),function(n,k){if(k===i)n.classList.add('over');else n.classList.remove('over')})}
+          function openShortcutOptions(index){
+            var item=items[index];if(!item)return;
+            var action=prompt('${tr("Tùy chọn lối tắt", "Shortcut options")}\n1 = ${tr("Sửa", "Edit")}\n2 = ${tr("Xóa", "Remove")}\n3 = ${tr("Thêm lối tắt", "Add shortcut")}\n4 = ${tr("Đổi kiểu bố cục", "Change layout")}','');
+            if(action==='1'){
+              var url=prompt('${tr("Địa chỉ URL", "URL")}',item.url);if(!url)return;url=url.trim();
+              if(!/^https?:\/\//i.test(url)){alert('${tr("URL không hợp lệ", "Invalid URL")}');return}
+              var title=prompt('${tr("Tên lối tắt", "Shortcut name")}',item.title)||url;
+              items[index]={title:title.trim()||url,url:url};save();render();
+            }else if(action==='2'){if(confirm('${tr("Xóa lối tắt này?", "Remove this shortcut?")}')){items.splice(index,1);save();render()}}
+            else if(action==='3'){addShortcut()}
+            else if(action==='4'){layout.value=layout.value==='custom'?'default':'custom';save();render()}
+          }
+          /* Hieu ung truot (FLIP): cac o truot tu cho cu sang cho moi; o vua tha bay tu cho tha ve o dich. */
+          function renderAnimated(skipId,dropRect){
+            var old={};
+            Array.prototype.forEach.call(grid.querySelectorAll('.item'),function(n){var r=n.getBoundingClientRect();old[n.dataset.id]={x:r.left+r.width/2,y:r.top+r.height/2}});
+            if(skipId&&dropRect)old[skipId]={x:dropRect.left+dropRect.width/2,y:dropRect.top+dropRect.height/2};
+            render();
+            var moved=[];
+            Array.prototype.forEach.call(grid.querySelectorAll('.item'),function(n){
+              var o=old[n.dataset.id];if(!o)return;
+              var r=n.getBoundingClientRect(),dx=o.x-(r.left+r.width/2),dy=o.y-(r.top+r.height/2);
+              if(Math.abs(dx)>1||Math.abs(dy)>1){n.style.transition='none';n.style.transform='translate('+dx+'px,'+dy+'px)';moved.push(n)}
+            });
+            if(!moved.length)return;
+            grid.getBoundingClientRect();
+            requestAnimationFrame(function(){moved.forEach(function(n){n.style.transition='transform .24s cubic-bezier(.2,.8,.2,1)';n.style.transform=''})});
+          }
+          /* Che do 'custom': giu ~0.2s de nhac o len, keo theo ngon tay, tha vao o dich de doi cho.
+             Giu roi tha khong di chuyen = mo menu tuy chon. Vuot truoc khi nhac = cuon trang binh thuong. */
+          function attachShortcutDrag(a,index){
+            a.addEventListener('click',function(e){if(Date.now()-lastShortcutDrag<450){e.preventDefault();e.stopPropagation()}});
+            a.addEventListener('pointerdown',function(e){
+              if(layout.value!=='custom'||editComponents||sd||drag)return;
+              if(e.pointerType==='mouse'&&e.button!==0)return;
+              var st={pid:e.pointerId,sx:e.clientX,sy:e.clientY,cx:e.clientX,cy:e.clientY,active:false,raf:0,timer:0,target:index,gx:0,gy:0,rects:null};
+              sd=st;
+              function schedule(){if(!st.raf)st.raf=requestAnimationFrame(frame)}
+              function frame(){
+                st.raf=0;if(!st.active)return;
+                var sc=edgeScroll(st.cy);if(sc)window.scrollBy(0,sc);
+                a.style.transform='none';
+                var r=a.getBoundingClientRect();
+                a.style.transform='translate('+(st.cx-st.gx-r.left)+'px,'+(st.cy-st.gy-r.top)+'px) scale(1.08)';
+                var ti=nearestIndex(st.rects,st.cx+window.pageXOffset,st.cy+window.pageYOffset);
+                if(ti>=0&&ti!==st.target){st.target=ti;setOver(ti===index?-1:ti);vibrate(8)}
+                if(sc)schedule();
+              }
+              function lift(){
+                st.timer=0;st.active=true;
+                var r=a.getBoundingClientRect();st.gx=st.sx-r.left;st.gy=st.sy-r.top;
+                st.rects=Array.prototype.map.call(grid.querySelectorAll('.item'),function(n){var q=n.getBoundingClientRect();return {x:q.left+window.pageXOffset,y:q.top+window.pageYOffset,w:q.width,h:q.height}});
+                a.classList.add('lifting');document.body.classList.add('tgfn-dragging');
+                try{a.setPointerCapture(st.pid)}catch(_){}
+                vibrate(15);schedule();
+              }
+              function detach(){a.removeEventListener('pointermove',move);a.removeEventListener('pointerup',end);a.removeEventListener('pointercancel',end);if(sd===st)sd=null}
+              function move(ev){
+                if(ev.pointerId!==st.pid)return;
+                st.cx=ev.clientX;st.cy=ev.clientY;
+                if(!st.active){if(Math.abs(st.cx-st.sx)>8||Math.abs(st.cy-st.sy)>8){clearTimeout(st.timer);detach()}return}
+                ev.preventDefault();schedule();
+              }
+              function end(ev){
+                if(ev.pointerId!==st.pid)return;
+                clearTimeout(st.timer);
+                if(st.raf){cancelAnimationFrame(st.raf);st.raf=0}
+                var was=st.active;detach();
+                try{a.releasePointerCapture(st.pid)}catch(_){}
+                if(!was)return;
+                lastShortcutDrag=Date.now();
+                var dropRect=a.getBoundingClientRect();
+                a.style.transform='';a.classList.remove('lifting');setOver(-1);
+                document.body.classList.remove('tgfn-dragging');
+                if(ev.type==='pointercancel')return;
+                var moved=Math.abs(st.cx-st.sx)+Math.abs(st.cy-st.sy)>12;
+                if(st.target!==index){var m=items.splice(index,1)[0];items.splice(st.target,0,m);save();renderAnimated(m._id,dropRect)}
+                else if(!moved){openShortcutOptions(index)}
+              }
+              a.addEventListener('pointermove',move);a.addEventListener('pointerup',end);a.addEventListener('pointercancel',end);
+              st.timer=setTimeout(lift,LIFT_MS);
+            });
           }
           function read(key,fallback){try{var v=JSON.parse(localStorage.getItem(key));return v===null?fallback:v}catch(e){return fallback}}
           function save(){try{localStorage.setItem(KEY,JSON.stringify(items));localStorage.setItem(LAYOUT,layout.value)}catch(e){}}
           var items=read(KEY,null); if(!Array.isArray(items)) items=defaults.slice();
           items=items.filter(function(x){return x&&typeof x.url==='string'&&/^https?:\/\//i.test(x.url)}).map(function(x){return {title:String(x.title||x.url),url:x.url}});
           layout.value=read(LAYOUT,'default')==='custom'?'custom':'default';
-          applyPositions();applyHidden();components().forEach(moveComponent);
           document.getElementById('layoutToggle').addEventListener('click',function(){if(editComponents)exitComponentEdit();else enterComponentEdit()});
           document.getElementById('layoutRestore').addEventListener('click',function(){if(confirm('${tr("Khôi phục vị trí mặc định của các thành phần?", "Reset component positions to default?")}'))resetPositions()});
           document.getElementById('componentRestore').addEventListener('click',restoreComponent);
+          document.addEventListener('touchmove',function(e){if((drag||(sd&&sd.active))&&e.cancelable)e.preventDefault()},{passive:false});
+          window.addEventListener('resize',function(){relayout(null)});
+          window.addEventListener('load',function(){relayout(null)});
           function addShortcut(){
             var url=prompt('${tr("Nhập địa chỉ URL (https://...)", "Enter shortcut URL (https://...)")}','https://');
             if(!url)return; url=url.trim(); if(!/^https?:\/\//i.test(url)){alert('${tr("URL phải bắt đầu bằng http:// hoặc https://", "URL must start with http:// or https://")}');return}
@@ -1018,9 +1251,11 @@ class MainActivity : Activity() {
           }
           function render(){
             grid.innerHTML='';
+            if(layout.value==='custom')grid.classList.add('reorder');else grid.classList.remove('reorder');
             items.forEach(function(item,index){
-              var a=document.createElement('a');a.className='item';a.href=item.url;a.dataset.index=index;
-              a.draggable=layout.value==='custom';
+              if(!item._id)Object.defineProperty(item,'_id',{value:'s'+(++seq),enumerable:false,writable:true});
+              var a=document.createElement('a');a.className='item';a.href=item.url;a.dataset.index=index;a.dataset.id=item._id;
+              a.draggable=false;
               var circle=document.createElement('div');circle.className='circle';
               var img=document.createElement('img');img.alt='';img.loading='lazy';img.src='https://www.google.com/s2/favicons?domain_url='+encodeURIComponent(item.url)+'&sz=64';
               img.onerror=function(){this.remove();var letter=document.createElement('span');letter.className='letter';letter.textContent=(item.title||'?').charAt(0).toUpperCase();circle.appendChild(letter)};
@@ -1029,27 +1264,18 @@ class MainActivity : Activity() {
               a.appendChild(circle);a.appendChild(name);
               a.addEventListener('contextmenu',function(e){
                 e.preventDefault();e.stopPropagation();
-                var action=prompt('${tr("Tùy chọn lối tắt", "Shortcut options")}\n1 = ${tr("Sửa", "Edit")}\n2 = ${tr("Xóa", "Remove")}\n3 = ${tr("Thêm lối tắt", "Add shortcut")}\n4 = ${tr("Đổi kiểu bố cục", "Change layout")}','');
-                if(action==='1'){
-                  var url=prompt('${tr("Địa chỉ URL", "URL")}',item.url);if(!url)return;url=url.trim();
-                  if(!/^https?:\/\//i.test(url)){alert('${tr("URL không hợp lệ", "Invalid URL")}');return}
-                  var title=prompt('${tr("Tên lối tắt", "Shortcut name")}',item.title)||url;
-                  items[index]={title:title.trim()||url,url:url};save();render();
-                }else if(action==='2'){if(confirm('${tr("Xóa lối tắt này?", "Remove this shortcut?")}')){items.splice(index,1);save();render()}}
-                else if(action==='3'){addShortcut()}
-                else if(action==='4'){layout.value=layout.value==='custom'?'default':'custom';save();render()}
+                if(editComponents||layout.value==='custom'||(sd&&sd.active)||Date.now()-lastShortcutDrag<700)return;
+                openShortcutOptions(index);
               });
-              a.addEventListener('dragstart',function(e){if(layout.value!=='custom'){e.preventDefault();return}dragIndex=index;a.classList.add('dragging');if(DISABLE_TEXT_SELECTION_DURING_DRAG)document.body.classList.add('tgfn-dragging');if(e.dataTransfer)e.dataTransfer.setData('text/plain',String(index))});
-              a.addEventListener('dragover',function(e){if(layout.value==='custom'){e.preventDefault();a.classList.add('over')}});
-              a.addEventListener('dragleave',function(){a.classList.remove('over')});
-              a.addEventListener('drop',function(e){if(layout.value!=='custom')return;e.preventDefault();var from=dragIndex,to=Number(a.dataset.index);if(from>=0&&from!==to){var moved=items.splice(from,1)[0];items.splice(to,0,moved);save();render()}});
-              a.addEventListener('dragend',function(){dragIndex=-1;if(DISABLE_TEXT_SELECTION_DURING_DRAG)document.body.classList.remove('tgfn-dragging');render()});
+              attachShortcutDrag(a,index);
               grid.appendChild(a);
             });
             if(items.length===0){var empty=document.createElement('div');empty.className='empty';empty.textContent='${tr("Chưa có lối tắt. Nhấn giữ vùng này để thêm.", "No shortcuts. Hold this area to add one.")}';grid.appendChild(empty)}
+            relayout('grid');
           }
-          grid.addEventListener('contextmenu',function(e){if(e.target===grid||e.target.classList.contains('empty')){e.preventDefault();var action=prompt('${tr("Tùy chỉnh tab mới", "Customize new tab")}\\n1 = ${tr("Thêm lối tắt", "Add shortcut")}\\n2 = ${tr("Đổi kiểu sắp xếp shortcut", "Toggle shortcut reorder")}\\n3 = ${tr("Xóa tất cả lối tắt", "Remove all shortcuts")}\\n4 = ${tr("Ẩn cụm shortcut", "Hide shortcut grid")}','1');if(action==='1')addShortcut();else if(action==='2'){layout.value=layout.value==='custom'?'default':'custom';save();render()}else if(action==='3'&&confirm('${tr("Xóa tất cả lối tắt?", "Remove all shortcuts?")}')){items=[];save();render()}else if(action==='4'){var hidden=readObject(HIDDEN);hidden.grid=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden()}}});
-          render();
+          grid.addEventListener('contextmenu',function(e){if(editComponents)return;if(e.target===grid||e.target.classList.contains('empty')){e.preventDefault();var action=prompt('${tr("Tùy chỉnh tab mới", "Customize new tab")}\\n1 = ${tr("Thêm lối tắt", "Add shortcut")}\\n2 = ${tr("Đổi kiểu sắp xếp shortcut", "Toggle shortcut reorder")}\\n3 = ${tr("Xóa tất cả lối tắt", "Remove all shortcuts")}\\n4 = ${tr("Ẩn cụm shortcut", "Hide shortcut grid")}','1');if(action==='1')addShortcut();else if(action==='2'){layout.value=layout.value==='custom'?'default':'custom';save();render()}else if(action==='3'&&confirm('${tr("Xóa tất cả lối tắt?", "Remove all shortcuts?")}')){items=[];save();render()}else if(action==='4'){var hidden=readObject(HIDDEN);hidden.grid=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden()}}});
+          applyHidden();components().forEach(moveComponent);
+          render();applyPositions();
         })();
         </script></body></html>
     """.trimIndent()
