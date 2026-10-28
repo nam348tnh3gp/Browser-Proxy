@@ -847,20 +847,15 @@ class MainActivity : Activity() {
         // Keep the native selection toolbar/handles for text. Only replace Chromium's
         // link/image menus with TGFN menus, and use the page menu for confirmed blank space.
         web.setOnCreateContextMenuListener { menu, v, _ ->
-            val webView = v as? WebView
-            if (tab.isNewTab || webView?.url?.startsWith("https://tgfn.browser/") == true) {
-                menu.clear()
-            }
+            if (isNewTabPage(tab, v as? WebView)) menu.clear()
         }
         web.setOnLongClickListener { view ->
             val target = view as? WebView ?: return@setOnLongClickListener false
-            val isNewTabPage = tab.isNewTab || target.url?.startsWith("https://tgfn.browser/") == true
-            if (isNewTabPage) {
-                val hit = target.hitTestResult
-                // Always consume long-press on the built-in new-tab page (including shortcuts/links)
-                // except for editable text fields, so Chromium's native hold menu never appears.
-                if (hit?.type == WebView.HitTestResult.EDIT_TEXT_TYPE) return@setOnLongClickListener false
-                return@setOnLongClickListener true
+            if (isNewTabPage(tab, target)) {
+                // Built-in new-tab page only: never show the hold menu. Shortcut favicons are <img> inside
+                // <a>, so WebView reports IMAGE / SRC_IMAGE_ANCHOR for them and the image menu would open.
+                // Editable text keeps its native behaviour; every other (website) tab is handled below as usual.
+                return@setOnLongClickListener target.hitTestResult?.type != WebView.HitTestResult.EDIT_TEXT_TYPE
             }
             val hit = target.hitTestResult ?: return@setOnLongClickListener false
             when (hit.type) {
@@ -989,7 +984,7 @@ class MainActivity : Activity() {
         <style>
         *{box-sizing:border-box}body{margin:0;background:${if (!prefs.getString("app_background_uri", null).isNullOrBlank()) "transparent" else if (darkMode) "#202124" else "#fff"};color:${if (darkMode) "#e8eaed" else "#202124"};font:16px Roboto,'Arial',sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
         /* Built-in new-tab labels must not trigger Android's copy/select toolbar. Keep search input selectable. */
-        body *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+        body *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}img,a,.item,.circle{-webkit-user-drag:none;user-drag:none;-webkit-touch-callout:none}img{pointer-events:none}
         input,textarea{ -webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default }
         body.tgfn-dragging,body.tgfn-dragging *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;-webkit-tap-highlight-color:transparent!important}
         body.tgfn-dragging input,body.tgfn-dragging textarea{-webkit-user-select:text!important;user-select:text!important}
@@ -1025,6 +1020,9 @@ class MainActivity : Activity() {
             {title:'Reddit',url:'https://www.reddit.com'},
             {title:'Bing',url:'https://www.bing.com'}
           ];
+          /* Trang tab moi: khong bao gio hien menu giu cua trinh duyet / keo anh (van cho phep o nhap lieu). */
+          document.addEventListener('contextmenu',function(e){var t=e.target;if(!(t&&t.closest&&t.closest('input,textarea')))e.preventDefault()},true);
+          document.addEventListener('dragstart',function(e){e.preventDefault()},true);
           var grid=document.getElementById('grid'), layout={value:'default'}, dragIndex=-1;
           var stage=document.getElementById('layoutStage'), editComponents=false, lastDragEnd=0, drag=null, sd=null, lastShortcutDrag=0, seq=0;
           if(!grid||!stage)return;
@@ -1355,7 +1353,7 @@ class MainActivity : Activity() {
               var a=document.createElement('a');a.className='item';a.href=item.url;a.dataset.index=index;a.dataset.id=item._id;
               a.draggable=false;
               var circle=document.createElement('div');circle.className='circle';
-              var img=document.createElement('img');img.alt='';img.loading='lazy';img.src='https://www.google.com/s2/favicons?domain_url='+encodeURIComponent(item.url)+'&sz=64';
+              var img=document.createElement('img');img.alt='';img.loading='lazy';img.draggable=false;img.src='https://www.google.com/s2/favicons?domain_url='+encodeURIComponent(item.url)+'&sz=64';
               img.onerror=function(){this.remove();var letter=document.createElement('span');letter.className='letter';letter.textContent=(item.title||'?').charAt(0).toUpperCase();circle.appendChild(letter)};
               circle.appendChild(img);
               var name=document.createElement('span');name.className='name';name.textContent=item.title;
@@ -1380,6 +1378,14 @@ class MainActivity : Activity() {
     """.trimIndent()
 
     private fun isSelected(tab: BrowserTab): Boolean = tabs.getOrNull(selectedTab) === tab
+
+    // True only for the built-in new-tab page. Several signals are checked because WebView.getUrl() can
+    // report about:blank/null for loadDataWithBaseURL pages, and tab.isNewTab is only refreshed from
+    // WebViewClient callbacks (a long-press can arrive before they run).
+    private fun isNewTabPage(tab: BrowserTab, web: WebView?): Boolean {
+        if (tab.isNewTab || tab.url == NEW_TAB_SESSION_URL) return true
+        return listOfNotNull(web?.url, web?.originalUrl).any { it.startsWith("https://tgfn.browser/", ignoreCase = true) }
+    }
 
     private fun selectTab(index: Int) {
         if (index !in tabs.indices) return
