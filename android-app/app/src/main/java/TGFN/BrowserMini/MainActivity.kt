@@ -564,7 +564,7 @@ class MainActivity : Activity() {
 
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val url = request?.url?.toString()
-                if (isAdUrl(url, view?.url)) {
+                if (isAdUrl(url, tab.url)) {
                     return WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
                 }
                 fetchViaHttpsProxy(url)?.let { return it }
@@ -3752,3 +3752,4 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         super.onDestroy()
     }
 }
+
