@@ -657,6 +657,22 @@ class MainActivity : Activity() {
             }
 
             override fun onJsPrompt(view: WebView?, url: String?, message: String?, defaultValue: String?, result: JsPromptResult?): Boolean {
+                val raw = message.orEmpty().replace("\\n", "\n").replace("/n", "\n")
+                val lines = raw.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                val options = lines.mapNotNull { line ->
+                    val match = Regex("""^(\d+)\s*=\s*(.+)$""").find(line) ?: return@mapNotNull null
+                    match.groupValues[1] to match.groupValues[2]
+                }
+                if (options.size >= 2) {
+                    val title = lines.firstOrNull { !it.matches(Regex("""^\d+\s*=""")); } ?: tr("Chọn", "Choose")
+                    android.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle(title)
+                        .setItems(options.map { it.second }.toTypedArray()) { _, which -> result?.confirm(options[which].first) }
+                        .setNegativeButton(android.R.string.cancel) { _, _ -> result?.cancel() }
+                        .setOnCancelListener { result?.cancel() }
+                        .show()
+                    return true
+                }
                 val input = EditText(this@MainActivity).apply {
                     setText(defaultValue.orEmpty())
                     setSelection(text.length)
@@ -664,7 +680,7 @@ class MainActivity : Activity() {
                 }
                 android.app.AlertDialog.Builder(this@MainActivity)
                     .setTitle(hostLabel(url))
-                    .setMessage(message.orEmpty())
+                    .setMessage(raw)
                     .setView(input)
                     .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm(input.text.toString()) }
                     .setNegativeButton(android.R.string.cancel) { _, _ -> result?.cancel() }
@@ -788,13 +804,17 @@ class MainActivity : Activity() {
         }
         // Keep the native selection toolbar/handles for text. Only replace Chromium's
         // link/image menus with TGFN menus, and use the page menu for confirmed blank space.
+        web.setOnCreateContextMenuListener { menu, _, _ ->
+            if (tab.isNewTab) menu.clear()
+        }
         web.setOnLongClickListener { view ->
             val target = view as? WebView ?: return@setOnLongClickListener false
             val hit = target.hitTestResult ?: return@setOnLongClickListener false
             // On the built-in new-tab page, let its own JavaScript manage long-press menus.
             // CSS disables selection on built-in labels while leaving input fields editable.
             if (tab.isNewTab && target.url?.startsWith("https://tgfn.browser/") == true) {
-                return@setOnLongClickListener false
+                // New-tab page has its own menus. Consume the hold so Chromium's menu stays off.
+                return@setOnLongClickListener hit.type != WebView.HitTestResult.EDIT_TEXT_TYPE
             }
             when (hit.type) {
                 WebView.HitTestResult.ANCHOR_TYPE,
@@ -1173,12 +1193,12 @@ class MainActivity : Activity() {
               el.addEventListener('pointermove',move);el.addEventListener('pointerup',finish);el.addEventListener('pointercancel',finish);
               vibrate(6);
             });
-            el.addEventListener('contextmenu',function(e){if(editComponents&&el.dataset.component!=='note'){e.preventDefault();e.stopPropagation();if(drag||Date.now()-lastDragEnd<700)return;var action=prompt('${tr("Thành phần", "Component")}: '+el.dataset.component+'\n1 = ${tr("Ẩn thành phần", "Hide component")}\n2 = ${tr("Hủy", "Cancel")}','1');if(action==='1'){var hidden=readObject(HIDDEN);hidden[el.dataset.component]=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden();if(isPositioned())fitStage()}}});
+            el.addEventListener('contextmenu',function(e){if(editComponents&&el.dataset.component!=='note'){e.preventDefault();e.stopPropagation();if(drag||Date.now()-lastDragEnd<700)return;var action=prompt(['${tr("Thành phần", "Component")}: '+el.dataset.component,'1 = ${tr("Ẩn thành phần", "Hide component")}','2 = ${tr("Hủy", "Cancel")}'].join('\n'),'1');if(action==='1'){var hidden=readObject(HIDDEN);hidden[el.dataset.component]=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden();if(isPositioned())fitStage()}}});
           }
           function setOver(i){Array.prototype.forEach.call(grid.querySelectorAll('.item'),function(n,k){if(k===i)n.classList.add('over');else n.classList.remove('over')})}
           function openShortcutOptions(index){
             var item=items[index];if(!item)return;
-            var action=prompt('${tr("Tùy chọn lối tắt", "Shortcut options")}\n1 = ${tr("Sửa", "Edit")}\n2 = ${tr("Xóa", "Remove")}\n3 = ${tr("Thêm lối tắt", "Add shortcut")}\n4 = ${tr("Đổi kiểu bố cục", "Change layout")}','');
+            var action=prompt(['${tr("Tùy chọn lối tắt", "Shortcut options")}','1 = ${tr("Sửa", "Edit")}','2 = ${tr("Xóa", "Remove")}','3 = ${tr("Thêm lối tắt", "Add shortcut")}','4 = ${tr("Đổi kiểu bố cục", "Change layout")}'].join('\n'),'');
             if(action==='1'){
               var url=prompt('${tr("Địa chỉ URL", "URL")}',item.url);if(!url)return;url=url.trim();
               if(!/^https?:\/\//i.test(url)){alert('${tr("URL không hợp lệ", "Invalid URL")}');return}
@@ -1303,7 +1323,7 @@ class MainActivity : Activity() {
             if(items.length===0){var empty=document.createElement('div');empty.className='empty';empty.textContent='${tr("Chưa có lối tắt. Nhấn giữ vùng này để thêm.", "No shortcuts. Hold this area to add one.")}';grid.appendChild(empty)}
             relayout('grid');
           }
-          grid.addEventListener('contextmenu',function(e){if(editComponents)return;if(e.target===grid||e.target.classList.contains('empty')){e.preventDefault();var action=prompt('${tr("Tùy chỉnh tab mới", "Customize new tab")}\\n1 = ${tr("Thêm lối tắt", "Add shortcut")}\\n2 = ${tr("Đổi kiểu sắp xếp shortcut", "Toggle shortcut reorder")}\\n3 = ${tr("Xóa tất cả lối tắt", "Remove all shortcuts")}\\n4 = ${tr("Ẩn cụm shortcut", "Hide shortcut grid")}','1');if(action==='1')addShortcut();else if(action==='2'){layout.value=layout.value==='custom'?'default':'custom';save();render()}else if(action==='3'&&confirm('${tr("Xóa tất cả lối tắt?", "Remove all shortcuts?")}')){items=[];save();render()}else if(action==='4'){var hidden=readObject(HIDDEN);hidden.grid=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden()}}});
+          grid.addEventListener('contextmenu',function(e){if(editComponents)return;if(e.target===grid||e.target.classList.contains('empty')){e.preventDefault();var action=prompt(['${tr("Tùy chỉnh tab mới", "Customize new tab")}','1 = ${tr("Thêm lối tắt", "Add shortcut")}','2 = ${tr("Đổi kiểu sắp xếp shortcut", "Toggle shortcut reorder")}','3 = ${tr("Xóa tất cả lối tắt", "Remove all shortcuts")}','4 = ${tr("Ẩn cụm shortcut", "Hide shortcut grid")}'].join('\n'),'1');if(action==='1')addShortcut();else if(action==='2'){layout.value=layout.value==='custom'?'default':'custom';save();render()}else if(action==='3'&&confirm('${tr("Xóa tất cả lối tắt?", "Remove all shortcuts?")}')){items=[];save();render()}else if(action==='4'){var hidden=readObject(HIDDEN);hidden.grid=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden()}}});
           applyHidden();components().forEach(moveComponent);
           render();scheduleApply();
         })();
