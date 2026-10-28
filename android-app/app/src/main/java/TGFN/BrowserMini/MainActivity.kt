@@ -1037,7 +1037,10 @@ class MainActivity : Activity() {
           function relayout(fixedKey){
             if(!isPositioned())return;
             var sw=stage.clientWidth,cb=contentBox();
-            var rects=visibleComponents().map(function(el){var r=measureComp(el);r.w=Math.min(r.w,cb.w);r.x=clamp(r.x,0,sw-r.w);r.y=Math.max(0,r.y);return r});
+            /* WebView fires resize with width 0 while the page is hidden or not laid out.
+               Clamping then shoves every box to the left corner. Skip until width is real. */
+            if(sw<40)return;
+            var rects=visibleComponents().map(function(el){var r=measureComp(el);r.w=Math.min(Math.max(r.w,1),cb.w);r.x=clamp(r.x,0,Math.max(0,sw-r.w));r.y=Math.max(0,r.y);return r});
             packRects(rects,fixedKey,GAP).forEach(function(r){var el=byKey(r.key);if(el){el.style.left=r.x+'px';el.style.top=r.y+'px';el.style.width=r.w+'px'}});
             fitStage();
           }
@@ -1241,8 +1244,9 @@ class MainActivity : Activity() {
           document.getElementById('layoutRestore').addEventListener('click',function(){if(confirm('${tr("Khôi phục vị trí mặc định của các thành phần?", "Reset component positions to default?")}'))resetPositions()});
           document.getElementById('componentRestore').addEventListener('click',restoreComponent);
           document.addEventListener('touchmove',function(e){if((drag||(sd&&sd.active))&&e.cancelable)e.preventDefault()},{passive:false});
-          window.addEventListener('resize',function(){relayout(null)});
-          window.addEventListener('load',function(){relayout(null)});
+          window.addEventListener('resize',function(){if(stage.clientWidth<40)return;relayout(null)});
+          window.addEventListener('load',function(){if(stage.clientWidth>=40)relayout(null)});
+          document.addEventListener('visibilitychange',function(){if(!document.hidden&&isPositioned())applyPositions()});
           function addShortcut(){
             var url=prompt('${tr("Nhập địa chỉ URL (https://...)", "Enter shortcut URL (https://...)")}','https://');
             if(!url)return; url=url.trim(); if(!/^https?:\/\//i.test(url)){alert('${tr("URL phải bắt đầu bằng http:// hoặc https://", "URL must start with http:// or https://")}');return}
