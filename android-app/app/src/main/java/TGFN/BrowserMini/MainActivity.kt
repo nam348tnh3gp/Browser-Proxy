@@ -879,6 +879,17 @@ class MainActivity : Activity() {
                             // Shortcut long-presses are still routed to their own context menu.
                         }
                     }
+                } else if (hitType == WebView.HitTestResult.UNKNOWN_TYPE || hitType == null) {
+                    // With all shortcuts removed, WebView reports a long-press on the empty
+                    // placeholder as UNKNOWN_TYPE. Forward it to the page's empty-state menu.
+                    target.evaluateJavascript(
+                        """(function(){try{
+                            var e=document.querySelector('#grid .empty');
+                            if(!e)return false;
+                            e.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,view:window}));
+                            return true;
+                          }catch(e){return false}})()"""
+                    , null)
                 }
                 // Consume native handling so it cannot replace the TGFN menu with Chromium's menu.
                 return@setOnLongClickListener hitType != WebView.HitTestResult.EDIT_TEXT_TYPE
