@@ -1,6 +1,8 @@
 package TGFN.BrowserMini
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -12,7 +14,9 @@ import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Message
 import android.view.Gravity
 import android.view.MotionEvent
@@ -20,6 +24,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.webkit.JsPromptResult
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import android.webkit.JsResult
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -1519,7 +1525,9 @@ class MainActivity : Activity() {
             if (stroke != null) setStroke(dp(strokeWidth), stroke)
         }
 
-    /** Hand WebView downloads to Android's download service, preserving page cookies. */
+    private var pendingDownload: Array<String?>? = null
+
+    /** Save into the device Downloads folder, not the app's private data directory. */
     private fun enqueueDownload(
         url: String?,
         userAgent: String?,
@@ -1530,17 +1538,48 @@ class MainActivity : Activity() {
             Toast.makeText(this, tr("Liên kết tải xuống không được hỗ trợ", "Unsupported download URL"), Toast.LENGTH_SHORT).show()
             return
         }
+        if (Build.VERSION.SDK_INT < 29 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingDownload = arrayOf(url, userAgent, contentDisposition, mimeType)
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 4101)
+            return
+        }
+        startPublicDownload(url, userAgent, contentDisposition, mimeType)
+    }
 
+    private fun uniqueDownloadName(filename: String): String {
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val dot = filename.lastIndexOf('.')
+        val base = if (dot > 0) filename.substring(0, dot) else filename
+        val ext = if (dot > 0) filename.substring(dot) else ""
+        var candidate = filename
+        var n = 1
+        while (java.io.File(dir, candidate).exists() && n < 100) {
+            candidate = "$base ($n)$ext"
+            n++
+        }
+        return candidate
+    }
+
+    private fun startPublicDownload(
+        url: String,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?
+    ) {
         try {
-            val filename = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
-                .replace(Regex("[/\\\\:*?\"<>|]"), "_")
+            val guessed = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
+                .replace(Regex("[/\\:*?\"<>|]"), "_")
                 .trim()
                 .take(180)
                 .ifBlank { "download" }
+            val filename = uniqueDownloadName(guessed)
             val request = DownloadManager.Request(android.net.Uri.parse(url))
                 .setTitle(filename)
                 .setDescription(url)
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
                 .setAllowedOverMetered(true)
                 .setAllowedOverRoaming(false)
             if (!mimeType.isNullOrBlank()) request.setMimeType(mimeType)
@@ -1548,14 +1587,26 @@ class MainActivity : Activity() {
             android.webkit.CookieManager.getInstance().getCookie(url)
                 ?.takeIf { it.isNotBlank() }
                 ?.let { request.addRequestHeader("Cookie", it) }
-            val id = (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
-            Toast.makeText(this, tr("Đã thêm tải xuống #", "Download queued #") + id, Toast.LENGTH_SHORT).show()
+            (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+            Toast.makeText(this, tr("Đã lưu vào Download: ", "Saved to Download: ") + filename, Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(
                 this,
                 tr("Không thể tải xuống: ", "Could not start download: ") + (e.message ?: "error"),
                 Toast.LENGTH_LONG
             ).show()
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != 4101) return
+        val pending = pendingDownload
+        pendingDownload = null
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED && pending != null) {
+            startPublicDownload(pending[0] ?: return, pending[1], pending[2], pending[3])
+        } else {
+            Toast.makeText(this, tr("Cần quyền lưu tệp để tải vào thư mục Download", "Storage permission is needed to save into Download"), Toast.LENGTH_LONG).show()
         }
     }
 
