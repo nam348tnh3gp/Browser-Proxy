@@ -90,17 +90,53 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    private fun isAdUrl(url: String?): Boolean {
+    private fun pageHost(url: String?): String? {
+        val host = try { java.net.URI(url).host?.lowercase() } catch (_: Exception) { null } ?: return null
+        return host.removePrefix("www.").takeIf { it.isNotBlank() }
+    }
+
+    private fun adblockAllowHosts(): MutableSet<String> =
+        prefs.getStringSet("adblock_allow_hosts", emptySet())?.toMutableSet() ?: mutableSetOf()
+
+    private fun isAdblockAllowed(pageUrl: String?): Boolean {
+        val host = pageHost(pageUrl) ?: return false
+        return adblockAllowHosts().contains(host)
+    }
+
+    private fun isAdUrl(url: String?, pageUrl: String? = null): Boolean {
         if (url.isNullOrBlank()) return false
         if (!prefs.getBoolean("adblock_enabled", true)) return false
+        if (isAdblockAllowed(pageUrl)) return false
         val host = try { java.net.URI(url).host?.lowercase() } catch (_: Exception) { null } ?: return false
         if (adDomains.contains(host)) return true
-        // parent domain match
         val parts = host.split(".")
         for (i in 0 until parts.size - 1) {
             if (adDomains.contains(parts.subList(i, parts.size).joinToString("."))) return true
         }
         return false
+    }
+
+    private fun toggleAdblockForCurrentSite() {
+        val host = pageHost(currentWebView()?.url) ?: run {
+            Toast.makeText(this, tr("Trang này không có tên miền", "This page has no site name"), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val allowed = adblockAllowHosts()
+        val nowAllowed = if (allowed.contains(host)) {
+            allowed.remove(host)
+            false
+        } else {
+            allowed.add(host)
+            true
+        }
+        prefs.edit().putStringSet("adblock_allow_hosts", allowed).apply()
+        Toast.makeText(
+            this,
+            if (nowAllowed) tr("Đã tắt AdBlock trên ", "AdBlock off for ") + host
+            else tr("Đã bật lại AdBlock trên ", "AdBlock on for ") + host,
+            Toast.LENGTH_SHORT
+        ).show()
+        currentWebView()?.reload()
     }
 
     private val tabs = mutableListOf<BrowserTab>()
@@ -528,7 +564,7 @@ class MainActivity : Activity() {
 
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val url = request?.url?.toString()
-                if (isAdUrl(url)) {
+                if (isAdUrl(url, view?.url)) {
                     return WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
                 }
                 fetchViaHttpsProxy(url)?.let { return it }
@@ -965,7 +1001,7 @@ class MainActivity : Activity() {
         .note{text-align:center;color:#80868b;font-size:12px;margin-top:24px}.empty{grid-column:1/-1;text-align:center;padding:22px 8px;color:#80868b;font-size:13px;border:1px dashed #9aa0a6;border-radius:14px}
         @media(max-width:340px){.wrap{padding:7vh 14px 24px}.brand{font-size:29px}.grid{gap:18px 6px}.circle{width:46px;height:46px}.quick a{font-size:11px}}
         </style></head><body><div class="wrap" id="layoutStage"><div class="brand component" id="brand" data-component="brand">TGFN <span>Browser</span></div>
-        <form class="search component" id="search" data-component="search" action="https://www.google.com/search" method="get"><input name="q" placeholder="${tr("Tìm kiếm trên Google", "Search Google")}" autofocus><button class="go" type="submit">${tr("Tìm", "Search")}</button></form>
+        <form class="search component" id="search" data-component="search" action="#" method="get" onsubmit="location.href='${searchTemplate().replace("'", "")}'.replace('{q}', encodeURIComponent(this.q.value));return false"><input name="q" placeholder="${tr("Tìm kiếm trên ", "Search ")}${searchEngineLabel()}" autofocus><button class="go" type="submit">${tr("Tìm", "Search")}</button></form>
         <div id="grid" class="grid component" data-component="grid" aria-label="Shortcuts"></div>
         <div class="quick component" id="quick" data-component="quick">
         <a href="https://tgfn.browser/__bookmarks">${tr("Dấu trang", "Bookmarks")}</a>
@@ -1727,13 +1763,17 @@ class MainActivity : Activity() {
         val adBlockLabel = if (prefs.getBoolean("adblock_enabled", true)) tr("AdBlock: đang bật", "AdBlock: on") else tr("AdBlock: đang tắt", "AdBlock: off")
         val desktopLabel = if (isDesktopModeEnabled()) tr("Phiên bản máy tính: đang bật", "Desktop site: on") else tr("Phiên bản máy tính", "Desktop site")
         val dataSaverLabel = if (isDataSaverEnabled()) "Data Saver: " + tr("bật", "on") else "Data Saver: " + tr("tắt", "off")
+        val siteHost = pageHost(currentWebView()?.url)
+        val siteAdLabel = if (siteHost == null) tr("AdBlock theo trang", "AdBlock for this site")
+            else if (isAdblockAllowed(currentWebView()?.url)) tr("Bật AdBlock trên ", "Turn AdBlock on for ") + siteHost
+            else tr("Tắt AdBlock trên ", "Turn AdBlock off for ") + siteHost
         val items = arrayOf(
             tr("Tab mới", "New tab"), tr("Tab ẩn danh mới", "New incognito tab"), tr("Dịch trang", "Translate page"), tr("Tìm trong trang", "Find in page"), tr("Thu phóng", "Zoom"),
             desktopLabel, tr("Lưu/Bỏ dấu trang", "Add/remove bookmark"), tr("Dấu trang", "Bookmarks"), tr("Lịch sử", "History"),
             tr("Chia sẻ trang", "Share page"), tr("Cài đặt", "Settings"), tr("Đóng tab hiện tại", "Close current tab"), dataSaverLabel,
             tr("Phân tích Data Saver", "Data Saver analytics"), tr("Tải xuống", "Downloads"),
             tr("Quản lý quyền riêng tư", "Privacy and site data"), tr("Chế độ đọc", "Reader mode"),
-            tr("Nhóm tab", "Tab groups"), tr("Thao tác nhanh", "Quick actions"), adBlockLabel,
+            tr("Nhóm tab", "Tab groups"), tr("Thao tác nhanh", "Quick actions"), adBlockLabel, siteAdLabel,
             tr("Tab đã đóng gần đây", "Recently closed tabs")
         )
         android.app.AlertDialog.Builder(this)
@@ -1760,7 +1800,8 @@ class MainActivity : Activity() {
                     17 -> manageTabGroups()
                     18 -> showQuickActions()
                     19 -> toggleAdBlock()
-                    20 -> showRecentlyClosedTabs()
+                    20 -> toggleAdblockForCurrentSite()
+                    21 -> showRecentlyClosedTabs()
                 }
             }
             .show()
@@ -2117,6 +2158,31 @@ class MainActivity : Activity() {
         }
         header.addView(countLabel)
         dialogContent.addView(header)
+        val tabActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(10))
+        }
+        fun actionButton(label: String, click: () -> Unit) = android.widget.Button(this).apply {
+            text = label
+            textSize = 11f
+            setOnClickListener { click() }
+        }
+        tabActions.addView(actionButton(tr("Đóng tab khác", "Close others")) {
+            currentTab()?.let { closeOtherTabs(it) }
+            countLabel.text = tabs.size.toString()
+            renderCards()
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        tabActions.addView(actionButton(tr("Đóng tab đã đọc", "Close read tabs")) {
+            closeReadTabs()
+            countLabel.text = tabs.size.toString()
+            renderCards()
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        tabActions.addView(actionButton(tr("Mở lại", "Restore")) {
+            restoreLastClosedTab()
+            countLabel.text = tabs.size.toString()
+            renderCards()
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        dialogContent.addView(tabActions)
 
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -2323,6 +2389,18 @@ class MainActivity : Activity() {
         closeTabAt(selectedTab)
         if (tabs.isEmpty()) createTab(null, true)
         updateTabButton()
+    }
+
+    private fun closeReadTabs() {
+        val closing = tabs.indices.filter { index ->
+            index != selectedTab && !tabs[index].isNewTab && (tabs[index].webView.url ?: tabs[index].url).startsWith("http")
+        }.sortedDescending()
+        if (closing.isEmpty()) {
+            Toast.makeText(this, tr("Không có tab đã đọc để đóng", "No read tabs to close"), Toast.LENGTH_SHORT).show()
+            return
+        }
+        closing.forEach { closeTabAt(it) }
+        Toast.makeText(this, tr("Đã đóng tab đã đọc", "Closed read tabs"), Toast.LENGTH_SHORT).show()
     }
 
     private fun isDesktopModeEnabled(): Boolean = prefs.getBoolean("desktop_mode", false)
@@ -2976,6 +3054,11 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             isChecked = isDesktopModeEnabled()
         }
         content.addView(desktop)
+        val searchEngine = android.widget.Button(this).apply {
+            text = tr("Công cụ tìm kiếm: ", "Search engine: ") + searchEngineLabel()
+            setOnClickListener { chooseSearchEngine(); text = tr("Công cụ tìm kiếm: ", "Search engine: ") + searchEngineLabel() }
+        }
+        content.addView(searchEngine)
         val adblock = android.widget.CheckBox(this).apply {
             text = tr("Chặn quảng cáo (AdBlock)", "Block ads (AdBlock)")
             isChecked = prefs.getBoolean("adblock_enabled", true)
@@ -3474,11 +3557,67 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         }
     }
 
+    private fun searchEngineId(): String = prefs.getString("search_engine", "google") ?: "google"
+
+    private fun searchEngineLabel(): String = when (searchEngineId()) {
+        "ddg" -> "DuckDuckGo"
+        "bing" -> "Bing"
+        "custom" -> tr("Tùy chọn", "Custom")
+        else -> "Google"
+    }
+
+    private fun searchTemplate(): String {
+        val custom = prefs.getString("search_engine_url", "")?.trim().orEmpty()
+        return when (searchEngineId()) {
+            "ddg" -> "https://duckduckgo.com/?q={q}"
+            "bing" -> "https://www.bing.com/search?q={q}"
+            "custom" -> if (custom.contains("{q}")) custom else "https://www.google.com/search?q={q}"
+            else -> "https://www.google.com/search?q={q}"
+        }
+    }
+
+    private fun searchUrl(query: String): String =
+        searchTemplate().replace("{q}", java.net.URLEncoder.encode(query, "UTF-8"))
+
+    private fun chooseSearchEngine() {
+        val ids = arrayOf("google", "ddg", "bing", "custom")
+        val labels = arrayOf("Google", "DuckDuckGo", "Bing", tr("URL tùy chọn ({q})", "Custom URL ({q})"))
+        android.app.AlertDialog.Builder(this)
+            .setTitle(tr("Công cụ tìm kiếm", "Search engine"))
+            .setItems(labels) { _, which ->
+                val id = ids[which]
+                if (id != "custom") {
+                    prefs.edit().putString("search_engine", id).apply()
+                    Toast.makeText(this, labels[which], Toast.LENGTH_SHORT).show()
+                } else {
+                    val input = android.widget.EditText(this).apply {
+                        setText(prefs.getString("search_engine_url", "https://www.google.com/search?q={q}"))
+                        hint = "https://example.com/search?q={q}"
+                    }
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle(tr("URL tìm kiếm, dùng {q}", "Search URL, use {q}"))
+                        .setView(input)
+                        .setPositiveButton(android.R.string.ok) { _, _ ->
+                            val value = input.text.toString().trim()
+                            if (!value.contains("{q}") || normalizeHttpUrl(value.replace("{q}", "test")) == null) {
+                                Toast.makeText(this, tr("URL phải là HTTP/HTTPS và có {q}", "URL must be HTTP/HTTPS and contain {q}"), Toast.LENGTH_LONG).show()
+                            } else {
+                                prefs.edit().putString("search_engine", "custom").putString("search_engine_url", value).apply()
+                            }
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     private fun navigate() {
         val input = address.text.toString().trim()
         if (input.isBlank()) return
         val target = if (input.contains("://")) input else if (input.contains(" ") || !input.contains(".")) {
-            "https://www.google.com/search?q=" + java.net.URLEncoder.encode(input, "UTF-8")
+            searchUrl(input)
         } else "https://$input"
         val normalized = normalizeHttpUrl(target)
         if (normalized == null) {
