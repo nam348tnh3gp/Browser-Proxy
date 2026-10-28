@@ -875,16 +875,9 @@ class MainActivity : Activity() {
                                 return false;
                               }catch(e){return false}})()"""
                         ) { handled ->
-                            // Favicon images belong to shortcut tiles; other images retain the image menu.
-                            if (handled != "true" &&
-                                (hitType == WebView.HitTestResult.IMAGE_TYPE ||
-                                 hitType == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE)) {
-                                runOnUiThread { showImageContextMenu(extra, target) }
-                            }
+                            // Do not show the image menu on the built-in new-tab page.
+                            // Shortcut long-presses are still routed to their own context menu.
                         }
-                    } else if (hitType == WebView.HitTestResult.IMAGE_TYPE ||
-                        hitType == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
-                        showImageContextMenu(extra, target)
                     }
                 }
                 // Consume native handling so it cannot replace the TGFN menu with Chromium's menu.
