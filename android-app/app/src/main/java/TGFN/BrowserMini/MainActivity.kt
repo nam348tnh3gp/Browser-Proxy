@@ -1010,7 +1010,7 @@ class MainActivity : Activity() {
         </div><div class="note component" id="note" data-component="note">${tr("Nhấn giữ lối tắt để quản lý; bật tùy chỉnh để kéo thả thành phần", "Hold a shortcut to manage it; enable layout editing to drag components")}
         <div class="layout-controls"><button type="button" id="layoutToggle">${tr("Tùy chỉnh bố cục", "Customize layout")}</button><button type="button" id="layoutRestore">${tr("Khôi phục bố cục", "Reset layout")}</button><button type="button" id="componentRestore">${tr("Thêm thành phần", "Restore component")}</button></div></div></div>
         <script>
-        (function(){
+        (function(){try{
           var KEY='tgfn_shortcuts_v1', LAYOUT='tgfn_shortcuts_layout_v1';
           var defaults=[
             {title:'Google',url:'https://www.google.com'},
@@ -1022,6 +1022,7 @@ class MainActivity : Activity() {
           ];
           var grid=document.getElementById('grid'), layout={value:'default'}, dragIndex=-1;
           var stage=document.getElementById('layoutStage'), editComponents=false, lastDragEnd=0, drag=null, sd=null, lastShortcutDrag=0, seq=0;
+          if(!grid||!stage)return;
           var POSITIONS='tgfn_newtab_component_positions_v1', HIDDEN='tgfn_newtab_hidden_components_v1';
           var GAP=12, SNAP=10, LIFT_MS=220;
           var DISABLE_TEXT_SELECTION_DURING_DRAG=true;
@@ -1162,12 +1163,12 @@ class MainActivity : Activity() {
               vis.forEach(function(el){if(el.style.position!=='absolute')placeAtBottom(el)});
             }
             editComponents=true;stage.classList.add('layout-editing');document.body.classList.add('tgfn-dragging');
-            document.getElementById('layoutToggle').textContent='${tr("Xong", "Done")}';
+            var doneBtn=document.getElementById('layoutToggle');if(doneBtn)doneBtn.textContent='${tr("Xong", "Done")}';
             render();relayout(null);persist();
           }
           function exitComponentEdit(){
             editComponents=false;stage.classList.remove('layout-editing');document.body.classList.remove('tgfn-dragging');
-            document.getElementById('layoutToggle').textContent='${tr("Tùy chỉnh bố cục", "Customize layout")}';
+            var editBtn=document.getElementById('layoutToggle');if(editBtn)editBtn.textContent='${tr("Tùy chỉnh bố cục", "Customize layout")}';
             visibleComponents().forEach(function(el){el.style.transform=''});
             persist();render();scheduleApply();
           }
@@ -1326,9 +1327,9 @@ class MainActivity : Activity() {
           var items=read(KEY,null); if(!Array.isArray(items)) items=defaults.slice();
           items=items.filter(function(x){return x&&typeof x.url==='string'&&/^https?:\/\//i.test(x.url)}).map(function(x){return {title:String(x.title||x.url),url:x.url}});
           layout.value=read(LAYOUT,'default')==='custom'?'custom':'default';
-          document.getElementById('layoutToggle').addEventListener('click',function(){if(editComponents)exitComponentEdit();else enterComponentEdit()});
-          document.getElementById('layoutRestore').addEventListener('click',function(){if(confirm('${tr("Khôi phục vị trí mặc định của các thành phần?", "Reset component positions to default?")}'))resetPositions()});
-          document.getElementById('componentRestore').addEventListener('click',restoreComponent);
+          var layoutToggle=document.getElementById('layoutToggle');if(layoutToggle)layoutToggle.addEventListener('click',function(){if(editComponents)exitComponentEdit();else enterComponentEdit()});
+          var layoutRestore=document.getElementById('layoutRestore');if(layoutRestore)layoutRestore.addEventListener('click',function(){if(confirm('${tr("Khôi phục vị trí mặc định của các thành phần?", "Reset component positions to default?")}'))resetPositions()});
+          var componentRestore=document.getElementById('componentRestore');if(componentRestore)componentRestore.addEventListener('click',restoreComponent);
           document.addEventListener('touchmove',function(e){if((drag||(sd&&sd.active))&&e.cancelable)e.preventDefault()},{passive:false});
           window.addEventListener('resize',function(){if(editComponents){if(stage.clientWidth>=40)relayout(null)}else scheduleApply()});
           window.addEventListener('load',scheduleApply);
@@ -1368,6 +1369,7 @@ class MainActivity : Activity() {
           grid.addEventListener('contextmenu',function(e){if(editComponents)return;if(e.target===grid||e.target.classList.contains('empty')){e.preventDefault();var action=prompt(['${tr("Tùy chỉnh tab mới", "Customize new tab")}','1 = ${tr("Thêm lối tắt", "Add shortcut")}','2 = ${tr("Đổi kiểu sắp xếp shortcut", "Toggle shortcut reorder")}','3 = ${tr("Xóa tất cả lối tắt", "Remove all shortcuts")}','4 = ${tr("Ẩn cụm shortcut", "Hide shortcut grid")}'].join('\n'),'1');if(action==='1')addShortcut();else if(action==='2'){layout.value=layout.value==='custom'?'default':'custom';save();render()}else if(action==='3'&&confirm('${tr("Xóa tất cả lối tắt?", "Remove all shortcuts?")}')){items=[];save();render()}else if(action==='4'){var hidden=readObject(HIDDEN);hidden.grid=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden()}}});
           applyHidden();components().forEach(moveComponent);
           render();scheduleApply();
+        }catch(err){try{console.log('newtab', err&&err.message)}catch(e){}}
         })();
         </script></body></html>
     """.trimIndent()
