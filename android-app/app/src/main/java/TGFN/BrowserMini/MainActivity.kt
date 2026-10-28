@@ -927,7 +927,7 @@ class MainActivity : Activity() {
         body.tgfn-dragging,body.tgfn-dragging *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;-webkit-tap-highlight-color:transparent!important}
         body.tgfn-dragging input,body.tgfn-dragging textarea{-webkit-user-select:text!important;user-select:text!important}
         .wrap{max-width:560px;margin:0 auto;padding:10vh 22px 32px;position:relative;min-height:100vh}.brand{text-align:center;font-size:34px;font-weight:700;letter-spacing:-1.5px;color:#1a73e8;margin-bottom:24px}.brand span{color:#188038}
-        .component{max-width:100%}.wrap.layout-editing .component{outline:1px dashed #1a73e8;outline-offset:4px;touch-action:none;cursor:move}.wrap.layout-editing .component.dragging-component{z-index:50;opacity:.92;box-shadow:0 4px 18px #0003}.component[hidden]{display:none!important}.wrap.positioned .component{margin:0!important}.wrap.layout-editing .component a,.wrap.layout-editing .search input,.wrap.layout-editing .search .go{pointer-events:none}.wrap.layout-editing .component{transition:left .2s cubic-bezier(.2,.8,.2,1),top .2s cubic-bezier(.2,.8,.2,1);-webkit-tap-highlight-color:transparent}.wrap.layout-editing .component.dragging-component{transition:none;will-change:transform;box-shadow:0 10px 26px #0004;outline-color:#1a73e8;outline-style:solid}.grid.reorder .circle{box-shadow:0 0 0 2px #1a73e855}.item.lifting{z-index:60;opacity:.97;filter:drop-shadow(0 8px 14px #0005);will-change:transform;transition:none!important}@media(prefers-reduced-motion:reduce){.wrap.layout-editing .component{transition:none}}
+        .component{max-width:100%}.wrap.layout-editing .component{outline:1px dashed #1a73e8;outline-offset:4px;touch-action:none;cursor:move}.wrap.layout-editing .component.dragging-component{z-index:50;opacity:.92;box-shadow:0 4px 18px #0003}.component[hidden]{display:none!important}.wrap.positioned .component{position:absolute;margin:0!important}.wrap.layout-editing .component a,.wrap.layout-editing .search input,.wrap.layout-editing .search .go{pointer-events:none}.wrap.layout-editing .component{transition:left .2s cubic-bezier(.2,.8,.2,1),top .2s cubic-bezier(.2,.8,.2,1);-webkit-tap-highlight-color:transparent}.wrap.layout-editing .component.dragging-component{transition:none;will-change:transform;box-shadow:0 10px 26px #0004;outline-color:#1a73e8;outline-style:solid}.grid.reorder .circle{box-shadow:0 0 0 2px #1a73e855}.item.lifting{z-index:60;opacity:.97;filter:drop-shadow(0 8px 14px #0005);will-change:transform;transition:none!important}@media(prefers-reduced-motion:reduce){.wrap.layout-editing .component{transition:none}}
         .layout-controls{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:8px 0}.layout-controls button{border:1px solid #dadce0;border-radius:18px;padding:7px 10px;background:#f8f9fa;color:inherit;font-size:12px}
         .search{display:flex;gap:10px;border:1px solid #dadce0;border-radius:28px;padding:7px 14px;box-shadow:0 1px 4px #0000000d}
         input{border:0;outline:0;flex:1;min-width:0;font-size:16px;background:transparent;color:${if (darkMode) "#e8eaed" else "#202124"}}.go,.tool{border:0;background:#1a73e8;color:#fff;border-radius:20px;padding:9px 14px;font-size:13px}
@@ -1036,12 +1036,15 @@ class MainActivity : Activity() {
           /* Tinh lai toan bo bo cuc: cat theo be rong man hinh va tach cac khoi dang chong nhau. */
           function relayout(fixedKey){
             if(!isPositioned())return;
-            var sw=stage.clientWidth,cb=contentBox();
+            var sw=stage.clientWidth;
             /* WebView fires resize with width 0 while the page is hidden or not laid out.
                Clamping then shoves every box to the left corner. Skip until width is real. */
             if(sw<40)return;
+            var pos=readObject(POSITIONS);
+            if(!editComponents&&Object.keys(pos).length){applyPositions();return}
+            var cb=contentBox();
             var rects=visibleComponents().map(function(el){var r=measureComp(el);r.w=Math.min(Math.max(r.w,1),cb.w);r.x=clamp(r.x,0,Math.max(0,sw-r.w));r.y=Math.max(0,r.y);return r});
-            packRects(rects,fixedKey,GAP).forEach(function(r){var el=byKey(r.key);if(el){el.style.left=r.x+'px';el.style.top=r.y+'px';el.style.width=r.w+'px'}});
+            packRects(rects,fixedKey,GAP).forEach(function(r){var el=byKey(r.key);if(el){el.style.left=r.x+'px';el.style.top=r.y+'px';el.style.width=r.w+'px';el.style.transform=''}});
             fitStage();
           }
           function persist(){
@@ -1053,16 +1056,19 @@ class MainActivity : Activity() {
           function applyPositions(){
             var pos=readObject(POSITIONS);
             if(!Object.keys(pos).length)return;
-            var sw=stage.clientWidth,cb=contentBox(),missing=[];
+            var sw=stage.clientWidth;
+            if(sw<40)return;
+            var cb=contentBox(),missing=[];
             stage.classList.add('positioned');
             visibleComponents().forEach(function(el){
               var p=pos[el.dataset.component];
+              el.style.transform='';
               if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)){missing.push(el);return}
               var w=(Number.isFinite(p.w)&&p.w>0)?Math.min(p.w,cb.w):cb.w;
-              placeComp(el,clamp(p.x,0,sw-w),Math.max(0,p.y),w);
+              placeComp(el,clamp(p.x,0,Math.max(0,sw-w)),Math.max(0,p.y),w);
             });
             missing.forEach(placeAtBottom);
-            relayout(null);
+            fitStage();
           }
           function enterComponentEdit(){
             var vis=visibleComponents();
@@ -1083,7 +1089,8 @@ class MainActivity : Activity() {
           function exitComponentEdit(){
             editComponents=false;stage.classList.remove('layout-editing');document.body.classList.remove('tgfn-dragging');
             document.getElementById('layoutToggle').textContent='${tr("Tùy chỉnh bố cục", "Customize layout")}';
-            render();relayout(null);persist();
+            visibleComponents().forEach(function(el){el.style.transform=''});
+            persist();render();applyPositions();
           }
           function resetPositions(){
             try{localStorage.removeItem(POSITIONS)}catch(e){}
@@ -1244,9 +1251,10 @@ class MainActivity : Activity() {
           document.getElementById('layoutRestore').addEventListener('click',function(){if(confirm('${tr("Khôi phục vị trí mặc định của các thành phần?", "Reset component positions to default?")}'))resetPositions()});
           document.getElementById('componentRestore').addEventListener('click',restoreComponent);
           document.addEventListener('touchmove',function(e){if((drag||(sd&&sd.active))&&e.cancelable)e.preventDefault()},{passive:false});
-          window.addEventListener('resize',function(){if(stage.clientWidth<40)return;relayout(null)});
-          window.addEventListener('load',function(){if(stage.clientWidth>=40)relayout(null)});
-          document.addEventListener('visibilitychange',function(){if(!document.hidden&&isPositioned())applyPositions()});
+          window.addEventListener('resize',function(){if(stage.clientWidth<40)return;if(editComponents)relayout(null);else applyPositions()});
+          window.addEventListener('load',function(){if(stage.clientWidth>=40)applyPositions()});
+          document.addEventListener('visibilitychange',function(){if(!document.hidden)applyPositions()});
+          window.addEventListener('pageshow',function(){applyPositions()});
           function addShortcut(){
             var url=prompt('${tr("Nhập địa chỉ URL (https://...)", "Enter shortcut URL (https://...)")}','https://');
             if(!url)return; url=url.trim(); if(!/^https?:\/\//i.test(url)){alert('${tr("URL phải bắt đầu bằng http:// hoặc https://", "URL must start with http:// or https://")}');return}
