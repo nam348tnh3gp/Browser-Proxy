@@ -53,7 +53,6 @@ class MainActivity : Activity() {
     private data class BrowserTab(val webView: WebView, var title: String = "Tab mới", var url: String = "", var isNewTab: Boolean = false, var group: String = "Default", var pendingRestoreUrl: String? = null, var favicon: android.graphics.Bitmap? = null)
     private data class ClosedTab(val title: String, val url: String)
 
-
     private val adDomains = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val hostsUrl = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
 
@@ -1611,6 +1610,21 @@ class MainActivity : Activity() {
         return candidate
     }
 
+    /** Remember which downloads belong to this browser so we only show our own files. */
+    private fun rememberBrowserDownloadId(id: Long) {
+        if (id <= 0L) return
+        val ids = (prefs.getStringSet("browser_download_ids", emptySet()) ?: emptySet()).toMutableSet()
+        ids.add(id.toString())
+        prefs.edit().putStringSet("browser_download_ids", ids).apply()
+    }
+
+    /** Newest first; cap so DownloadManager.query() IN-clause stays reasonable. */
+    private fun browserDownloadIds(): List<Long> =
+        (prefs.getStringSet("browser_download_ids", emptySet()) ?: emptySet())
+            .mapNotNull { it.toLongOrNull() }
+            .sortedDescending()
+            .take(200)
+
     private fun startPublicDownload(
         url: String,
         userAgent: String?,
@@ -1636,7 +1650,8 @@ class MainActivity : Activity() {
             android.webkit.CookieManager.getInstance().getCookie(url)
                 ?.takeIf { it.isNotBlank() }
                 ?.let { request.addRequestHeader("Cookie", it) }
-            (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+            val downloadId = (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+            rememberBrowserDownloadId(downloadId)
             Toast.makeText(this, tr("Đã lưu vào Download: ", "Saved to Download: ") + filename, Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(
@@ -1668,28 +1683,128 @@ class MainActivity : Activity() {
         return String.format(java.util.Locale.ROOT, "%.1f %s", value, units[unit])
     }
 
+    private data class DownloadRow(val status: Int, val title: String?, val mime: String?)
+
+    /** DownloadManager often reports application/octet-stream; use the file extension so other apps can match it. */
+    private fun resolveDownloadMime(reported: String?, name: String?): String {
+        val generic = reported.isNullOrBlank() ||
+            reported.equals("application/octet-stream", true) ||
+            reported.equals("binary/octet-stream", true) ||
+            reported == "*/*"
+        if (!generic) return reported ?: "*/*"
+        val ext = name?.substringAfterLast('.', "")?.lowercase().orEmpty()
+        val fromExt = if (ext.isNotEmpty()) android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) else null
+        return fromExt ?: reported?.takeIf { it.isNotBlank() } ?: "*/*"
+    }
+
+    /** True only when the provider says the file is really gone (other failures are treated as "unknown"). */
+    private fun uriFileMissing(uri: Uri): Boolean = try {
+        contentResolver.openAssetFileDescriptor(uri, "r")?.close()
+        false
+    } catch (_: java.io.FileNotFoundException) {
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun isDownloadFileMissing(manager: DownloadManager, id: Long): Boolean {
+        val uri = (try { manager.getUriForDownloadedFile(id) } catch (_: Exception) { null }) ?: return false
+        return uriFileMissing(uri)
+    }
+
+    /**
+     * Open a finished download with another app.
+     * DownloadManager.COLUMN_LOCAL_URI is a file:// URI; handing it to another app throws FileUriExposedException
+     * on Android 7+, which the old code swallowed and reported as "no app can open this file". Use the
+     * DownloadProvider content:// URI with a read grant instead, and report the real reason when it fails.
+     */
+    private fun openDownloadedFile(manager: DownloadManager, id: Long) {
+        val row = try {
+            manager.query(DownloadManager.Query().setFilterById(id))?.use { c ->
+                if (!c.moveToFirst()) null else DownloadRow(
+                    status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)),
+                    title = c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE)),
+                    mime = c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_MEDIA_TYPE))
+                )
+            }
+        } catch (_: Exception) { null }
+        if (row == null || row.status != DownloadManager.STATUS_SUCCESSFUL) {
+            Toast.makeText(this, tr("Không đọc được thông tin tệp", "Could not read file info"), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val name = row.title ?: "download"
+        val uri: Uri? = try { manager.getUriForDownloadedFile(id) } catch (_: Exception) { null }
+        if (uri == null || uriFileMissing(uri)) {
+            Toast.makeText(this, tr("Tệp không còn tồn tại (có thể đã bị xóa)", "The file no longer exists (it may have been deleted)"), Toast.LENGTH_LONG).show()
+            return
+        }
+        val fileUri: Uri = uri
+        val mime = resolveDownloadMime(row.mime, name)
+
+        fun viewIntent(type: String) = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(fileUri, type)
+            clipData = ClipData.newRawUri(name, fileUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        try {
+            startActivity(viewIntent(mime))
+        } catch (_: android.content.ActivityNotFoundException) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle(tr("Không tìm thấy ứng dụng mở tệp", "No app can open this file"))
+                .setMessage(
+                    tr("Loại tệp: ", "File type: ") + mime + "\n" +
+                        tr("Cài ứng dụng đọc được loại tệp này, hoặc chọn ứng dụng khác.", "Install an app that supports this type, or pick another app.")
+                )
+                .setPositiveButton(tr("Chọn ứng dụng khác", "Choose another app")) { _, _ ->
+                    try {
+                        startActivity(Intent.createChooser(viewIntent("*/*"), name).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                    } catch (_: Exception) {
+                        Toast.makeText(this, tr("Không mở được tệp", "Could not open the file"), Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNeutralButton(tr("Mở trình quản lý hệ thống", "System download manager")) { _, _ ->
+                    try { startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)) } catch (_: Exception) {}
+                }
+                .setNegativeButton(tr("Đóng", "Close"), null)
+                .show()
+        } catch (_: SecurityException) {
+            Toast.makeText(this, tr("Ứng dụng được chọn không có quyền đọc tệp này", "The chosen app is not allowed to read this file"), Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, tr("Không mở được tệp: ", "Could not open the file: ") + (e.message ?: ""), Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun openDownloads() {
         val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+        val ownIds = browserDownloadIds()
+        if (ownIds.isEmpty()) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle(tr("Tải xuống", "Downloads"))
+                .setMessage(tr("Chưa có tệp nào do trình duyệt này tải xuống.", "No downloads from this browser yet."))
+                .setNeutralButton(tr("Mở trình quản lý hệ thống", "System download manager")) { _, _ ->
+                    try { startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)) } catch (_: Exception) { }
+                }
+                .setPositiveButton(tr("Đóng", "Close"), null)
+                .show()
+            return
+        }
         val rows = mutableListOf<Pair<Long, String>>()
         try {
-            manager.query(DownloadManager.Query().setFilterByStatus(
-                DownloadManager.STATUS_PENDING or DownloadManager.STATUS_RUNNING or
-                    DownloadManager.STATUS_PAUSED or DownloadManager.STATUS_SUCCESSFUL or
-                    DownloadManager.STATUS_FAILED
-            )).use { cursor ->
+            manager.query(DownloadManager.Query().setFilterById(*ownIds.toLongArray()))?.use { cursor ->
                 val idCol = cursor.getColumnIndex(DownloadManager.COLUMN_ID)
                 val titleCol = cursor.getColumnIndex(DownloadManager.COLUMN_TITLE)
                 val statusCol = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
                 val downloadedCol = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
                 val totalCol = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
-                while (cursor.moveToNext() && rows.size < 30) {
+                while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
                     val title = cursor.getString(titleCol) ?: ("Download #" + id)
                     val state = when (cursor.getInt(statusCol)) {
                         DownloadManager.STATUS_PENDING -> tr("Đang chờ", "Pending")
                         DownloadManager.STATUS_RUNNING -> tr("Đang tải", "Downloading")
                         DownloadManager.STATUS_PAUSED -> tr("Tạm dừng", "Paused")
-                        DownloadManager.STATUS_SUCCESSFUL -> tr("Hoàn tất", "Complete")
+                        DownloadManager.STATUS_SUCCESSFUL -> if (isDownloadFileMissing(manager, id)) tr("Tệp đã bị xóa", "File deleted") else tr("Hoàn tất", "Complete")
                         DownloadManager.STATUS_FAILED -> tr("Thất bại", "Failed")
                         else -> tr("Không rõ", "Unknown")
                     }
@@ -1704,7 +1819,8 @@ class MainActivity : Activity() {
             Toast.makeText(this, tr("Không đọc được danh sách tải xuống", "Could not read downloads"), Toast.LENGTH_SHORT).show()
             return
         }
-        if (rows.isEmpty()) {
+        val sortedRows = rows.sortedByDescending { it.first }.take(30)
+        if (sortedRows.isEmpty()) {
             android.app.AlertDialog.Builder(this)
                 .setTitle(tr("Tải xuống", "Downloads"))
                 .setMessage(tr("Chưa có tệp tải xuống.", "No downloads yet."))
@@ -1714,41 +1830,24 @@ class MainActivity : Activity() {
         }
         android.app.AlertDialog.Builder(this)
             .setTitle(tr("Tải xuống gần đây", "Recent downloads"))
-            .setItems(rows.map { it.second }.toTypedArray()) { _, which ->
-                val id = rows[which].first
-                val cursor = manager.query(DownloadManager.Query().setFilterById(id))
-                cursor.use {
-                    if (!it.moveToFirst()) return@use
-                    val statusCol = it.getColumnIndex(DownloadManager.COLUMN_STATUS)
-                    if (it.getInt(statusCol) == DownloadManager.STATUS_SUCCESSFUL) {
-                        try {
-                            val uriCol = it.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
-                            val localUri = it.getString(uriCol)
-                            if (!localUri.isNullOrBlank()) {
-                                val mimeCol = it.getColumnIndex(DownloadManager.COLUMN_MEDIA_TYPE)
-                                val mime = it.getString(mimeCol) ?: "*/*"
-                                startActivity(Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(android.net.Uri.parse(localUri), mime)
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                })
-                            }
-                        } catch (_: Exception) {
-                            Toast.makeText(this, tr("Không tìm thấy ứng dụng mở tệp", "No app can open this file"), Toast.LENGTH_SHORT).show()
-                        }
+            .setItems(sortedRows.map { it.second }.toTypedArray()) { _, which ->
+                val id = sortedRows[which].first
+                manager.query(DownloadManager.Query().setFilterById(id))?.use { c ->
+                    if (!c.moveToFirst()) return@use
+                    val statusCol = c.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    val status = c.getInt(statusCol)
+                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                        openDownloadedFile(manager, id)
+                    } else if (status == DownloadManager.STATUS_FAILED) {
+                        val uriCol = c.getColumnIndex(DownloadManager.COLUMN_URI)
+                        val failedUrl = if (uriCol >= 0) c.getString(uriCol) else null
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle(tr("Tải xuống thất bại", "Download failed"))
+                            .setMessage(tr("Kiểm tra kết nối rồi thử tải lại.", "Check your connection, then retry the download."))
+                            .setPositiveButton(tr("Thử lại", "Retry")) { _, _ -> enqueueDownload(failedUrl, null, null, null) }
+                            .setNegativeButton(tr("Đóng", "Close"), null).show()
                     } else {
-                        if (it.getInt(statusCol) == DownloadManager.STATUS_FAILED) {
-                            val uriCol = it.getColumnIndex(DownloadManager.COLUMN_URI)
-                            val failedUrl = if (uriCol >= 0) it.getString(uriCol) else null
-                            val titleCol = it.getColumnIndex(DownloadManager.COLUMN_TITLE)
-                            val failedTitle = if (titleCol >= 0) it.getString(titleCol) else "download"
-                            android.app.AlertDialog.Builder(this)
-                                .setTitle(tr("Tải xuống thất bại", "Download failed"))
-                                .setMessage(tr("Kiểm tra kết nối rồi thử tải lại.", "Check your connection, then retry the download."))
-                                .setPositiveButton(tr("Thử lại", "Retry")) { _, _ -> enqueueDownload(failedUrl, null, failedTitle, null) }
-                                .setNegativeButton(tr("Đóng", "Close"), null).show()
-                        } else {
-                            Toast.makeText(this, tr("Tệp vẫn đang tải. Mở mục này lại sau khi hoàn tất.", "This download is still in progress. Open it after completion."), Toast.LENGTH_LONG).show()
-                        }
+                        Toast.makeText(this, tr("Tệp vẫn đang tải. Mở mục này lại sau khi hoàn tất.", "This download is still in progress. Open it after completion."), Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -3763,4 +3862,3 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         super.onDestroy()
     }
 }
-
