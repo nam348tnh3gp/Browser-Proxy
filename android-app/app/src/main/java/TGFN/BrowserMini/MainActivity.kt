@@ -851,10 +851,44 @@ class MainActivity : Activity() {
         web.setOnLongClickListener { view ->
             val target = view as? WebView ?: return@setOnLongClickListener false
             if (isNewTabPage(tab, target)) {
-                // Built-in new-tab page only: never show the hold menu. Shortcut favicons are <img> inside
-                // <a>, so WebView reports IMAGE / SRC_IMAGE_ANCHOR for them and the image menu would open.
-                // Editable text keeps its native behaviour; every other (website) tab is handled below as usual.
-                return@setOnLongClickListener target.hitTestResult?.type != WebView.HitTestResult.EDIT_TEXT_TYPE
+                // Keep the built-in page free of Chromium's native menu, but route long-presses
+                // to the browser's own shortcut/image actions instead of swallowing them.
+                val hit = target.hitTestResult
+                val hitType = hit?.type
+                val extra = hit?.extra
+                if (hitType == WebView.HitTestResult.ANCHOR_TYPE ||
+                    hitType == WebView.HitTestResult.SRC_ANCHOR_TYPE ||
+                    hitType == WebView.HitTestResult.IMAGE_TYPE ||
+                    hitType == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+                    if (!extra.isNullOrBlank()) {
+                        val quoted = org.json.JSONObject.quote(extra)
+                        target.evaluateJavascript(
+                            """(function(){try{
+                                var u=$quoted,as=document.querySelectorAll('#grid a.item');
+                                for(var i=0;i<as.length;i++){
+                                  var a=as[i],img=a.querySelector('img');
+                                  if(a.href===u||(img&&img.src===u)){
+                                    a.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,view:window}));
+                                    return true;
+                                  }
+                                }
+                                return false;
+                              }catch(e){return false}})()"""
+                        ) { handled ->
+                            // Favicon images belong to shortcut tiles; other images retain the image menu.
+                            if (handled != "true" &&
+                                (hitType == WebView.HitTestResult.IMAGE_TYPE ||
+                                 hitType == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE)) {
+                                runOnUiThread { showImageContextMenu(extra, target) }
+                            }
+                        }
+                    } else if (hitType == WebView.HitTestResult.IMAGE_TYPE ||
+                        hitType == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+                        showImageContextMenu(extra, target)
+                    }
+                }
+                // Consume native handling so it cannot replace the TGFN menu with Chromium's menu.
+                return@setOnLongClickListener hitType != WebView.HitTestResult.EDIT_TEXT_TYPE
             }
             val hit = target.hitTestResult ?: return@setOnLongClickListener false
             when (hit.type) {
