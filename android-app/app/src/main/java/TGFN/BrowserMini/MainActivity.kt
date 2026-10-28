@@ -1053,11 +1053,13 @@ class MainActivity : Activity() {
             visibleComponents().forEach(function(el){pos[el.dataset.component]={x:Math.round(parseFloat(el.style.left)||0),y:Math.round(parseFloat(el.style.top)||0),w:Math.round(el.offsetWidth)}});
             savePositions(pos);
           }
+          var applyTimer=0, applyTries=0, lastAppliedWidth=0;
           function applyPositions(){
             var pos=readObject(POSITIONS);
-            if(!Object.keys(pos).length)return;
+            if(!Object.keys(pos).length)return false;
             var sw=stage.clientWidth;
-            if(sw<40)return;
+            /* First tab after the process is killed can run before WebView has its real width. */
+            if(sw<40)return false;
             var cb=contentBox(),missing=[];
             stage.classList.add('positioned');
             visibleComponents().forEach(function(el){
@@ -1069,6 +1071,21 @@ class MainActivity : Activity() {
             });
             missing.forEach(placeAtBottom);
             fitStage();
+            lastAppliedWidth=sw;
+            return true;
+          }
+          function scheduleApply(){
+            if(editComponents)return;
+            if(applyTimer){clearTimeout(applyTimer);applyTimer=0}
+            applyTries=0;
+            function attempt(){
+              applyTimer=0;
+              var sw=stage.clientWidth;
+              if(applyPositions()&&Math.abs(sw-lastAppliedWidth)<2&&applyTries>0)return;
+              if(applyTries++>24)return;
+              applyTimer=setTimeout(attempt, applyTries<4?50:120);
+            }
+            attempt();
           }
           function enterComponentEdit(){
             var vis=visibleComponents();
@@ -1090,7 +1107,7 @@ class MainActivity : Activity() {
             editComponents=false;stage.classList.remove('layout-editing');document.body.classList.remove('tgfn-dragging');
             document.getElementById('layoutToggle').textContent='${tr("Tùy chỉnh bố cục", "Customize layout")}';
             visibleComponents().forEach(function(el){el.style.transform=''});
-            persist();render();applyPositions();
+            persist();render();scheduleApply();
           }
           function resetPositions(){
             try{localStorage.removeItem(POSITIONS)}catch(e){}
@@ -1251,10 +1268,11 @@ class MainActivity : Activity() {
           document.getElementById('layoutRestore').addEventListener('click',function(){if(confirm('${tr("Khôi phục vị trí mặc định của các thành phần?", "Reset component positions to default?")}'))resetPositions()});
           document.getElementById('componentRestore').addEventListener('click',restoreComponent);
           document.addEventListener('touchmove',function(e){if((drag||(sd&&sd.active))&&e.cancelable)e.preventDefault()},{passive:false});
-          window.addEventListener('resize',function(){if(stage.clientWidth<40)return;if(editComponents)relayout(null);else applyPositions()});
-          window.addEventListener('load',function(){if(stage.clientWidth>=40)applyPositions()});
-          document.addEventListener('visibilitychange',function(){if(!document.hidden)applyPositions()});
-          window.addEventListener('pageshow',function(){applyPositions()});
+          window.addEventListener('resize',function(){if(editComponents){if(stage.clientWidth>=40)relayout(null)}else scheduleApply()});
+          window.addEventListener('load',scheduleApply);
+          document.addEventListener('visibilitychange',function(){if(!document.hidden)scheduleApply()});
+          window.addEventListener('pageshow',scheduleApply);
+          if(window.ResizeObserver){new ResizeObserver(function(){if(!editComponents)scheduleApply()}).observe(stage)}
           function addShortcut(){
             var url=prompt('${tr("Nhập địa chỉ URL (https://...)", "Enter shortcut URL (https://...)")}','https://');
             if(!url)return; url=url.trim(); if(!/^https?:\/\//i.test(url)){alert('${tr("URL phải bắt đầu bằng http:// hoặc https://", "URL must start with http:// or https://")}');return}
@@ -1287,7 +1305,7 @@ class MainActivity : Activity() {
           }
           grid.addEventListener('contextmenu',function(e){if(editComponents)return;if(e.target===grid||e.target.classList.contains('empty')){e.preventDefault();var action=prompt('${tr("Tùy chỉnh tab mới", "Customize new tab")}\\n1 = ${tr("Thêm lối tắt", "Add shortcut")}\\n2 = ${tr("Đổi kiểu sắp xếp shortcut", "Toggle shortcut reorder")}\\n3 = ${tr("Xóa tất cả lối tắt", "Remove all shortcuts")}\\n4 = ${tr("Ẩn cụm shortcut", "Hide shortcut grid")}','1');if(action==='1')addShortcut();else if(action==='2'){layout.value=layout.value==='custom'?'default':'custom';save();render()}else if(action==='3'&&confirm('${tr("Xóa tất cả lối tắt?", "Remove all shortcuts?")}')){items=[];save();render()}else if(action==='4'){var hidden=readObject(HIDDEN);hidden.grid=true;try{localStorage.setItem(HIDDEN,JSON.stringify(hidden))}catch(_){}applyHidden()}}});
           applyHidden();components().forEach(moveComponent);
-          render();applyPositions();
+          render();scheduleApply();
         })();
         </script></body></html>
     """.trimIndent()
