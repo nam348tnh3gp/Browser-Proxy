@@ -20,8 +20,8 @@ android {
         applicationId = "TGFN.BrowserMini"
         minSdk = 23
         targetSdk = 35
-        versionCode = 68
-        versionName = "1.0.17"
+        versionCode = 69
+        versionName = "1.0.18"
     }
 
     signingConfigs {
