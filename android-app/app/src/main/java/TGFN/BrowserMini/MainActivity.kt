@@ -846,18 +846,23 @@ class MainActivity : Activity() {
         }
         // Keep the native selection toolbar/handles for text. Only replace Chromium's
         // link/image menus with TGFN menus, and use the page menu for confirmed blank space.
-        web.setOnCreateContextMenuListener { menu, _, _ ->
-            if (tab.isNewTab) menu.clear()
+        web.setOnCreateContextMenuListener { menu, v, _ ->
+            val webView = v as? WebView
+            if (tab.isNewTab || webView?.url?.startsWith("https://tgfn.browser/") == true) {
+                menu.clear()
+            }
         }
         web.setOnLongClickListener { view ->
             val target = view as? WebView ?: return@setOnLongClickListener false
-            val hit = target.hitTestResult ?: return@setOnLongClickListener false
-            // On the built-in new-tab page, let its own JavaScript manage long-press menus.
-            // CSS disables selection on built-in labels while leaving input fields editable.
-            if (tab.isNewTab && target.url?.startsWith("https://tgfn.browser/") == true) {
-                // New-tab page has its own menus. Consume the hold so Chromium's menu stays off.
-                return@setOnLongClickListener hit.type != WebView.HitTestResult.EDIT_TEXT_TYPE
+            val isNewTabPage = tab.isNewTab || target.url?.startsWith("https://tgfn.browser/") == true
+            if (isNewTabPage) {
+                val hit = target.hitTestResult
+                // Always consume long-press on the built-in new-tab page (including shortcuts/links)
+                // except for editable text fields, so Chromium's native hold menu never appears.
+                if (hit?.type == WebView.HitTestResult.EDIT_TEXT_TYPE) return@setOnLongClickListener false
+                return@setOnLongClickListener true
             }
+            val hit = target.hitTestResult ?: return@setOnLongClickListener false
             when (hit.type) {
                 WebView.HitTestResult.ANCHOR_TYPE,
                 WebView.HitTestResult.SRC_ANCHOR_TYPE,
