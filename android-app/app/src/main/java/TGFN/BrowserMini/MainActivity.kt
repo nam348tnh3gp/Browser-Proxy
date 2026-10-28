@@ -2158,6 +2158,7 @@ class MainActivity : Activity() {
         }
         header.addView(countLabel)
         dialogContent.addView(header)
+        lateinit var renderCards: () -> Unit
         val tabActions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, 0, 0, dp(10))
@@ -2189,7 +2190,7 @@ class MainActivity : Activity() {
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
         }
         val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        fun renderCards() {
+        renderCards = {
             grid.removeAllViews()
             var index = 0
             while (index < tabs.size) {
