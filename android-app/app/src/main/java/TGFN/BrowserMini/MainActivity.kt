@@ -439,7 +439,13 @@ class MainActivity : Activity() {
                     setBackgroundColor(Color.TRANSPARENT)
                     setOnPreparedListener { mediaPlayer ->
                         mediaPlayer.isLooping = true
-                        mediaPlayer.setVolume(0f, 0f)
+                        val wantAudio = prefs.getBoolean("background_video_audio", false)
+                        if (wantAudio) {
+                            mediaPlayer.setVolume(1f, 1f)
+                            requestBackgroundAudioFocus()
+                        } else {
+                            mediaPlayer.setVolume(0f, 0f)
+                        }
                         // Measure the video and fit its view inside the real available host bounds.
                         // This preserves the source aspect ratio instead of stretching/cropping it.
                         val videoWidth = mediaPlayer.videoWidth
@@ -3100,6 +3106,57 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         recreate()
     }
 
+
+    private fun applyBackgroundAudio(enabled: Boolean) {
+        videoBackground?.let { player ->
+            try {
+                // VideoView doesn't expose MediaPlayer directly after prepared,
+                // so we use the volume via reflection-free approach: restart with new volume
+                // by seeking is not reliable. Instead store and apply on next prepared.
+                // For immediate effect we pause/start which re-triggers prepared on some devices,
+                // but safer: just note the preference and recreate if currently playing video bg.
+                if (enabled) requestBackgroundAudioFocus() else abandonBackgroundAudioFocus()
+            } catch (_: Exception) {}
+        }
+        // Recreate only if a video background is active so volume takes effect immediately
+        val uri = prefs.getString("app_background_uri", null)
+        if (!uri.isNullOrBlank() && isMp4Uri(Uri.parse(uri))) {
+            dialogSafeRecreate()
+        }
+    }
+
+    private fun requestBackgroundAudioFocus() {
+        try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                val attrs = android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MOVIE)
+                    .build()
+                val focusReq = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                    .setAudioAttributes(attrs)
+                    .build()
+                am.requestAudioFocus(focusReq)
+            } else {
+                @Suppress("DEPRECATION")
+                am.requestAudioFocus(null, android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun abandonBackgroundAudioFocus() {
+        try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                // No stored request; best-effort abandon not available without keeping the request.
+                // Volume mute on next prepare is the reliable path.
+            } else {
+                @Suppress("DEPRECATION")
+                am.abandonAudioFocus(null)
+            }
+        } catch (_: Exception) {}
+    }
+
     private fun showSettings() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -3159,6 +3216,15 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
             setPadding(0, dp(6), 0, 0)
         })
         content.addView(backgroundButtons)
+        val bgAudio = android.widget.CheckBox(this).apply {
+            text = tr("Phát âm thanh nền MP4", "Play MP4 background audio")
+            isChecked = prefs.getBoolean("background_video_audio", false)
+            setOnCheckedChangeListener { _, checked ->
+                prefs.edit().putBoolean("background_video_audio", checked).apply()
+                applyBackgroundAudio(checked)
+            }
+        }
+        content.addView(bgAudio)
         val restoreSession = android.widget.CheckBox(this).apply {
             text = tr("Khôi phục các tab khi mở lại trình duyệt", "Restore tabs when reopening the browser")
             isChecked = prefs.getBoolean("restore_session_enabled", true)
