@@ -816,7 +816,7 @@ class MainActivity : Activity() {
             }
         }
         web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-            enqueueDownload(url, userAgent, contentDisposition, mimeType)
+            enqueueDownload(url, userAgent, contentDisposition, mimeType, web)
         }
         // Cache whether the touch-down point is ordinary text or genuinely blank page
         // space. The JS check is asynchronous, so it must never consume the touch event:
@@ -1624,20 +1624,132 @@ class MainActivity : Activity() {
         url: String?,
         userAgent: String?,
         contentDisposition: String?,
-        mimeType: String?
+        mimeType: String?,
+        sourceWebView: WebView? = null
     ) {
-        if (url.isNullOrBlank() || !(url.startsWith("https://", true) || url.startsWith("http://", true))) {
+        if (url.isNullOrBlank()) {
             Toast.makeText(this, tr("Liên kết tải xuống không được hỗ trợ", "Unsupported download URL"), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val trimmed = url.trim()
+        // Resolve relative / protocol-relative against current page
+        val resolved = when {
+            trimmed.startsWith("//") -> "https:$trimmed"
+            trimmed.startsWith("http://", true) || trimmed.startsWith("https://", true) -> trimmed
+            trimmed.startsWith("blob:", true) || trimmed.startsWith("data:", true) -> trimmed
+            else -> {
+                val base = sourceWebView?.url ?: currentWebView()?.url
+                if (!base.isNullOrBlank()) android.net.Uri.parse(base).buildUpon().path(trimmed).build().toString()
+                else trimmed
+            }
+        }
+        if (resolved.startsWith("blob:", true)) {
+            val web = sourceWebView ?: currentWebView()
+            if (web == null) {
+                Toast.makeText(this, tr("Không thể tải blob (không có WebView)", "Cannot download blob (no WebView)"), Toast.LENGTH_SHORT).show()
+                return
+            }
+            downloadBlob(web, resolved, contentDisposition, mimeType)
+            return
+        }
+        if (resolved.startsWith("data:", true)) {
+            saveDataUrl(resolved, contentDisposition, mimeType)
+            return
+        }
+        if (!(resolved.startsWith("https://", true) || resolved.startsWith("http://", true))) {
+            Toast.makeText(this, tr("Liên kết tải xuống không được hỗ trợ: ", "Unsupported download URL: ") + resolved.take(60), Toast.LENGTH_LONG).show()
             return
         }
         if (Build.VERSION.SDK_INT < 29 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
         ) {
-            pendingDownload = arrayOf(url, userAgent, contentDisposition, mimeType)
+            pendingDownload = arrayOf(resolved, userAgent, contentDisposition, mimeType)
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 4101)
             return
         }
-        startPublicDownload(url, userAgent, contentDisposition, mimeType)
+        startPublicDownload(resolved, userAgent, contentDisposition, mimeType)
+    }
+
+    private fun downloadBlob(web: WebView, blobUrl: String, contentDisposition: String?, mimeType: String?) {
+        Toast.makeText(this, tr("Đang chuẩn bị tệp…", "Preparing file…"), Toast.LENGTH_SHORT).show()
+        val safeUrl = blobUrl.replace("'", "\'")
+        val js = """
+            (function(){
+                try {
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('GET', '$safeUrl', true);
+                    xhr.responseType = 'blob';
+                    xhr.onload = function(){
+                        var reader = new FileReader();
+                        reader.onloadend = function(){
+                            var result = reader.result || '';
+                            if (window.BrowserDownloadBridge) {
+                                BrowserDownloadBridge.onBlob('' + result);
+                            }
+                        };
+                        reader.readAsDataURL(xhr.response);
+                    };
+                    xhr.onerror = function(){ if (window.BrowserDownloadBridge) BrowserDownloadBridge.onBlob(''); };
+                    xhr.send();
+                } catch(e) { if (window.BrowserDownloadBridge) BrowserDownloadBridge.onBlob(''); }
+            })();
+        """.trimIndent()
+        // One-shot bridge
+        val bridge = object {
+            @android.webkit.JavascriptInterface
+            fun onBlob(dataUrl: String) {
+                runOnUiThread {
+                    web.removeJavascriptInterface("BrowserDownloadBridge")
+                    if (dataUrl.isBlank()) {
+                        Toast.makeText(this@MainActivity, tr("Không đọc được nội dung blob", "Could not read blob content"), Toast.LENGTH_LONG).show()
+                    } else {
+                        saveDataUrl(dataUrl, contentDisposition, mimeType)
+                    }
+                }
+            }
+        }
+        web.addJavascriptInterface(bridge, "BrowserDownloadBridge")
+        web.evaluateJavascript(js, null)
+    }
+
+    private fun saveDataUrl(dataUrl: String, contentDisposition: String?, mimeType: String?) {
+        try {
+            val comma = dataUrl.indexOf(',')
+            if (comma < 0) throw IllegalArgumentException("bad data url")
+            val meta = dataUrl.substring(0, comma)
+            val payload = dataUrl.substring(comma + 1)
+            val isBase64 = meta.contains(";base64", true)
+            val bytes = if (isBase64) android.util.Base64.decode(payload, android.util.Base64.DEFAULT)
+                        else java.net.URLDecoder.decode(payload, "UTF-8").toByteArray()
+            val guessedMime = mimeType ?: meta.substringAfter("data:").substringBefore(";").ifBlank { "application/octet-stream" }
+            val guessed = android.webkit.URLUtil.guessFileName("file", contentDisposition, guessedMime)
+                .replace(Regex("[/\\:*?\"<>|]"), "_")
+                .trim().take(180).ifBlank { "download" }
+            val filename = uniqueDownloadName(guessed)
+            if (Build.VERSION.SDK_INT >= 29) {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, filename)
+                    put(android.provider.MediaStore.Downloads.MIME_TYPE, guessedMime)
+                    put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val uri = contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: throw IllegalStateException("MediaStore insert failed")
+                contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    ?: throw IllegalStateException("openOutputStream failed")
+                values.clear()
+                values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+            } else {
+                val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (!dir.exists()) dir.mkdirs()
+                val out = java.io.File(dir, filename)
+                out.writeBytes(bytes)
+                android.media.MediaScannerConnection.scanFile(this, arrayOf(out.absolutePath), arrayOf(guessedMime), null)
+            }
+            Toast.makeText(this, tr("Đã lưu vào Download: ", "Saved to Download: ") + filename, Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, tr("Không lưu được tệp: ", "Could not save file: ") + (e.message ?: ""), Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun uniqueDownloadName(filename: String): String {
