@@ -658,26 +658,35 @@ class MainActivity : Activity() {
             ): Boolean {
                 fileChooserCallback?.onReceiveValue(null)
                 fileChooserCallback = filePathCallback
-                val intent = try {
-                    fileChooserParams?.createIntent()
-                        ?: Intent(Intent.ACTION_GET_CONTENT).apply {
-                            type = "*/*"
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                        }
-                } catch (_: Exception) {
-                    Intent(Intent.ACTION_GET_CONTENT).apply {
-                        type = "*/*"
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                    }
+                val accept = fileChooserParams?.acceptTypes
+                    ?.firstOrNull { !it.isNullOrBlank() && it != "*/*" }
+                    ?.trim()
+                    ?: "*/*"
+                val multiple = fileChooserParams?.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = if (accept.startsWith(".")) "*/*" else accept
+                    if (multiple) putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                }
+                val fallback = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = intent.type
+                    if (multiple) putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 }
                 return try {
-                    startActivityForResult(intent, FILE_CHOOSER_REQUEST)
+                    startActivityForResult(Intent.createChooser(intent, tr("Chọn tệp", "Choose file")), FILE_CHOOSER_REQUEST)
                     true
                 } catch (_: Exception) {
-                    fileChooserCallback?.onReceiveValue(null)
-                    fileChooserCallback = null
-                    Toast.makeText(this@MainActivity, tr("Không thể mở trình chọn tệp", "Could not open file picker"), Toast.LENGTH_SHORT).show()
-                    false
+                    try {
+                        startActivityForResult(fallback, FILE_CHOOSER_REQUEST)
+                        true
+                    } catch (_: Exception) {
+                        fileChooserCallback?.onReceiveValue(null)
+                        fileChooserCallback = null
+                        Toast.makeText(this@MainActivity, tr("Không thể mở trình chọn tệp", "Could not open file picker"), Toast.LENGTH_SHORT).show()
+                        false
+                    }
                 }
             }
 
@@ -3985,14 +3994,26 @@ Do not use 127.0.0.1 when the proxy runs on another device."""
         if (requestCode != FILE_CHOOSER_REQUEST) return
         val callback = fileChooserCallback ?: return
         fileChooserCallback = null
-        val results = if (resultCode == Activity.RESULT_OK) {
+        val results = if (resultCode == Activity.RESULT_OK && data != null) {
             try {
                 WebChromeClient.FileChooserParams.parseResult(resultCode, data)
-                    ?: data?.data?.let { arrayOf(it) }
+                    ?: data.data?.let { arrayOf(it) }
+                    ?: data.clipData?.let { clip ->
+                        Array(clip.itemCount) { i -> clip.getItemAt(i).uri }
+                    }
             } catch (_: Exception) {
-                data?.data?.let { arrayOf(it) }
+                data.data?.let { arrayOf(it) }
+                    ?: data.clipData?.let { clip ->
+                        Array(clip.itemCount) { i -> clip.getItemAt(i).uri }
+                    }
             }
         } else null
+        // Take persistable permission so WebView can read the content URI
+        results?.forEach { uri ->
+            try {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: Exception) {}
+        }
         callback.onReceiveValue(results)
     }
 
